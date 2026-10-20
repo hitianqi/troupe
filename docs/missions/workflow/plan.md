@@ -82,7 +82,8 @@ the kit and what it drops takes judgement.
 
 o2 runs a sample mission through the finished skill and checks it against
 the existing reader, then writes the mission record. It shares no file with
-o1 (it writes only under `docs/missions/workflow/`). It still depends on o1:
+o1 (it writes only under `docs/missions/workflow/`), except for the two
+wording leftovers from o1's re-review (amendment below). It still depends on o1:
 a walkthrough written before the skill is final would test a draft. It is
 `sonnet`: given the skill, the work is well bounded, and a builder that only
 has the written skill to go on is a fair test of whether the skill can be
@@ -102,6 +103,16 @@ Gates: 大博士贴 approves this plan and gives the MR go on Tianqi's behalf.
 p2 is expected to land first, and this branch rebases onto the trunk before
 its MR. Cost: nothing runs on Tianqi's API key; subagents run on the seat's
 own login.
+
+Amendment (2026-10-20 13:16Z, orchestrator): o1 passed its re-review
+(`REVIEW-o1-2.md`) with two Consider items that are bounded wording fixes.
+o1 has no review rounds left, so they go to o2, and o2's review covers them.
+First, the touches diff check (SKILL step 4, `orchestrator.md` Merge item 1)
+names `order/<m>/<id>` and not the last reviewed `-fix` branch. Second,
+`builder.md` step 2's "never check out another builder's branch" reads oddly
+next to the fixer's `git switch -c`. o2 now also touches `SKILL.md`,
+`references/orchestrator.md` and `references/builder.md`, and it already
+depends on o1.
 
 ## Orders
 
@@ -151,6 +162,9 @@ orders:
     why: "The brief's item 4 and 5: shows the skill can be followed and that what it produces is what the pane reads. Reuses hooks/plan.ts (readPlan, layersOf, isLight) and hooks/read-state.ts (stateOf), imported unchanged, and the p1 RECORD.md's shape. Nothing in tests/ can be used: p2 owns it until it lands."
     touches:
       - docs/missions/workflow/
+      - skills/troupe-mission/SKILL.md            # the two wording leftovers of REVIEW-o1-2.md
+      - skills/troupe-mission/references/orchestrator.md
+      - skills/troupe-mission/references/builder.md
     depends_on: [o1]
     model: sonnet
     risks: "The hooks import without extensions and read-state.ts imports 'claude-code', which node cannot resolve outside the engine. If stateOf cannot be imported, the check reimplements nothing and states that it covers readPlan and layersOf only. p2 changes hooks/ too, so after the rebase the check must still run against the reader p2 lands. A sample plan that uses YAML outside hooks/yaml.ts's subset would be flagged, which is a finding about the skill or the template, not about the fixture."
