@@ -1,0 +1,120 @@
+# p2 look 4: a 158x57 tmux window, his tile's size. The session runs as a seat does (no TMUX in the
+# engine), cwd the main checkout; typed: /troupe ../troupe-p2-o2/docs/missions/p2
+# Left: the session pane %0 (78 columns, active). Right: troupe-panel (79 columns), at the top.
+# o2 shows running and the builder working: o2's branch is ahead of the mission branch (git).
+ ▐▛███▛█   Claude Code v2.1.304                                               │TROUPE · p2 · light · plan checks clean · Split the mission plan out to a pane…
+▝▜██████▀  Opus 5.5 with high effort · Claude Team                            │
+ ▝▝   ▝▝   ~/repos/projects/troupe                                            │╔═ ▦ MISSION p2 ══════════════════════════════════════════════════════════════╗
+                                                                              │║                  ┌─ ≡ orchestrator ─────────────────────┐                   ║
+                                                                              │║                  │ ✓ plan                               │                   ║
+❯ /troupe ../troupe-p2-o2/docs/missions/p2                                    │║                  │ MR                                   │                   ║
+  ⎿  troupe: troupe panel opened on the right (79 columns, pane %1).          │║                  └──────────────────────────────────────┘                   ║
+                                                                              │║                                      ▼                                      ║
+──────────────────────────────────────────────────────────────────────────────│║                               ┌────────────┐                                ║
+❯                                                                             │║                               │ ✓ Plan OK? │                                ║
+──────────────────────────────────────────────────────────────────────────────│║                               └────────────┘                                ║
+  ⚠ Transcript saving is off — inherited CLAUDE_CODE_CHILD_SESSION marker ·…  │║                                      ▼                                      ║
+  ⏵⏵ accept edits on (shift+tab to cycle)                                     │║                  ┌─ ≡ builder ──────────────────────────┐                   ║
+                                                                              │║                  │ ✓ o1  opus  reviewed                 │                   ║
+                                                                              │║                  │ ◐ o2  opus  running                  │                   ║
+                                                                              │║                  └──────────────────────────────────────┘                   ║
+                                                                              │║                                      ▼                                      ║
+                                                                              │║                  ┌─ ≡ reviewer ─────────────────────────┐                   ║
+                                                                              │║                  │ idle                                 │                   ║
+                                                                              │║                  └──────────────────────────────────────┘                   ║
+                                                                              │║                    ↑ fix ≤ 2 → back to builder                              ║
+                                                                              │║                                      ▼                                      ║
+                                                                              │║                               ┌────────────┐                                ║
+                                                                              │║                               │ ◆ MR OK?   │                                ║
+                                                                              │║                               └────────────┘                                ║
+                                                                              │║                                      ▼                                      ║
+                                                                              │║                               ┌────────────┐                                ║
+                                                                              │║                               │ ◆ Merged?  │                                ║
+                                                                              │║                               └────────────┘                                ║
+                                                                              │║                                                                             ║
+                                                                              │╚═════════════════════════════════════════════════════════════════════════════╝
+                                                                              │
+                                                                              │  ── ROLES · 3 ────────────────────────────────────────────────────────────────
+                                                                              │  · orchestrator  opus    idle       —
+                                                                              │  ● builder       opus    working    o2
+                                                                              │  · reviewer      sonnet  idle       —
+                                                                              │
+                                                                              │  ── ORDERS · 2 ───────────────────────────────────────────────────────────────
+                                                                              │  ✓ o1     opus    reviewed
+                                                                              │  ◐ o2     opus    running   ← o1
+                                                                              │
+                                                                              │  ── GOAL ─────────────────────────────────────────────────────────────────────
+                                                                              │  goal:         Split the mission plan out to a panel on the right of the
+                                                                              │                terminal, after proving the tmux moves the dispatch design
+                                                                              │                rests on.
+                                                                              │  plan:         ../troupe-p2-o2/docs/missions/p2/plan.md · plan checks clean ·
+                                                                              │                light (2 orders)
+                                                                              │
+                                                                              │  ── ORDERS · 2 ───────────────────────────────────────────────────────────────
+                                                                              │  o1:           opus · reviewed · layer 1 · depends — · Answer the three Phase
+                                                                              │                2 checks with evidence in docs/FEASIBILITY.md: tmux send-keys
+                                                                              │                and a spawned child from a hook, finding the session's own pane
+                                                                              │                and splitting right from a hook (with and without $TMUX), and
+                                                                              │                the pane's text drawn by a plain Node script outside the engine
+                                                                              │                on a poll.
+                                                                              │  o2:           opus · running · layer 2 · depends o1 · Ship bin/troupe-panel
+                                                                              │↓ 23 more rows · ↑↓ PgUp PgDn
+
+# The panel after End (tmux send-keys -t <panel> End): the header pinned, '↑ 23 more', the last DETAIL line at the bottom.
+TROUPE · p2 · light · plan checks clean · Split the mission plan out to a pane…
+↑ 23 more
+║                               └────────────┘                                ║
+║                                      ▼                                      ║
+║                               ┌────────────┐                                ║
+║                               │ ◆ Merged?  │                                ║
+║                               └────────────┘                                ║
+║                                                                             ║
+╚═════════════════════════════════════════════════════════════════════════════╝
+
+  ── ROLES · 3 ────────────────────────────────────────────────────────────────
+  · orchestrator  opus    idle       —
+  ● builder       opus    working    o2
+  · reviewer      sonnet  idle       —
+
+  ── ORDERS · 2 ───────────────────────────────────────────────────────────────
+  ✓ o1     opus    reviewed
+  ◐ o2     opus    running   ← o1
+
+  ── GOAL ─────────────────────────────────────────────────────────────────────
+  goal:         Split the mission plan out to a panel on the right of the
+                terminal, after proving the tmux moves the dispatch design
+                rests on.
+  plan:         ../troupe-p2-o2/docs/missions/p2/plan.md · plan checks clean ·
+                light (2 orders)
+
+  ── ORDERS · 2 ───────────────────────────────────────────────────────────────
+  o1:           opus · reviewed · layer 1 · depends — · Answer the three Phase
+                2 checks with evidence in docs/FEASIBILITY.md: tmux send-keys
+                and a spawned child from a hook, finding the session's own pane
+                and splitting right from a hook (with and without $TMUX), and
+                the pane's text drawn by a plain Node script outside the engine
+                on a poll.
+  o2:           opus · running · layer 2 · depends o1 · Ship bin/troupe-panel
+                and the /troupe split-right (pane id kept and reused, /troupe
+                close, session-end close, no-tmux fallback to the in-session
+                pane) on one shared drawing module, fix the four Phase 1
+                leftovers, with tests, README, RECORD.md, and the look seen and
+                approved by Tianqi.
+
+  ── ROLES · 3 ────────────────────────────────────────────────────────────────
+  orchestrator: opus · high · ▪▪▪▫▫
+                ▪ Writes the plan and gets it approved
+                ▪ Dispatches each order and merges it onto the mission branch
+                ▪ Opens the MR after the go, then tears down
+                ✓ messaging-the-human
+                ✓ queue-handoff
+  builder:      opus · high · ▪▪▪▫▫
+                ▪ Runs the tmux checks from a hook, with evidence
+                ▪ Builds troupe-panel and the split, sharing one drawing
+                  module with the pane
+                ▪ Fixes review findings, once per review
+                ✓ plugin-authoring
+  reviewer:     sonnet · high · ▪▪▪▫▫
+                ▪ Reviews each order for behaviour as it lands
+                ▪ On a light rig, the last review is also the final review
+                no skills

@@ -1,9 +1,9 @@
 import { expect, test } from 'claude-code/testing'
 
-import { graph } from '../hooks/graph'
-import { textOf } from '../hooks/view'
-import { GRAPH_106, GRAPH_107, GRAPH_50 } from './graph-goldens'
-import { P1 } from './p1'
+import { graph } from '../hooks/graph.ts'
+import { textOf } from '../hooks/view.ts'
+import { GRAPH_106, GRAPH_107, GRAPH_50 } from './graph-goldens.ts'
+import { P1 } from './p1.ts'
 
 const drawn = (width: number) => graph(P1, width).map(line => textOf(line).trimEnd())
 

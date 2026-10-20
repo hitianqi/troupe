@@ -1,4 +1,9 @@
 #!/usr/bin/env node
+// HISTORICAL: o1's check-3 evidence, kept as it ran on 2b9a1b7 (89eb623 before
+// the rebase). It no longer runs on this tree: o2 replaced the tables it calls
+// and made the hooks run under plain Node; bin/troupe-panel and
+// tests/panel.node.mjs are what draw and test the panel now.
+//
 // Check 3 evidence (o1 of p2), not the product: draws the troupe pane's text
 // (header, GRAPH, TABLES, DETAIL) outside the engine, from the same hooks/
 // plan.ts, view.ts and graph.ts, with no engine import, and redraws on a poll.

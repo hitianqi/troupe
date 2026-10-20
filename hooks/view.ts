@@ -1,11 +1,11 @@
 import type { TroupeMission, TroupeOrder, TroupeOrderState, TroupeRole } from '../types'
-import { isLight, layersOf, STEPS } from './plan'
+import { EFFORTS, isLight, layersOf, STEPS } from './plan.ts'
 
-// The pane as lines of styled runs, in the OpenRig TUI's conventions: the
-// header, the seat-table style TABLES and the detail-view DETAIL sections.
-// graph.ts draws the GRAPH the same way; draw-pane.tsx only paints lines.
+// The view as lines of styled runs, in the OpenRig TUI's conventions: the
+// header, compact ROLES and ORDERS, and the detail-view DETAIL sections.
+// graph.ts draws the GRAPH the same way; lines.ts puts them in order.
 
-/** OpenRig's theme (tui/dist/theme.js): every colour the pane uses. */
+/** OpenRig's theme (tui/dist/theme.js): every colour the pane uses; `dim` is lighter than OpenRig's #6d7480, so waiting items read on a picture background. */
 export const TONES = {
   bright: '#e8eaf0',
   accent: '#6fa8ff',
@@ -14,7 +14,7 @@ export const TONES = {
   warn: '#f4be5c',
   ok: '#98c379',
   error: '#e06c75',
-  dim: '#6d7480',
+  dim: '#9aa3ad',
 } as const
 export type Tone = keyof typeof TONES
 export type Run = { text: string; tone?: Tone; bold?: true; strike?: true }
@@ -51,9 +51,8 @@ export const wrap = (text: string, width: number): string[] => {
 
 const STATE_TONE: Record<TroupeOrderState, Tone> = { planned: 'dim', running: 'ok', done: 'ok', reviewed: 'ok' }
 export const ORDER_GLYPH: Record<TroupeOrderState, string> = { planned: '○', running: '◐', done: '●', reviewed: '✓' }
-const EFFORT = ['low', 'medium', 'high', 'xhigh', 'max']
 const meterOf = (effort: string) => {
-  const on = Math.max(0, EFFORT.indexOf(effort) + 1)
+  const on = Math.max(0, EFFORTS.indexOf(effort) + 1)
 
   return '▪'.repeat(on) + '▫'.repeat(5 - on)
 }
@@ -101,71 +100,53 @@ const cut = (line: Line, width: number): Line => {
   return last ? [...out.slice(0, -1), { ...last, text: `${last.text}…` }] : out
 }
 
-/** A table in the seat table's style: a caps header, a ━ rule, rows split by · lines. */
-function table(head: string[], rows: Line[][], widths: number[], width: number): Line[] {
-  const cells = (row: Line[]): Line => {
-    const runs = row.flatMap((cell, index) => {
-      const w = widths[index] ?? 0
-      const text = textOf(cell)
-      if (text.length <= w) return [...cell, { text: ' '.repeat(w - text.length) }]
+// ---- compact ROLES and ORDERS: one line each, under a DETAIL-style rule ----
 
-      // A cut cell keeps one blank before the next column; the last one runs to the edge.
-      return index < widths.length - 1 ? [...cut(cell, w - 1), { text: ' ' }] : cut(cell, w)
-    })
-    const last = runs[runs.length - 1]
+/** Below this width a compact line leaves out the model. */
+const MODEL_MIN = 46
 
-    return last && last.tone === undefined ? [...runs.slice(0, -1), { text: last.text.trimEnd() }] : runs
-  }
+const compact = (title: string, rows: Line[], width: number): Line[] => [sectionRule(title, width), ...rows.map(row => cut(row, width))]
 
-  return [
-    [{ text: head.map((title, index) => fit(title, widths[index] ?? 0)).join('').trimEnd(), tone: 'accentBright', bold: true }],
-    [{ text: '━'.repeat(width), tone: 'chrome' }],
-    ...rows.flatMap((row, index) => (index === 0 ? [cells(row)] : [[{ text: '·'.repeat(width), tone: 'chrome' as const }], cells(row)])),
-  ]
-}
-
-export function rolesTable(m: TroupeMission, width: number): Line[] {
-  const rows = m.roles.map((role): Line[] => {
+/** One line per role: glyph, name, model, state, what it is on. */
+export function compactRoles(m: TroupeMission, width: number): Line[] {
+  const rows = m.roles.map((role): Line => {
     const now = roleState(role, m)
-    const skills: Line =
-      role.skills.length === 0
-        ? [{ text: '—', tone: 'dim' }]
-        : role.skills.flatMap((skill, index): Line => [
-            ...(index > 0 ? [{ text: '  ' }] : []),
-            skill.isFound ? { text: `✓ ${skill.name}`, tone: 'ok' } : { text: `✗ ${skill.name}`, tone: 'error' },
-          ])
 
     return [
-      [{ text: now.glyph, tone: now.tone }, { text: ` ${role.name}` }],
-      [{ text: role.model || '—' }],
-      [{ text: `${role.effort} ` }, { text: meterOf(role.effort) }],
-      skills,
-      [{ text: now.state, tone: now.tone }],
-      [{ text: now.now, tone: now.now === '—' ? 'dim' : now.tone }],
+      { text: '  ' },
+      { text: now.glyph, tone: now.tone },
+      { text: ` ${fit(role.name, 13)} ` },
+      ...(width >= MODEL_MIN ? [{ text: `${fit(role.model || '—', 7)} `, tone: 'dim' as const }] : []),
+      { text: fit(now.state, 10), tone: now.tone },
+      { text: ` ${now.now}`, tone: now.now === '—' ? 'dim' : now.tone },
     ]
   })
 
-  return table(['ROLE', 'MODEL', 'EFFORT', 'SKILLS', 'STATE', 'NOW'], rows, [17, 8, 13, width - 66, 12, 16], width)
+  return compact(`ROLES · ${m.roles.length}`, rows, width)
 }
 
-export function ordersTable(m: TroupeMission, width: number): Line[] {
-  const layerOf = new Map(layersOf(m.orders).layers.flatMap((layer, index) => layer.map(order => [order.id, index + 1] as const)))
-  const rows = m.orders.map((order): Line[] => [
-    [{ text: ORDER_GLYPH[order.state], tone: STATE_TONE[order.state] }, { text: ` ${order.id}` }],
-    [{ text: String(layerOf.get(order.id) ?? '↺') }],
-    [{ text: order.model || '—' }],
-    [{ text: order.state, tone: STATE_TONE[order.state] }],
-    [{ text: order.dependsOn.join(', ') || '—', tone: order.dependsOn.length === 0 ? 'dim' : undefined }],
-    [{ text: order.goal, tone: 'dim' }],
+/** One line per order: glyph, id, model, state, what it waits on. */
+export function compactOrders(m: TroupeMission, width: number): Line[] {
+  const rows = m.orders.map((order): Line => [
+    { text: '  ' },
+    { text: ORDER_GLYPH[order.state], tone: STATE_TONE[order.state] },
+    { text: ` ${fit(order.id || '?', 6)} ` },
+    ...(width >= MODEL_MIN ? [{ text: `${fit(order.model || '—', 7)} `, tone: 'dim' as const }] : []),
+    ...(order.dependsOn.length > 0
+      ? [{ text: fit(order.state, 9), tone: STATE_TONE[order.state] }, { text: ` ← ${order.dependsOn.join(', ')}`, tone: 'dim' as const }]
+      : [{ text: order.state, tone: STATE_TONE[order.state] }]),
   ])
 
-  return table(['ID', 'LAYER', 'MODEL', 'STATE', 'DEPENDS', 'GOAL'], rows, [7, 7, 8, 10, 10, width - 42], width)
+  return compact(`ORDERS · ${m.orders.length}`, rows, width)
 }
 
 // ---- DETAIL: detail.js's sections, rules and label column ------------------
 
 const LABEL_W = 13
 const VALUE_AT = 2 + LABEL_W + 1
+/** Below this width a label takes its own line and the value goes under it. */
+const STACK_BELOW = 48
+const STACKED_AT = 4
 
 const sectionRule = (title: string, width: number): Line => [
   { text: '  ' },
@@ -176,16 +157,28 @@ const sectionRule = (title: string, width: number): Line => [
   { text: '─'.repeat(Math.max(4, width - title.length - 6)), tone: 'chrome' },
 ]
 
-/** `  label:       value`, the value wrapped under its own column; `paint` styles each value line. */
-const field = (label: string, value: string, width: number, paint: (text: string) => Line = text => [{ text }]): Line[] =>
-  wrap(value, width - VALUE_AT).map((text, index) => [
-    index === 0 ? { text: `  ${`${label}:`.padEnd(LABEL_W)} `, tone: 'dim' } : { text: ' '.repeat(VALUE_AT) },
+/** `  label:       value`, the value wrapped under its own column (under the label when narrow); `paint` styles each value line. */
+const field = (label: string, value: string, width: number, paint: (text: string) => Line = text => [{ text }]): Line[] => {
+  if (width < STACK_BELOW) {
+    return [
+      [{ text: `  ${label}:`, tone: 'dim' }],
+      ...wrap(value, width - STACKED_AT).map((text): Line => [{ text: ' '.repeat(STACKED_AT) }, ...paint(text)]),
+    ]
+  }
+  const shown = label.length < LABEL_W ? label : `${label.slice(0, LABEL_W - 2)}…`
+
+  return wrap(value, width - VALUE_AT).map((text, index) => [
+    index === 0 ? { text: `  ${`${shown}:`.padEnd(LABEL_W)} `, tone: 'dim' } : { text: ' '.repeat(VALUE_AT) },
     ...paint(text),
   ])
+}
 
 /** A line under the value column, continuation lines indented two more. */
-const under = (text: string, width: number, paint: (text: string) => Line): Line[] =>
-  wrap(text, width - VALUE_AT - 2).map((line, index) => [{ text: ' '.repeat(VALUE_AT) + (index > 0 ? '  ' : '') }, ...paint(line)])
+const under = (text: string, width: number, paint: (text: string) => Line): Line[] => {
+  const at = width < STACK_BELOW ? STACKED_AT : VALUE_AT
+
+  return wrap(text, width - at - 2).map((line, index) => [{ text: ' '.repeat(at) + (index > 0 ? '  ' : '') }, ...paint(line)])
+}
 
 const paintOrder = (order: TroupeOrder) => (text: string): Line =>
   text.split(new RegExp(`\\b(${order.state})\\b`)).map(part => (part === order.state ? { text: part, tone: STATE_TONE[order.state] } : { text: part }))

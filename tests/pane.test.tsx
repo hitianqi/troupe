@@ -1,9 +1,9 @@
 import { expect, mock, test } from 'claude-code/testing'
 import type { On } from 'claude-code'
 
-import { SKILLS_MS } from '../hooks/read-state'
-import { POLL_MS } from '../hooks/register'
-import { MISSING_SKILL, SESSION_SKILLS, VALID } from './fixtures'
+import { SKILLS_MS } from '../hooks/read-state.ts'
+import { POLL_MS } from '../hooks/mission.ts'
+import { MISSING_SKILL, SESSION_SKILLS, VALID } from './fixtures.ts'
 
 // The engine hands fs hooks the path resolved against the session's directory.
 const at = <T,>(table: Record<string, T>, path: string): T | undefined =>
@@ -18,7 +18,7 @@ const PANE = {
     isFocused: false,
     bodyColumns: 100,
     placement: 'dock',
-    scroll: { offset: 0, bodyRows: 40 },
+    scroll: { offset: 0, bodyRows: 200 },
     view: {},
   },
 } as const
@@ -65,13 +65,12 @@ test('the pane draws the newest mission, flags a missing skill, redraws on an ed
 
   const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
   expect(await ui.find({ type: 'Text', text: /^TROUPE · p1 · light · plan checks clean · Show the demo mission in a pane$/ })).toBeDefined()
-  // The GRAPH (stacked at 100 columns), the TABLES and the DETAIL.
+  // The GRAPH (stacked at 100 columns), compact ROLES and ORDERS, and the DETAIL.
   expect(await ui.find({ type: 'Text', text: /▦ MISSION p1/ })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /≡ build/ })).toBeDefined()
-  expect(await ui.find({ type: 'Text', text: /^ROLE +MODEL +EFFORT +SKILLS +STATE +NOW$/ })).toBeDefined()
   // One order running: the builder works on it; the missing skill is red in the table and the detail.
-  expect(await ui.find({ type: 'Text', text: /^● builder +opus +high ▪▪▪▫▫ +✓ plugin-authoring {2}✗ troupe-no-… working +o1$/ })).toBeDefined()
-  expect(await ui.find({ type: 'Text', text: /^◐ o1 +1 +opus +running +— +Anything$/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /^ {2}● builder +opus +working +o1$/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /^ {2}◐ o1 +opus +running$/ })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /^ {2}── ROLES · 1 ─+$/ })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /^ {16}▪ Builds its order in its own worktree$/ })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /^ {16}✗ troupe-no-such-skill$/ })).toBeDefined()
@@ -79,7 +78,7 @@ test('the pane draws the newest mission, flags a missing skill, redraws on an ed
   // An edit to plan.md: the next poll reads it again and the pane redraws.
   files['docs/missions/p1/plan.md'] = { text: MISSING_SKILL.replace('model: opus', 'model: sonnet'), at: 300 }
   await clock.advance(POLL_MS)
-  expect(await ui.find({ type: 'Text', text: /^◐ o1 +1 +sonnet +running/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /^ {2}◐ o1 +sonnet +running/ })).toBeDefined()
   await ui.unmount()
 
   // A second session.start (an enable, a respawn) must not add a second
@@ -106,6 +105,7 @@ test('/troupe <folder> draws that mission; a folder with no plan says so', async
   on('fs.read', () => ({ value: VALID }))
   on('session.usage', () => ({ deny: 'no usage here' }))
   on('agent.list', () => ({ value: [] }))
+  outsideTmux(on)
 
   await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
   await clock.settle()
@@ -113,9 +113,9 @@ test('/troupe <folder> draws that mission; a folder with no plan says so', async
   expect(await ui.find({ type: 'Text', text: /no mission under docs\/missions\// })).toBeDefined()
 
   const answer = await $.command.run({ command: 'troupe', args: '../other/docs/missions/p9/' } as never)
-  expect(JSON.stringify(answer)).toContain('troupe pane opened.')
+  expect(JSON.stringify(answer)).toContain('no tmux: showing the in-session pane')
   expect(await ui.find({ type: 'Text', text: /^TROUPE · p9/ })).toBeDefined()
-  expect(await ui.find({ type: 'Text', text: /^○ o2 +2 +sonnet +planned +o1 +Draw the pane$/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /^ {2}○ o2 +sonnet +planned +← o1$/ })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /the session lists no skills to check against/ })).toBeDefined()
 
   await $.command.run({ command: 'troupe', args: 'nope' } as never)
@@ -163,6 +163,13 @@ test('the skill verdict follows the session: a listing that failed, or one that 
   await ui.unmount()
 })
 
+/** A session with no tmux above it: no TMUX, and no ancestor that has one. */
+const outsideTmux = (on: On) => {
+  on('session.cwd', () => ({ value: '/repo' }))
+  on('env.get', () => ({ value: undefined }))
+  on('process.run', (_, e) => ({ value: { exitCode: 0, stdout: e.argv[0] === 'sh' ? '100\t\t\n1\t\t\n' : '', stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }))
+}
+
 const servesValid = (on: On) => {
   on('command.register', () => ({ value: { command: 'troupe' } }))
   on('ui.open', () => ({ value: { isPlaced: true } }))
@@ -184,33 +191,43 @@ const inline = (bodyColumns: number, bodyRows: number) => ({
   props: { ...PANE.props, placement: 'inline' as const, bodyColumns, scroll: { offset: 0, bodyRows } },
 })
 
-/** The order of the pane's parts: the header, each DETAIL rule, the tables' header rows, the GRAPH's title. */
+/** The order of the pane's parts: the header, the GRAPH's title, each section rule; and whether it ends cut (…). */
 const partsOf = async (ui: { findAll: (query: { type: string }) => Promise<{ text?: string }[]> }) =>
   (await ui.findAll({ type: 'Text' }))
     .map(one => one.text ?? '')
-    .filter((text, index, all) => /^(TROUPE ·|╔═ ▦ MISSION| {2}── |ROLE |ID )/.test(text) && text !== all[index - 1])
-    .map(text => (text.startsWith('TROUPE') ? 'header' : text.startsWith('╔') ? 'GRAPH' : text.replace(/ ─+$/, '').replace(/(\S) {2,}.*$/, '$1').trim()))
+    .filter((text, index, all) => /^(TROUPE ·|╔═ ▦ MISSION| {2}── |…$)/.test(text) && text !== all[index - 1])
+    .map(text => (text.startsWith('TROUPE') ? 'header' : text.startsWith('╔') ? 'GRAPH' : text.replace(/ ─+$/, '').trim()))
 
-test('inline with few rows: the header and DETAIL first, then the TABLES, no GRAPH', async ($, on) => {
+test('inline with few rows: the pane draws the whole view, for the engine to scroll', async ($, on) => {
   const clock = mock.clock(on)
   servesValid(on)
   await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
   await clock.settle()
-  const ui = await $.ui.mount(inline(72, 9))
-  expect(await partsOf(ui)).toEqual(['header', '── GOAL', '── ORDERS · 3', '── ROLES · 3', 'ROLE', 'ID'])
-  expect(await ui.find({ type: 'Text', text: /^ {2}o2: {11}sonnet · planned · layer 2 · depends o1 · Draw the pane$/ })).toBeDefined()
-  expect(await ui.find({ type: 'Text', text: /^ {2}orchestrator: fable · max · ▪▪▪▪▪$/ })).toBeDefined()
+  const ui = await $.ui.mount(inline(100, 9))
+  expect(await partsOf(ui)).toEqual(['header', 'GRAPH', '── ROLES · 3', '── ORDERS · 3', '── GOAL', '── ORDERS · 3', '── ROLES · 3'])
   await ui.unmount()
 })
 
-test('inline given the rows for all of it: the GRAPH comes first, as docked', async ($, on) => {
+test('inline given the rows for all of it: header, GRAPH, compact ROLES and ORDERS, then DETAIL', async ($, on) => {
   const clock = mock.clock(on)
   servesValid(on)
   await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
   await clock.settle()
   const ui = await $.ui.mount(inline(150, 200))
-  expect(await partsOf(ui)).toEqual(['header', 'GRAPH', 'ROLE', 'ID', '── GOAL', '── ORDERS · 3', '── ROLES · 3'])
-  // Three orders: not light, so the review steps are not struck, and o1 and o3 share layer 1.
-  expect(await ui.find({ type: 'Text', text: /^○ o3 +1 +opus +planned +— +Check the engine's widths$/ })).toBeDefined()
+  expect(await partsOf(ui)).toEqual(['header', 'GRAPH', '── ROLES · 3', '── ORDERS · 3', '── GOAL', '── ORDERS · 3', '── ROLES · 3'])
+  // Three orders, o2 after o1: one line each, the goal only in DETAIL.
+  expect(await ui.find({ type: 'Text', text: /^ {2}○ o2 +sonnet +planned +← o1$/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /^ {2}o2: {11}sonnet · planned · layer 2 · depends o1 · Draw the pane$/ })).toBeDefined()
+  await ui.unmount()
+})
+
+test('narrow: the compact lines keep each role state, and DETAIL keeps the roles', async ($, on) => {
+  const clock = mock.clock(on)
+  servesValid(on)
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  await clock.settle()
+  const ui = await $.ui.mount(inline(72, 200))
+  expect(await ui.find({ type: 'Text', text: /^ {2}◐ orchestrator {2}fable {3}needs you {2}◆ Plan OK\?$/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /^ {2}orchestrator: fable · max · ▪▪▪▪▪$/ })).toBeDefined()
   await ui.unmount()
 })

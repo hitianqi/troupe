@@ -1,0 +1,59 @@
+# o2: the panel driven in a scratch session (Claude Code 2.1.304)
+# tmux -L troupe-o2, a 160x45 window, cwd the main checkout; the session runs as an OpenRig seat does:
+#   sh -c 'env -u TMUX -u TMUX_PANE claude --plugin-dir <the o2 worktree>'
+# so the engine has no TMUX and the pane's shell above it has. /troupe typed with tmux send-keys.
+
+## /troupe /home/tizh/repos/projects/troupe-p2-o2/docs/missions/p2 (first)
+list-panes: %0 0,0 95x45 sh   |   %1 96,0 64x45 node .../bin/troupe-panel /home/tizh/repos/projects/troupe-p2-o2/docs/missions/p2 --owner 1744567
+(1744567 = the claude process; the panel showed the plan path absolute, since fixed: the mod now passes the folder as the session names it, with -c <session dir>)
+
+## after the hot reload (files changed under --plugin-dir), /troupe <p2 path> again
+%0 95x45
+%1 64x45
+│                 /troupe split-right (pane id kept and reused, /troupe close, session-end    │
+│                 ▪ Builds troupe-panel and the split, sharing one drawing module with the    │
+
+## /troupe docs/missions/p1 (another mission: respawn in the same pane)
+%0 95x45
+%1 64x45
+  ⎿  troupe: troupe panel already open (pane %1); now showing docs/missions/p1.
+│   o1:           opus · reviewed · layer 1 · depends — · Turn the troupe pane into a         │
+TROUPE · p1 · light · plan checks clean · Show a mission in a p…
+  ── GOAL ──────────────────────────────────────────────────────
+  goal:         Show a mission in a pane: its goal, the workflow
+
+## /troupe close
+%0 160x45
+  ⎿  troupe: troupe panel closed.
+
+## /troupe close again
+%0 160x45
+  ⎿  troupe: no troupe panel is open.
+
+## /troupe docs/missions/p1 (opens a new split)
+%0 95x45
+%2 64x45
+  ⎿  troupe: troupe panel opened on the right (64 columns, pane %2).
+
+## hot reload with the panel open: a comment appended to hooks/lines.ts in the --plugin-dir, then /troupe docs/missions/p1
+%0 95x45
+%2 64x45
+  ⎿  troupe: troupe panel already open (pane %2); now showing docs/missions/p1.
+
+## /exit
+no server running on /tmp/tmux-1000/troupe-o2
+pgrep: no troupe-panel process left (the server exited: both panes gone)
+
+## kill -KILL of the claude process with the panel open (no session.end)
+%0 95x45 sh
+%1 64x45 node
+claude pid 1749693
+1 s after:
+no server running on /tmp/tmux-1000/troupe-o2
+4 s after:
+no server running on /tmp/tmux-1000/troupe-o2
+no troupe-panel process
+
+## the owner check alone: troupe-panel --owner <a sleep's pid>, then kill the sleep
+before: pane_dead=0 cmd=node
+after 2.5 s: pane_dead=1 pane_dead_status=0

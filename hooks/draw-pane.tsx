@@ -1,29 +1,18 @@
 import type { EngineInterface, RenderElement, RenderInput } from 'claude-code'
 
-import type { TroupeMission } from '../types'
-import { graph } from './graph'
-import { readMission } from './read-state'
-import { detail, headerLine, ordersTable, rolesTable, TONES } from './view'
-import type { Line } from './view'
+import { viewLines } from './lines.ts'
+import { readMission } from './read-state.ts'
+import { TONES } from './view.ts'
 
-// Draws pane `troupe` as the approved mock (docs/missions/p1/mock-p1.txt):
-// docked, the header, the GRAPH, the TABLES and the DETAIL sections; inline,
-// the header and DETAIL first, then the TABLES, and the GRAPH only when the
-// rows for all of it are given.
-
-/** The pane top to bottom, as lines of styled runs. */
-export function paneLines(m: TroupeMission, width: number, placement: 'dock' | 'inline', rows: number): Line[] {
-  const docked = [headerLine(m, width), [], ...graph(m, width), [], ...rolesTable(m, width), [], ...ordersTable(m, width), ...detail(m, width)]
-  if (placement === 'dock' || rows >= docked.length) return docked
-
-  return [headerLine(m, width), ...detail(m, width).slice(1), [], ...rolesTable(m, width), [], ...ordersTable(m, width)]
-}
+// Draws pane `troupe`: the whole view from lines.ts, which bin/troupe-panel
+// draws from too. A view taller than the pane's rows scrolls in the engine's
+// own window (the arrows while the pane is focused); the header scrolls with it.
 
 /** The rows the whole pane takes at `width`: what the pane asks for inline. */
 export async function paneRows($: EngineInterface, width: number): Promise<number | undefined> {
   const m = await readMission($)
 
-  return m === null || 'missing' in m ? undefined : paneLines(m, width, 'dock', 0).length
+  return m === null || 'missing' in m ? undefined : viewLines(m, width).length
 }
 
 export async function drawPane($: EngineInterface, e: RenderInput<'Pane'>): Promise<RenderElement> {
@@ -43,7 +32,7 @@ export async function drawPane($: EngineInterface, e: RenderInput<'Pane'>): Prom
       </Box>
     )
   }
-  const lines = paneLines(current, Math.max(40, e.props.bodyColumns), e.props.placement, e.props.scroll.bodyRows)
+  const lines = viewLines(current, Math.max(40, e.props.bodyColumns))
 
   return (
     <Box flexDirection="column">
