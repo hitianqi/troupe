@@ -1,0 +1,7 @@
+# OpenRig writes these into the checkout; never commit them
+.claude/skills/
+.agents/skills/
+CLAUDE.local.md
+# tooling
+node_modules/
+.claude-plugin/types/
