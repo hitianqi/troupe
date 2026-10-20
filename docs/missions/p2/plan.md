@@ -114,6 +114,14 @@ be separate tmux windows or sessions, never panes beside an OpenRig-bound
 one. Looks stay in dev.b1's tile, and Tianqi runs `/troupe close` after
 each.
 
+Fourth amendment (2026-10-20 14:09Z, Tianqi's look-2 verdict through
+大博士贴, "是空的，而且宽度不是 50%"): the split is 50% of the window;
+waiting items use a brighter grey that reads on a picture background
+(OpenRig theme's next step up from dim, or #9aa3ad), and strikethrough is
+kept only for steps skipped as light; inside a group box each step is one
+line, the checkpoints stay small boxes, so the graph, roles and orders fit
+in 57 rows at 63 and at 79 columns.
+
 ## How the work is split
 
 Two orders in series, as the brief sets out. o1 is research by nature, but
