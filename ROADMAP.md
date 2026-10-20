@@ -1,9 +1,14 @@
 # troupe — roadmap (draft, 2026-10-20)
 
-troupe is a Claude Code mod (a plugin with a hooks module) that
-runs the core of the tianqi-rig-kit mission workflow inside one Claude Code
-session: Agent-tool subagents are the roles, and a read-only pane docked on
-the right shows the plan and its progress. It does not talk to OpenRig.
+troupe is a Claude Code mod (a plugin with a hooks module) that runs the
+core of the tianqi-rig-kit mission workflow from one Claude Code session, as
+a lightweight alternative to OpenRig's configuration barrier. The user types
+`/troupe` and a mission in the chat; a plan panel splits right in the
+terminal; the conversation window is the orchestrator; once the plan is
+agreed, one tmux window per role (orchestrator excluded) opens a Claude
+instance in its own worktree, and the existing workflow runs. tmux is a hard
+requirement (split and cross-window typing); herdr comes second. It does
+not talk to OpenRig.
 
 Status: Phase 0 done (2026-10-20, mission p0; see `docs/FEASIBILITY.md`).
 Repo: GitLab `AI/troupe`, developed on the Prover account like the other
@@ -39,7 +44,8 @@ columns unasked, 110 once opened with /troupe". Phase 2 first verifies live,
 with a person at the keyboard: the Approve/Change round trip, a person-opened
 pane, a 144-column screenshot, the agent rows drawing, the Change input.
 Phase 3's orchestrator runs from the mission checkout and merges each order
-itself.
+itself. Phase 2 was re-planned the same day (windows and dispatch, tmux
+first) after Tianqi set the product shape.
 
 ## What was checked while drafting this (2026-10-20)
 
@@ -129,26 +135,43 @@ Measured by: `claude plugin test` fixtures (a valid plan, an overlapping plan
 without depends_on, bad YAML, a missing skill); each hooks file under 300
 lines; one screenshot.
 
-### Phase 2 — Two hard rules and the approval dialog (about half a day)
+### Phase 2 — Windows and dispatch (tmux first; decided 2026-10-20)
 
-Delivers:
-- `hooks/enforce-rules.ts`: `on('tool.call', { tool: 'Agent' })` with the
-  guard pattern. Deny when the plan is not approved; deny when the order's
-  `depends_on` is not done. Orders are identified by the "oN:" description
-  prefix; an Agent call without a prefix is not an order and passes.
-- Approval: when plan.md is ready (lint passes) the mod asks with `$.ui.ask`:
-  Approve / Change. Change takes free text (e.g. "o2 on opus", "add the
-  verify skill to the reviewer"), hands it to the orchestrator as context,
-  the orchestrator edits plan.md, the pane redraws, the dialog comes back.
-  Approval is written to a file in the mission dir so it survives a reload.
-- Light mode: a plan with 1–2 orders skips the slim pass and runs serially.
+Checks first, half a day, each with evidence in `docs/FEASIBILITY.md`:
+1. Can a hook send keys to another tmux pane? `$.process.run(["tmux",
+   "send-keys", …])` from the mod, where a Bash call from the model is
+   refused by the auto-mode classifier ("Tmux Self Drive", Phase 0 finding).
+2. Can the mod find its own tmux pane (`$TMUX`, `tmux display -p`) and
+   split right, and does the split show as a tile under herdr?
+3. A standalone panel process (same parser as read-state) drawing the plan
+   in that split, never scrolling, at any width.
 
-Done when: the tests prove dispatch before approval is refused with a reason
-the model can read, o2 before o1 is refused, o2 after o1 is allowed, and one
-Change round trip edits the plan and re-asks.
+Then the build:
+- `troupe_dispatch(order)`: a tool the mod registers for the orchestrator.
+  It is the home of the two hard rules: refuse before the plan is approved,
+  refuse while `depends_on` is not done. On success it creates the order's
+  worktree, opens a tmux window there with a Claude instance (no mod needed
+  in role windows, so no "Turn on the mods" question; `--permission-mode`
+  as the user set it), and types the order brief into it.
+- Results come back as files in `docs/missions/<mission>/` (done markers,
+  REVIEW-<id>.md); the panel polls them, as it already polls plan.md.
+- Approval is `$.ui.ask` in the orchestrator window: Approve / Change, Change
+  taking free text; the orchestrator edits plan.md, the panel redraws, the
+  dialog comes back. Verified live with a person at the keyboard first.
+- Light mode: 1–2 orders, serial, no slim.
 
-Measured by: `claude plugin test`; a scripted two-order dry run in the troupe
-repo itself (no paid model calls beyond a short session).
+Done when: `/troupe` with a two-order mission opens the panel on the right,
+the dialog approves the plan, two role windows open in their worktrees and
+take their briefs, a dispatch before approval and a dispatch with an unmet
+dependency are refused with a reason the model reads, and the panel shows the
+orders moving to done.
+
+Measured by: the three checks with their evidence; `claude plugin test` for
+the dispatch rules; one scripted two-order dry run; what is left to the
+human (prompts in role windows) listed in the record.
+
+Trade-off accepted: no queue or daemon, so no recovery after a reboot, one
+machine only, and the human watches the role windows for prompts.
 
 ### Phase 3 — The workflow skill and one real mission (about one day)
 
