@@ -103,6 +103,17 @@ Claude pane was his own drag, not the split. Items 1 (width cap) and 5
 50%, at least 30 columns, and reports the real width from tmux. Items 2, 3
 and 4 stand.
 
+Third amendment (2026-10-20 13:47Z, 大博士贴's ruling on a finding):
+while the panel was open in dev.b1's window, OpenRig refused every delivery
+to that seat ("does not have the single expected bound pane"). o2 adds:
+`split-window -d`, so the split does not take focus; the mod survives its
+pane vanishing (a re-split on the next `/troupe`, no stale id); and
+RECORD.md names the known limit: a split in an OpenRig seat's window makes
+the seat unreachable by `rig send` and queue wakes. p3's role windows must
+be separate tmux windows or sessions, never panes beside an OpenRig-bound
+one. Looks stay in dev.b1's tile, and Tianqi runs `/troupe close` after
+each.
+
 ## How the work is split
 
 Two orders in series, as the brief sets out. o1 is research by nature, but
