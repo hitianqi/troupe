@@ -1,7 +1,7 @@
 {
   "name": "troupe",
-  "version": "0.1.0",
-  "description": "Runs a planned mission with subagents and shows its plan in a pane (Phase 0: hello pane and API probes)",
+  "version": "0.2.0",
+  "description": "Shows the mission in plan.md in a pane: roles and their skills, plan problems, orders in dependency layers, the human gates",
   "author": {
     "name": "Tianqi Zhao"
   },
