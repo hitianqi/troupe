@@ -20,27 +20,45 @@ Done when:
 - Order state comes from the mission dir (`REVIEW-<id>.md` present →
   reviewed) and from `$.agent.list()` entries whose description starts with
   `<id>:` (running / done); otherwise planned.
-- Roles and their skills come from the plan's `roles` mapping (role → list
-  of skill names; three default roles with none declared when the block is
-  absent). Each skill is resolved against `$.session.usage` in both
-  spellings (`shared:x` and `x`), and one that is not found is flagged
-  visibly. `templates/plan.md` in this repo carries the `roles` block.
+- Roles come from the plan's `roles` block. Each role carries `model`,
+  `effort` (think level: low / medium / high / xhigh / max), `duty` (a list
+  of bullet lines) and `skills`; an order's own `model` stays the override
+  for that order. The short list form (`builder: [skill, …]`) is still
+  accepted, with default model, effort and duty for orchestrator, builder
+  and reviewer; with no block at all the three defaults are shown. Each
+  skill is resolved against `$.session.usage` in both spellings (`shared:x`
+  and `x`), and one that is not found is flagged visibly. `templates/plan.md`
+  in this repo carries the full `roles` block.
 - `hooks/draw-pane.tsx` draws pane `troupe`, titled `TROUPE · <mission>`,
-  in this order so the inline frame (about 9 rows at 76 columns) shows the
-  first part: the goal line (first sentence of the plan's Intent); the
-  workflow stage line; orders in dependency layers with model, state and
-  goal; then roles, each with a one-line duty and its skills (missing
-  flagged); plan problems; the gates plan / MR / merged as plain rows; and
-  the first ~3 lines of the plan's "How the work is split". Docked, it all
-  shows. It reuses the spike's layering and palette, with no backgrounds.
-- The workflow is the static row of stages plan → build → review → slim →
-  final review → MR → merged, with the current stage marked from state the
-  pane already has (gate rows and order states); a plan of one or two
-  orders shows `light` beside it. No live stage tracking (Phase 3).
-- A role's duty comes from a `duty` field when the `roles` block uses the
-  mapping form (`builder: { skills: [...], duty: "..." }`); the list form
-  (`builder: [...]`) is still accepted, and then the default duty line for
-  orchestrator, builder and reviewer is shown.
+  in four parts, plus plan problems wherever they fit best:
+  1. **Goal**: the `goal:` key of the plan's YAML block when present
+     (`templates/plan.md` carries it), else the first sentence of Intent.
+  2. **Workflow**: the key steps of the kit's mission flow
+     (`<kit>/workflows/tianqi-mission.yaml`, as drawn by
+     `<kit>/scripts/draw_mission.py`), compact, not the full diagram:
+     Intent → Plan → Plan OK? → Build (each order, in parallel: build →
+     order review → fix, ≤ 2 reviews) → Slim → Cut → Final review (fix,
+     ≤ 2 reviews) → MR OK? → Open MR → Merged? → Teardown → main. The three
+     human gates are marked as such; the current step is highlighted from
+     state the pane already has (gate rows, order states, the REVIEW / SLIM
+     files in the mission dir); a plan of one or two orders is `light` and
+     skips Slim, Cut and Final review. No live stage tracking (Phase 3).
+  3. **Roles**: per role its model, effort, duty bullets and skills
+     (missing flagged).
+  4. **Orders** (the work split): orders in dependency layers with id,
+     model, state, goal and depends_on. If 大博士贴 confirms a different
+     fourth part with Tianqi, that replaces this one.
+  It reuses the spike's layering and palette, with no backgrounds. Docked
+  it all shows. Inline, the pane fits the rows the engine gives it
+  (`e.props.scroll.bodyRows`, about 9 at 76 columns): a compact layout
+  ranked goal, workflow, orders, roles, so nothing important is cut by the
+  fold.
+- **The pane does not scroll away.** Find what the engine allows to keep
+  the inline pane in place above the prompt as the transcript scrolls
+  (`rows` / `columns` on `$.ui.open`, the main-screen inline placement,
+  the fullscreen layout, anything else in the types) and use it. If only
+  the docked (fullscreen) pane can stay fixed, record why in RECORD.md
+  with the engine's own text, and the orchestrator tells 大博士贴.
 - `hooks/register.tsx` only wires (≤ 100 lines); `read-state.ts` and
   `draw-pane.tsx` are each under 300 lines. The Phase 0 probe tool, probe
   commands and probe deny rule are gone, and with them the tool hook that
@@ -60,11 +78,15 @@ Done when:
   `README.md` says what the mod shows, how to load it, and the 144/110
   columns. The repo copy and the dev-mods copy of the mod are identical.
 
-Amendment (2026-10-20 11:13Z, ruled by 大博士贴): after a first look inline
-Tianqi withdrew his approval — "that's all the plan? I cannot see any model
-info, goal, role duty, how the work is split, the workflow". The pane now
-also draws the goal line, role duties, the split, and the workflow stages,
-and orders its content for the inline fold. Still one order. Anything he
+Amendment (2026-10-20, second version, 11:17Z, from 大博士贴): after a
+first look inline Tianqi withdrew his approval — "that's all the plan? I
+cannot see any model info, goal, role duty, how the work is split, the
+workflow". A first amendment (goal line, a stage line, one-line duties) was
+still "太简单了". His spec has four parts: the goal; the workflow with all
+its key steps and the human gates, not as complex as the kit diagram; each
+role's model, think/effort level, duty as bullets and skills for this task;
+and the orders (assumed, being confirmed). He also asked "有没有什么办法不随
+着滚动消失": the pane must not scroll away. Still one order. Anything he
 asks for beyond Phase 1 (live progress, dialogs, costs) is listed in
 RECORD.md as Phase 2/3, not built.
 
@@ -99,18 +121,35 @@ mission runs.
 ## Orders
 
 ```yaml
+goal: "Show a mission in a pane: its goal, the workflow and where it stands, the roles, and the orders."
 roles:
   orchestrator:
-    duty: "Plans, dispatches the order, merges it, owns the mission branch"
-    skills: []
+    model: opus
+    effort: high
+    duty:
+      - "Writes the plan and gets it approved"
+      - "Dispatches each order and merges it onto the mission branch"
+      - "Opens the MR after the human's go, then tears down"
+    skills: [messaging-the-human, queue-handoff]
   builder:
-    duty: "Builds o1 in its worktree and hands it back"
+    model: opus
+    effort: high
+    duty:
+      - "Builds its order in its own worktree"
+      - "Keeps ./check.sh green and the dev-mods copy in step"
+      - "Fixes review findings, once per review"
     skills: [plugin-authoring]
-  reviewer: []
+  reviewer:
+    model: sonnet
+    effort: high
+    duty:
+      - "Reviews each order for behaviour as it lands"
+      - "On a light rig, that review is also the final review"
+    skills: []
 orders:
   - id: o1
     kind: code
-    goal: "Turn the troupe pane into a read-only view of the mission plan: read-state.ts parses and checks plan.md and resolves role skills, draw-pane.tsx draws the goal, the workflow stage, orders in layers, roles with duties, gates and the split (inline fold first), register.tsx only wires; probes removed, p0 leftovers fixed, tests, README, and the pane seen by Tianqi."
+    goal: "Turn the troupe pane into a read-only view of the mission plan: read-state.ts parses and checks plan.md and resolves role skills, draw-pane.tsx draws four parts (goal, workflow key steps with gates and the current step, roles with model/effort/duty/skills, orders in layers) and stays in place as the transcript scrolls, register.tsx only wires; probes removed, p0 leftovers fixed, tests, README, and the pane seen by Tianqi."
     why: "ROADMAP Phase 1 with the Phase 0 changes. Reuses the p0 mod (hooks/register.tsx: pane open and placement, $.agent.list polling, $.session.usage skill listing, the atom state pattern), the trellis-plan spike at ~/.claude/dev-mods/7b60ff2d-d4e0-4799-85d2-6c581256bfdd/trellis-plan/hooks/register.tsx (Kahn layering, layer rows and palette; read, not copied), and the kit's scripts/plan_lint.py (the overlap, cycle, unknown-id and empty-touches rules, ported to TS) and templates/plan.md (the YAML orders block as the input format)."
     touches:
       - hooks/
