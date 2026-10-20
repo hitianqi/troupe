@@ -122,6 +122,13 @@ kept only for steps skipped as light; inside a group box each step is one
 line, the checkpoints stay small boxes, so the graph, roles and orders fit
 in 57 rows at 63 and at 79 columns.
 
+Fifth amendment (2026-10-20 14:14Z, 大博士贴): order state is also read
+from git, so the panel is honest on rig-built missions. An order branch
+`order/<mission>/<id>` with commits ahead of the mission branch is running,
+an order squash-merged onto the mission branch is done, and the builder is
+working while any order runs. RECORD.md says live subagent progress stays
+Phase 3.
+
 ## How the work is split
 
 Two orders in series, as the brief sets out. o1 is research by nature, but
