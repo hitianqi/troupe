@@ -70,6 +70,16 @@ run, and any publishing before the MR gate. Tianqi's global
 runs `claude --plugin-dir` in the builder's own scratch tmux server with a
 per-session setting, and the record says so.
 
+Amendment (2026-10-20 12:54Z, 大博士贴's ruling on the o1 verdict): all
+three checks passed (`docs/FEASIBILITY.md`, "Phase 2 — the tmux checks").
+The engine has no `$TMUX`, so the mod finds its own pane by its process
+ancestry against `tmux list-panes -a`. Two calls for o2 are approved:
+1. The split takes 40% of the window, at least 30 columns. Below about 90
+   columns the panel draws the detail form (dev.b1's tile is 76 columns).
+2. The mod writes a small state file in the mission dir that the panel reads
+   for what only the engine knows: order states from the agent list, and the
+   skills' ✓/✗. git ignores it (`.gitignore`), and the README names it.
+
 ## How the work is split
 
 Two orders in series, as the brief sets out. o1 is research by nature, but
@@ -155,6 +165,7 @@ orders:
       - tsconfig.json
       - .claude-plugin/plugin.json
       - README.md
+      - .gitignore
       - docs/missions/p2/
     depends_on: [o1]
     model: opus
