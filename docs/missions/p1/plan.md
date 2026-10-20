@@ -25,10 +25,22 @@ Done when:
   absent). Each skill is resolved against `$.session.usage` in both
   spellings (`shared:x` and `x`), and one that is not found is flagged
   visibly. `templates/plan.md` in this repo carries the `roles` block.
-- `hooks/draw-pane.tsx` draws pane `troupe`: mission title, roles with skills
-  (missing flagged), plan problems, orders in dependency layers with model
-  and state, and the gates plan / MR / merged as plain rows. It reuses the
-  spike's layering and palette, with no backgrounds.
+- `hooks/draw-pane.tsx` draws pane `troupe`, titled `TROUPE · <mission>`,
+  in this order so the inline frame (about 9 rows at 76 columns) shows the
+  first part: the goal line (first sentence of the plan's Intent); the
+  workflow stage line; orders in dependency layers with model, state and
+  goal; then roles, each with a one-line duty and its skills (missing
+  flagged); plan problems; the gates plan / MR / merged as plain rows; and
+  the first ~3 lines of the plan's "How the work is split". Docked, it all
+  shows. It reuses the spike's layering and palette, with no backgrounds.
+- The workflow is the static row of stages plan → build → review → slim →
+  final review → MR → merged, with the current stage marked from state the
+  pane already has (gate rows and order states); a plan of one or two
+  orders shows `light` beside it. No live stage tracking (Phase 3).
+- A role's duty comes from a `duty` field when the `roles` block uses the
+  mapping form (`builder: { skills: [...], duty: "..." }`); the list form
+  (`builder: [...]`) is still accepted, and then the default duty line for
+  orchestrator, builder and reviewer is shown.
 - `hooks/register.tsx` only wires (≤ 100 lines); `read-state.ts` and
   `draw-pane.tsx` are each under 300 lines. The Phase 0 probe tool, probe
   commands and probe deny rule are gone, and with them the tool hook that
@@ -38,16 +50,27 @@ Done when:
   layering. `./check.sh` exits 0 with `tsc` actually run.
 - Live, in dev.b1's session with the mod loaded and this repo as cwd: the
   pane shows this plan (p1), an edit to the plan redraws it within the poll
-  interval, and a skill that does not exist is flagged. Tianqi has seen the
-  pane placed (unasked from 144 columns, from 110 after `/troupe`) and
-  approved the look, through 大博士贴.
+  interval, and a skill that does not exist is flagged. Tianqi has looked at
+  the pane (inline, and once with the tile widened) and approved what it
+  shows and how it looks, through 大博士贴. Docked placement (110 fullscreen
+  / 144 unasked) is evidenced by the engine's own `isPlaced` / `reason`
+  answer; no separate docked screenshot is required.
 - `docs/missions/p1/RECORD.md` records `claude --version`, the engine's
   `isPlaced` / `reason` at each width tried, and what was seen live.
   `README.md` says what the mod shows, how to load it, and the 144/110
   columns. The repo copy and the dev-mods copy of the mod are identical.
 
+Amendment (2026-10-20 11:13Z, ruled by 大博士贴): after a first look inline
+Tianqi withdrew his approval — "that's all the plan? I cannot see any model
+info, goal, role duty, how the work is split, the workflow". The pane now
+also draws the goal line, role duties, the split, and the workflow stages,
+and orders its content for the inline fold. Still one order. Anything he
+asks for beyond Phase 1 (live progress, dialogs, costs) is listed in
+RECORD.md as Phase 2/3, not built.
+
 Out of scope: the deny rules and the Approve/Change dialog (Phase 2), the
-workflow skill (Phase 3), gate state beyond "unknown", any paid run, any
+workflow skill and live stage tracking (Phase 3), gate state beyond
+"unknown", any paid run, any
 push before the MR gate, anything in `docs/` beyond this mission's folder.
 
 ## How the work is split
@@ -77,13 +100,17 @@ mission runs.
 
 ```yaml
 roles:
-  orchestrator: []
-  builder: [plugin-authoring]
+  orchestrator:
+    duty: "Plans, dispatches the order, merges it, owns the mission branch"
+    skills: []
+  builder:
+    duty: "Builds o1 in its worktree and hands it back"
+    skills: [plugin-authoring]
   reviewer: []
 orders:
   - id: o1
     kind: code
-    goal: "Turn the troupe pane into a read-only view of the mission plan: read-state.ts parses and checks plan.md and resolves role skills, draw-pane.tsx draws roles, orders in layers and gates, register.tsx only wires; probes removed, p0 leftovers fixed, tests, README, and the pane seen by Tianqi."
+    goal: "Turn the troupe pane into a read-only view of the mission plan: read-state.ts parses and checks plan.md and resolves role skills, draw-pane.tsx draws the goal, the workflow stage, orders in layers, roles with duties, gates and the split (inline fold first), register.tsx only wires; probes removed, p0 leftovers fixed, tests, README, and the pane seen by Tianqi."
     why: "ROADMAP Phase 1 with the Phase 0 changes. Reuses the p0 mod (hooks/register.tsx: pane open and placement, $.agent.list polling, $.session.usage skill listing, the atom state pattern), the trellis-plan spike at ~/.claude/dev-mods/7b60ff2d-d4e0-4799-85d2-6c581256bfdd/trellis-plan/hooks/register.tsx (Kahn layering, layer rows and palette; read, not copied), and the kit's scripts/plan_lint.py (the overlap, cycle, unknown-id and empty-touches rules, ported to TS) and templates/plan.md (the YAML orders block as the input format)."
     touches:
       - hooks/
