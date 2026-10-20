@@ -113,6 +113,9 @@ names `order/<m>/<id>` and not the last reviewed `-fix` branch. Second,
 next to the fixer's `git switch -c`. o2 now also touches `SKILL.md`,
 `references/orchestrator.md` and `references/builder.md`, and it already
 depends on o1.
+C2's evidence (`REVIEW-o1-2.md`, probes of 2026-10-20) showed that the
+reviewer cannot write into the orchestrator's checkout, so o2 also touches
+`references/reviewer.md`.
 
 ## Orders
 
@@ -165,6 +168,7 @@ orders:
       - skills/troupe-mission/SKILL.md            # the two wording leftovers of REVIEW-o1-2.md
       - skills/troupe-mission/references/orchestrator.md
       - skills/troupe-mission/references/builder.md
+      - skills/troupe-mission/references/reviewer.md   # C2: the reviewer writes its report in its own worktree
     depends_on: [o1]
     model: sonnet
     risks: "The hooks import without extensions and read-state.ts imports 'claude-code', which node cannot resolve outside the engine. If stateOf cannot be imported, the check reimplements nothing and states that it covers readPlan and layersOf only. p2 changes hooks/ too, so after the rebase the check must still run against the reader p2 lands. A sample plan that uses YAML outside hooks/yaml.ts's subset would be flagged, which is a finding about the skill or the template, not about the fixture."

@@ -11,8 +11,9 @@ the one check, how to run the app) are in its README or contributor docs.
    `touches`, `risks`, `proof`, and the mission's done-when criteria.
 2. You run in your own worktree, cut from the mission branch. Rename its
    branch to `order/<mission>/<id>` first (`git branch -m`). Never check
-   out the mission branch or another builder's branch: each is checked out
-   elsewhere, and only the orchestrator merges. Install dependencies in
+   out the mission branch or any branch another worktree holds: git refuses,
+   and only the orchestrator merges. Creating a new branch from one is fine
+   (the fixer's `git switch -c`, below). Install dependencies in
    that worktree; never symlink `node_modules` or a virtualenv from another
    tree.
 3. Change only the files your order declares. If you need another file,

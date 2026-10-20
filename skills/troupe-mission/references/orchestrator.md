@@ -32,28 +32,36 @@ line there.
 You are the only writer of the mission branch. When a builder hands back an
 order:
 
-1. Check the order's diff against its `touches`:
-   `git diff --name-only <mission branch>...order/<mission>/<id>`. Every
+1. Check the diff of the order's last reviewed branch
+   (`order/<mission>/<id>-fix` when there was a fix round, else
+   `order/<mission>/<id>`) against its `touches`:
+   `git diff --name-only <mission branch>...<that branch>`. Every
    changed file must sit under a declared path (a directory with a trailing
    `/` covers everything under it); `plan.md` itself is allowed. A file
    outside fails the merge: send it back, or accept a `plan.md` change made
    in the same commit and decide whether it creates a new dependency.
-2. Send the order branch to a reviewer for an order review. Act-on findings
+2. Send the order branch to a reviewer for an order review. The reviewer
+   writes its report in its own worktree, untracked, and hands back the
+   absolute path (it cannot write into your checkout); you read it and copy
+   it into `docs/missions/<mission>/` (`SKILL.md`, step 4). Act-on findings
    go to a fixer, whose `order/<mission>/<id>-fix` branch starts from the
    order branch; the re-review and the merge then take the fix branch. When
    the human says they will test something by hand, the review still reads
    the diff but does not drive the app for what they will test.
 3. Squash-merge the order's last reviewed branch onto the mission branch as
-   one commit named after the order, with its review report.
+   one commit named after the order, with its report copies
+   (`REVIEW-<id>*.md`).
 4. Dispatch any orders that just became ready.
 
 ## Slim, final review and fix (full mode)
 
 - After the last merge, a reviewer runs the slim pass with the mission's
-  base commit. Its CUT entries go to a builder for one round of cuts on
-  `order/<mission>/slim`, which you squash-merge; no cuts goes straight
-  through.
-- Then a reviewer runs the final review on the mission branch.
+  base commit. Copy its `SLIM.md` into the mission folder. Its CUT entries
+  go to a builder for one round of cuts on `order/<mission>/slim`, which you
+  squash-merge with `SLIM.md`; no cuts goes straight through, with
+  `SLIM.md` committed alone.
+- Then a reviewer runs the final review on the mission branch; copy its
+  `REVIEW.md` into the mission folder the same way.
 - A failed final review goes to a fixer with the findings, not a
   diagnosis; it works on `order/<mission>/fix` from the mission branch's
   tip. Squash-merge that branch, then review again.
@@ -67,10 +75,11 @@ full mission: say so at the plan gate.
 
 ## Land
 
-The mission lands as one MR. The review reports and any README update are
-on the mission branch before you ask. Pushing, opening or merging needs the
-human's yes. After the yes, push and open the MR per the project's
-conventions, then give the human the MR link at the merged gate.
+The mission lands as one MR. The report copies (committed with the merges,
+or alone) and any README update are on the mission branch before you ask.
+Pushing, opening or merging needs the human's yes. After the yes, push and
+open the MR per the project's conventions, then give the human the MR link
+at the merged gate.
 
 ## Teardown
 
@@ -81,11 +90,16 @@ machine so the next one starts clean.
    project's equivalent) and go on only if it says merged.
 2. `git worktree list`: remove every worktree of this mission (the
    builders', the fixers' and the reviewers') with `git worktree remove`,
-   never `--force`. A worktree with uncommitted changes other than review
-   reports already in the MR keeps its worktree; name it in the report.
+   never `--force`. A reviewer's worktree holds its report as an untracked
+   file, so `git worktree remove` refuses it until you delete that file:
+   delete only a report whose copy is committed on the mission branch (the
+   copy is what the MR carries). A worktree with any other uncommitted
+   change keeps its worktree; name it in the report.
 3. Delete the mission's local branches: every `order/<mission>/…` branch,
    the branches the engine cut its worktrees on that are left behind (a
-   fixer's, after `git switch -c`), and the mission branch. They were
+   fixer's after `git switch -c`, a reviewer's after its detached checkout:
+   a worktree at `.claude/worktrees/agent-<id>` was cut on
+   `worktree-agent-<id>`), and the mission branch. They were
    squash-merged, so `git branch -d` refuses them; use `-D`, but only
    for this mission's branches, and keep the mission branch if its tip
    differs from the MR's head commit.

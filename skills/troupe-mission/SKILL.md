@@ -141,11 +141,14 @@ ask is a new question.
 
 Create the mission branch from the base branch, named by the project's
 conventions (else `mission/<mission>`), and work on it in the checkout the
-session runs in, so the pane reads its mission folder. If that checkout has
-uncommitted work, ask the human before switching. **Commit `plan.md` on the
-mission branch before the first dispatch**, and again after any change to
-it: a builder's worktree is cut from HEAD, so an uncommitted plan is not in
-it.
+session runs in, so the pane reads its mission folder. The mission's base
+commit is where that branch left the base branch (`git merge-base <base
+branch> HEAD`); the slim pass and a light mission's last review need it. If
+that checkout has uncommitted work other than the mission's own folder
+(`git switch -c` carries that onto the branch), ask the human before
+switching. **Commit `plan.md` on the mission branch before the first
+dispatch**, and again after any change to it: a builder's worktree is cut
+from HEAD, so an uncommitted plan is not in it.
 
 **Every builder gets its own branch, and only you merge.** A builder,
 fixer or cutter runs with `isolation: "worktree"`, cut from the session's
@@ -171,40 +174,57 @@ or on another builder's branch.
   branch, the branch name to use, `references/builder.md`, the role's
   skills, and what counts as done. Give the goal and the context, not a
   script.
-- **As each order lands**, check its diff against its `touches`:
-  `git diff --name-only <mission branch>...order/<mission>/<id>`. A file
-  outside them fails the merge, unless the same commit updated `touches` in
+- **As each order lands**, check its diff against its `touches`, on the
+  order's last reviewed branch (`order/<mission>/<id>-fix` when there was a
+  fix round, else `order/<mission>/<id>`):
+  `git diff --name-only <mission branch>...<that branch>`. A file outside
+  them fails the merge, unless the same commit updated `touches` in
   `plan.md`; then decide whether the new file creates a dependency.
 - **Order review**: send the order branch to a reviewer subagent (in the
-  background, in its own worktree, on the reviewer role's model) with
-  `references/reviewer.md`, `templates/REVIEW.md` and the absolute path of
-  the mission folder in your checkout, where it writes its report; the slim
-  pass and the final review get the same. Act-on findings go to a fixer,
-  whose `order/<mission>/<id>-fix` branch starts from the order branch;
-  the re-review (step 7's cap) and the merge then take the fix branch.
+  background, `isolation: "worktree"`, the reviewer role's model, a
+  description such as `review <id>`) with `references/reviewer.md`,
+  `templates/REVIEW.md`, the branch to check out, the report's file name
+  and, for the last order in light mode, the mission's base commit. The
+  reviewer cannot write into your checkout: the harness refuses a write
+  outside its own worktree. It writes the report in its own worktree, at
+  `docs/missions/<mission>/<REVIEW file>`, untracked, and hands back that
+  absolute path; the engine keeps the worktree because of the file. Read the
+  report there, **copy it into your own `docs/missions/<mission>/`**, where
+  the pane reads it, and commit it with the merge. The slim pass and the
+  final review work the same way. Act-on findings go to a fixer, whose
+  `order/<mission>/<id>-fix` branch starts from the order branch; the
+  re-review (step 7's cap) and the merge then take the fix branch.
 - **Merge**: you are the only writer of the mission branch. Squash-merge the
   order's last reviewed branch as one commit named after the order
-  (`<id>: <what it does>`), and commit its review report with it. Then
-  dispatch whatever just became ready; it starts from the updated mission
-  branch and needs no rebase.
+  (`<id>: <what it does>`), and commit the order's report copies
+  (`REVIEW-<id>*.md`) with it. Then dispatch whatever just became ready; it
+  starts from the updated mission branch and needs no rebase.
 
-The report on disk is the review's result. Once it is written, read it and
-move on; do not wait for the agent to finish after it.
+The report on disk is the review's result, and its path is known before
+the reviewer hands back, from the agent id in the Agent call's result:
+
+    <checkout>/.claude/worktrees/agent-<agent id>/docs/missions/<mission>/<file>
+
+Once the file is there, read it and move on; do not wait for the agent to
+finish after it.
 
 ## 5. Slim (full mode)
 
 After the last order is merged, a reviewer runs the slim pass
 (`templates/SLIM.md`) against the mission's base commit and writes
-`SLIM.md`. Its CUT entries go to a builder for one round of cuts on
-`order/<mission>/slim`, which you squash-merge; no CUT entries go straight
-on. There is no second slim round.
+`SLIM.md` in its own worktree. Copy it into the mission folder. Its CUT
+entries go to a builder for one round of cuts on `order/<mission>/slim`,
+which you squash-merge with `SLIM.md`; with no CUT entries, commit
+`SLIM.md` alone and go straight on. There is no second slim round.
 
 ## 6. Final review (full mode)
 
 A reviewer, not one of the builders, runs the final review of
 `templates/REVIEW.md` on the integrated mission branch: every done-when
 criterion, driven in its own instance, and the problems across orders. The
-cuts are reviewed with everything else. It writes `REVIEW.md`.
+cuts are reviewed with everything else. It writes `REVIEW.md` in its own
+worktree; copy it into the mission folder and commit it with the fix's
+merge, or alone when the review passes.
 
 In light mode there is no separate final review: the last order's review
 also reads the whole mission diff against the base and drives every
@@ -214,8 +234,10 @@ done-when criterion, and says so in its report.
 
 A review with Act-on findings goes to a fixer, a builder subagent with
 `references/builder.md`: give it the findings, not a diagnosis, and the
-branch to start from and the one to use (step 4). A fixer has the `<id>:`
-description only for an order's fix; the final review's fixer has none.
+branch to start from and the one to use (step 4). A re-review's brief gives
+the absolute path of the previous report, and the re-review writes `-2`
+(`REVIEW-<id>-2.md`, `REVIEW-2.md`). A fixer has the `<id>:` description
+only for an order's fix; the final review's fixer has none.
 For an order, the re-review takes the fix branch and you merge after it; for
 the final review, you squash-merge the fix branch and the re-review runs on
 the mission branch. **Two reviews, then you rule**: an order review and the
@@ -226,12 +248,13 @@ question, each with your recommendation, for the human to decide.
 
 ## 8. Gate: MR OK?
 
-Put the review reports (`REVIEW*.md`, `SLIM.md`) on the mission branch, so
-the review record lands with the plan, and update the README there if the
-mission changed what it describes. Then ask the human one question: what
-the MR delivers, any Act-on finding still open with your recommendation,
-and the branch. Nothing is pushed, opened or merged before a yes. A
-"change it" sends you to the fix loop or the plan.
+Check that every report copy (`REVIEW*.md`, `SLIM.md`) is committed on the
+mission branch, so the review record lands with the plan (commit any that
+is left), and update the README there if the mission changed what it
+describes. Then ask the human one question: what the MR delivers, any
+Act-on finding still open with your recommendation, and the branch.
+Nothing is pushed, opened or merged before a yes. A "change it" sends you
+to the fix loop or the plan.
 
 ## 9. Open the MR
 
