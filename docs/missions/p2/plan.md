@@ -97,6 +97,12 @@ supersedes the panel's look rules in the first amendment and in Done when
 > 5. The "63 columns" vs 117: find out why (resize after open? split -l misapplied?) and make the reported width the real one.
 > Then a new look: send me a rig capture of BOTH panes (seat pane and panel) at his tile size, and a row; he looks once more.
 
+Correction (2026-10-20 13:43Z, Tianqi through 大博士贴): the 40-column
+Claude pane was his own drag, not the split. Items 1 (width cap) and 5
+(63 vs 117) of the ruling above are withdrawn: the split defaults to 40% or
+50%, at least 30 columns, and reports the real width from tmux. Items 2, 3
+and 4 stand.
+
 ## How the work is split
 
 Two orders in series, as the brief sets out. o1 is research by nature, but
