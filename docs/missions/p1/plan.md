@@ -53,6 +53,22 @@ Done when:
   (`e.props.scroll.bodyRows`, about 9 at 76 columns): a compact layout
   ranked goal, workflow, orders, roles, so nothing important is cut by the
   fold.
+- **A real TUI, not lines of text** (Tianqi, third look, 11:25Z: "这太简陋了
+  … 搞点这种正儿八经的TUI图形化的东西，现在就完全是一堆文字啊", pointing at
+  the OpenRig TUI's topology view and seat table). The four parts are drawn
+  with the engine's `Box` borders, colour and glyphs, in the style of that
+  TUI: the workflow as bordered step boxes joined by arrows (wrapping into
+  rows like the kit's mission diagram), the human gates in their own
+  colour, the current step highlighted, done steps marked, skipped steps
+  dimmed; roles as bordered cards side by side, each with a status dot,
+  a model badge, the effort as a small level meter, duty bullets and skills
+  with ✓ / ✗; orders as bordered cards in dependency layers joined by
+  connectors (the spike's), with model badge and state dot, and a progress
+  meter of orders done. Thin dotted rules separate rows where a table fits
+  better than boxes. No backgrounds behind text blocks; badges may use a
+  coloured chip. Docked (fullscreen, from 110 columns) is where it shows in
+  full; inline, a compact graphic of the most important parts fits the
+  rows given.
 - **The pane does not scroll away.** Find what the engine allows to keep
   the inline pane in place above the prompt as the transcript scrolls
   (`rows` / `columns` on `$.ui.open`, the main-screen inline placement,
