@@ -1,6 +1,7 @@
 {
   "name": "troupe",
   "private": true,
+  "type": "module",
   "description": "Development tooling for the troupe mod: type-checking only",
   "scripts": {
     "check": "./check.sh"

@@ -6,8 +6,10 @@ export type Yaml = string | null | Yaml[] | { [key: string]: Yaml }
 type Line = { no: number; indent: number; text: string }
 
 class YamlError extends Error {
-  constructor(readonly line: number, message: string) {
+  readonly line: number
+  constructor(line: number, message: string) {
     super(`line ${line}: ${message}`)
+    this.line = line
   }
 }
 

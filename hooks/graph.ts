@@ -1,7 +1,7 @@
 import type { TroupeMission } from '../types'
-import { STEPS } from './plan'
-import { fit, ORDER_GLYPH } from './view'
-import type { Line, Run, Tone } from './view'
+import { STEPS } from './plan.ts'
+import { fit, ORDER_GLYPH } from './view.ts'
+import type { Line, Run, Tone } from './view.ts'
 
 // The GRAPH, drawn as OpenRig draws its topology: a character canvas. Like
 // OpenRig it shows the roles and the human checkpoints only: the orchestrator,
@@ -26,7 +26,9 @@ const ROW_MIN = 107
 
 class Canvas {
   readonly cells: Cell[][]
-  constructor(readonly width: number, height: number) {
+  readonly width: number
+  constructor(width: number, height: number) {
+    this.width = width
     this.cells = Array.from({ length: height }, () => Array.from({ length: width }, () => ({ ch: ' ' })))
   }
   put(row: number, col: number, text: string, style: Style = {}) {
@@ -88,12 +90,10 @@ function flow(m: TroupeMission, inner: number, gateInner: number): Item[] {
   const gate = (label: string) => stepBox(label, at(label), m.step, gateInner, '◆')
   const orders: Box[] = m.orders.map(order => {
     const tone: Tone = order.state === 'planned' ? 'dim' : 'ok'
+    const model = inner >= 22 && order.model ? `  ${order.model}` : ''
 
     return {
-      lines: [
-        [{ text: ORDER_GLYPH[order.state], tone }, { text: fit(` ${order.id}  ${order.model}`, inner - 1) }],
-        [{ text: fit(`  ${order.state}`, inner), tone }],
-      ],
+      lines: [[{ text: ORDER_GLYPH[order.state], tone }, { text: fit(` ${order.id}${model}  ${order.state}`, inner - 1), tone }]],
       border: 'chrome',
     }
   })
@@ -122,25 +122,29 @@ function boxes(canvas: Canvas, list: Box[], row: number, col: number, width: num
   }
 }
 
+/** A role's box: its steps one line each, no box of their own. */
 function role(canvas: Canvas, name: string, list: Box[], row: number, col: number, width: number, height: number, isNow: boolean) {
   canvas.box(row, col, width, height, 'chrome')
   canvas.put(row, col + 2, ' ')
   canvas.put(row, col + 3, `≡ ${name}`, isNow ? { tone: 'warn', bold: true } : { tone: 'accentBright' })
   canvas.put(row, col + 5 + name.length, ' ')
-  boxes(canvas, list, row + 1, col + 2, width - 4)
+  list.flatMap(box => box.lines).forEach((line, index) => canvas.runs(row + 1 + index, col + 2, line))
 }
+
+/** A role's height: its border and one line per step. */
+const roleHeight = (list: Box[]) => list.reduce((sum, box) => sum + box.lines.length, 0) + 2
 
 export function graph(m: TroupeMission, width: number): Line[] {
   const isBuilding = STEPS[m.step]?.label === 'Build'
   const isRow = width >= ROW_MIN
   const roleWidth = isRow ? GW : Math.min(40, width - 6)
-  const items = flow(m, roleWidth - 8, CW - 4)
+  const items = flow(m, roleWidth - 4, CW - 4)
   const title = ` ▦ MISSION ${m.name} `
   const widthOf = (item: Item) => (item.kind === 'role' ? roleWidth : CW)
 
   if (isRow) {
     // The checkpoint columns stack their boxes with a ▼ between.
-    const heightOfItem = (item: Item) => (item.kind === 'role' ? heightOf(item.boxes) + 2 : heightOf(item.boxes) + item.boxes.length)
+    const heightOfItem = (item: Item) => (item.kind === 'role' ? roleHeight(item.boxes) : heightOf(item.boxes) + item.boxes.length - 1)
     const gh = Math.max(...items.map(heightOfItem))
     const canvas = new Canvas(width, gh + 5)
     canvas.box(0, 0, width, gh + 5, 'chrome', '╔═╗║╚╝')
@@ -153,10 +157,10 @@ export function graph(m: TroupeMission, width: number): Line[] {
         role(canvas, item.name, item.boxes, 1, x, roleWidth, gh, item.name === 'builder' && isBuilding)
         centers.push(x + Math.floor(roleWidth / 2))
       } else {
-        boxes(canvas, item.boxes, 2, x, CW, 1)
-        item.boxes.slice(1).forEach((_, below) => canvas.put(5 + below * 4, x + Math.floor(CW / 2), '▼', { tone: 'accent' }))
+        boxes(canvas, item.boxes, 1, x, CW, 1)
+        item.boxes.slice(1).forEach((_, below) => canvas.put(4 + below * 4, x + Math.floor(CW / 2), '▼', { tone: 'accent' }))
       }
-      if (index < items.length - 1) canvas.put(3, x + widthOf(item), ARROW, { tone: 'accent' })
+      if (index < items.length - 1) canvas.put(2, x + widthOf(item), ARROW, { tone: 'accent' })
       x += widthOf(item) + ARROW.length
     })
     const [cb = 0, cr = 0] = [centers[1], centers[2]]
@@ -170,7 +174,7 @@ export function graph(m: TroupeMission, width: number): Line[] {
 
   // Too narrow for the flow side by side: it stacks top to bottom, joined by
   // ▼, and the fix loop is one line under the reviewer.
-  const rows = items.map(item => (item.kind === 'role' ? heightOf(item.boxes) + 2 : heightOf(item.boxes) + item.boxes.length - 1))
+  const rows = items.map(item => (item.kind === 'role' ? roleHeight(item.boxes) : heightOf(item.boxes) + item.boxes.length - 1))
   const total = 1 + rows.reduce((sum, h) => sum + h, 0) + (items.length - 1) + 1 + 2
   const canvas = new Canvas(width, total)
   canvas.box(0, 0, width, total, 'chrome', '╔═╗║╚╝')
@@ -186,7 +190,9 @@ export function graph(m: TroupeMission, width: number): Line[] {
     }
     y += rows[index] ?? 2
     if (item.kind === 'role' && item.name === 'reviewer') {
-      canvas.put(y, gx + 2, `↑${LOOP}→ back to builder`, { tone: 'chrome' })
+      const room = width - 1 - (gx + 2)
+      const loop = [`↑${LOOP}→ back to builder`, `↑${LOOP}→ builder`, `↑${LOOP.trimEnd()}`].find(text => text.length <= room) ?? '↑'
+      canvas.put(y, gx + 2, loop, { tone: 'chrome' })
       y += 1
     }
     if (index < items.length - 1) {

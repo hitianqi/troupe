@@ -7,3 +7,5 @@ CLAUDE.local.md
 # tooling
 node_modules/
 .claude-plugin/types/
+# what the mod hands troupe-panel in a mission folder (README, troupe-panel)
+.troupe-state.json

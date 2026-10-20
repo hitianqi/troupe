@@ -1,0 +1,147 @@
+#!/usr/bin/env node
+// troupe-panel <mission dir> [--width N] [--once] [--plain] [--owner PID]
+//
+// ↑/↓ or j/k scroll a row, PgUp/PgDn a page, Home/End to the ends, the wheel
+// three rows (tmux: `set -g mouse on`); keys reach it while its pane has the
+// focus. Ctrl+C ends it.
+//
+// Draws the troupe pane's view of a mission in the terminal it runs in, from
+// the same code as the in-session pane (hooks/lines.ts, through
+// hooks/ansi.ts): the header, the GRAPH, compact ROLES and ORDERS, then
+// DETAIL, cut from the bottom to the terminal's rows. It redraws when what
+// it would draw changes (the folder, the facts the mod wrote, git: polled
+// every 2 s, git every 10 s) or the terminal is resized, never scrolls, and
+// exits on SIGTERM, SIGINT or SIGHUP, or once the process --owner names is
+// gone. --once prints one screen and exits. Node 22.18 or later: it imports
+// the hooks' .ts files with Node's own type stripping.
+
+import { execFile } from 'node:child_process'
+import { readdirSync, readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
+
+const hooks = new URL('../hooks/', import.meta.url)
+let shared
+try {
+  shared = await Promise.all(['plan.ts', 'mission.ts', 'ansi.ts'].map(file => import(new URL(file, hooks).href)))
+} catch (error) {
+  console.error(`troupe-panel: cannot load the hooks (${error.message}); it needs Node 22.18 or later, this is ${process.version}`)
+  process.exit(1)
+}
+const [{ readPlan }, { GIT_MS, gitFacts, missionOf, POLL_MS, STATE_FILE }, { actionsOf, frame, scrolled }] = shared
+
+const args = process.argv.slice(2)
+const valueOf = name => (args.includes(name) ? args[args.indexOf(name) + 1] : undefined)
+const width = valueOf('--width') === undefined ? undefined : Number(valueOf('--width'))
+const owner = valueOf('--owner') === undefined ? undefined : Number(valueOf('--owner'))
+const given = args.find((arg, index) => !arg.startsWith('--') && !['--width', '--owner'].includes(args[index - 1] ?? ''))
+if (given === undefined || (width !== undefined && !(width >= 20))) {
+  console.error('usage: troupe-panel <mission dir> [--width N (20 or more)] [--once] [--plain] [--owner PID]')
+  process.exit(2)
+}
+const dir = resolve(given)
+
+/** One git command in the mission's repository: its output, or undefined when it fails. */
+const git = args =>
+  new Promise(done => execFile('git', ['-C', dir, ...args], { timeout: 5000 }, (error, stdout) => done(error ? undefined : stdout)))
+let gitRead = { at: 0, key: '', facts: undefined }
+
+/** The mission from plan.md, the folder's files, the facts the mod wrote and git's (asked at most every GIT_MS); or why there is none. */
+async function read() {
+  let source
+  try {
+    source = readFileSync(`${dir}/plan.md`, 'utf8')
+  } catch {
+    return { missing: `no plan.md in ${dir}` }
+  }
+  const files = readdirSync(dir)
+  let facts = { agents: [] }
+  try {
+    facts = JSON.parse(readFileSync(`${dir}/${STATE_FILE}`, 'utf8'))
+  } catch {
+    // No mod beside it (or not yet): no agents, and no skill listing to check against.
+  }
+
+  const plan = readPlan(source)
+  const ids = plan.orders.map(order => order.id)
+  if (Date.now() - gitRead.at >= GIT_MS || gitRead.key !== ids.join(',')) {
+    gitRead = { at: Date.now(), key: ids.join(','), facts: await gitFacts(git, dir.slice(dir.lastIndexOf('/') + 1), ids) }
+  }
+
+  // Shown as it was given, as the pane shows it; read from its resolved path.
+  return missionOf(given.replace(/\/+$/, ''), plan, files, facts, gitRead.facts)
+}
+
+const isColour = !args.includes('--plain')
+if (args.includes('--once') || !process.stdout.isTTY) {
+  process.stdout.write(`${frame(await read(), width ?? 80, Number.MAX_SAFE_INTEGER, isColour).lines.join('\n')}\n`)
+  process.exit(0)
+}
+
+// The mission as last read, and the viewport over it: the header pinned, the
+// rest scrolled by the keys and the wheel (troupe asks the terminal for SGR
+// mouse reports; under tmux they need `set -g mouse on`).
+let mission = { missing: 'reading…' }
+let offset = 0
+let maxOffset = 0
+let last = ''
+function paint(force) {
+  const { columns = 80, rows = 24 } = process.stdout
+  let lines
+  try {
+    ;({ lines, offset, maxOffset } = frame(mission, width ?? columns, rows, isColour, offset))
+  } catch (error) {
+    lines = [`troupe-panel: ${error.message}`]
+  }
+  // Each line at its own row, autowrap off: no newline is written, so the
+  // screen cannot scroll, even where the terminal counts a character wider.
+  // The row is cleared before it is written: with autowrap off the cursor
+  // stays on the last column, and clearing after would erase that cell.
+  const screen = lines.map((line, index) => `\x1b[${index + 1};1H\x1b[2K${line}`).join('')
+  if (!force && screen === last) return
+  last = screen
+  process.stdout.write(`\x1b[?25l\x1b[?7l\x1b[H\x1b[2J${screen}`)
+}
+let busy = false
+/** Reads the mission again and draws it when the screen would change. */
+async function refresh() {
+  if (busy) return
+  busy = true
+  try {
+    mission = await read()
+  } catch (error) {
+    mission = { missing: `troupe-panel: ${error.message}` }
+  }
+  busy = false
+  paint(false)
+}
+function quit() {
+  process.stdout.write('\x1b[?1006l\x1b[?1000l\x1b[0m\x1b[?7h\x1b[?25h\x1b[?1049l')
+  process.exit(0)
+}
+for (const signal of ['SIGTERM', 'SIGINT', 'SIGHUP']) process.on(signal, quit)
+process.stdout.on('resize', () => paint(true))
+// The alternate screen: frames replace each other and leave no scrollback.
+process.stdout.write('\x1b[?1049h\x1b[?1000h\x1b[?1006h')
+if (process.stdin.isTTY) {
+  process.stdin.setRawMode(true)
+  process.stdin.setEncoding('utf8')
+  process.stdin.on('data', input => {
+    for (const action of actionsOf(input)) {
+      if (action === 'quit') quit()
+      offset = scrolled(offset, action, process.stdout.rows ?? 24, maxOffset)
+    }
+    paint(false)
+  })
+}
+setInterval(() => {
+  if (owner !== undefined) {
+    try {
+      process.kill(owner, 0)
+    } catch (error) {
+      if (error.code === 'ESRCH') quit()
+    }
+  }
+  void refresh()
+}, POLL_MS)
+paint(true)
+void refresh()

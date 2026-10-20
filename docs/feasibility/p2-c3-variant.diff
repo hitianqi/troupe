@@ -1,0 +1,197 @@
+diff -ru '--exclude=node_modules' '--exclude=types' '--exclude=.git' /home/tizh/repos/projects/troupe-p2-o1/hooks/draw-pane.tsx variant/hooks/draw-pane.tsx
+--- /home/tizh/repos/projects/troupe-p2-o1/hooks/draw-pane.tsx	2026-10-20 14:25:55.314146029 +0200
++++ variant/hooks/draw-pane.tsx	2026-10-20 14:30:57.129138501 +0200
+@@ -1,10 +1,10 @@
+ import type { EngineInterface, RenderElement, RenderInput } from 'claude-code'
+ 
+ import type { TroupeMission } from '../types'
+-import { graph } from './graph'
+-import { readMission } from './read-state'
+-import { detail, headerLine, ordersTable, rolesTable, TONES } from './view'
+-import type { Line } from './view'
++import { graph } from './graph.ts'
++import { readMission } from './read-state.ts'
++import { detail, headerLine, ordersTable, rolesTable, TONES } from './view.ts'
++import type { Line } from './view.ts'
+ 
+ // Draws pane `troupe` as the approved mock (docs/missions/p1/mock-p1.txt):
+ // docked, the header, the GRAPH, the TABLES and the DETAIL sections; inline,
+diff -ru '--exclude=node_modules' '--exclude=types' '--exclude=.git' /home/tizh/repos/projects/troupe-p2-o1/hooks/graph.ts variant/hooks/graph.ts
+--- /home/tizh/repos/projects/troupe-p2-o1/hooks/graph.ts	2026-10-20 14:25:55.315238122 +0200
++++ variant/hooks/graph.ts	2026-10-20 14:30:57.131116597 +0200
+@@ -1,7 +1,7 @@
+ import type { TroupeMission } from '../types'
+-import { STEPS } from './plan'
+-import { fit, ORDER_GLYPH } from './view'
+-import type { Line, Run, Tone } from './view'
++import { STEPS } from './plan.ts'
++import { fit, ORDER_GLYPH } from './view.ts'
++import type { Line, Run, Tone } from './view.ts'
+ 
+ // The GRAPH, drawn as OpenRig draws its topology: a character canvas. Like
+ // OpenRig it shows the roles and the human checkpoints only: the orchestrator,
+@@ -26,7 +26,9 @@
+ 
+ class Canvas {
+   readonly cells: Cell[][]
+-  constructor(readonly width: number, height: number) {
++  readonly width: number
++  constructor(width: number, height: number) {
++    this.width = width
+     this.cells = Array.from({ length: height }, () => Array.from({ length: width }, () => ({ ch: ' ' })))
+   }
+   put(row: number, col: number, text: string, style: Style = {}) {
+diff -ru '--exclude=node_modules' '--exclude=types' '--exclude=.git' /home/tizh/repos/projects/troupe-p2-o1/hooks/plan.ts variant/hooks/plan.ts
+--- /home/tizh/repos/projects/troupe-p2-o1/hooks/plan.ts	2026-10-20 14:25:55.315238122 +0200
++++ variant/hooks/plan.ts	2026-10-20 14:30:57.131383555 +0200
+@@ -1,6 +1,6 @@
+ import type { TroupeOrderState } from '../types'
+-import { parseYaml } from './yaml'
+-import type { Yaml } from './yaml'
++import { parseYaml } from './yaml.ts'
++import type { Yaml } from './yaml.ts'
+ 
+ // plan.md, read and checked: the goal, the roles, the orders block,
+ // plan_lint's rules, the dependency layers and the workflow step.
+diff -ru '--exclude=node_modules' '--exclude=types' '--exclude=.git' /home/tizh/repos/projects/troupe-p2-o1/hooks/read-state.ts variant/hooks/read-state.ts
+--- /home/tizh/repos/projects/troupe-p2-o1/hooks/read-state.ts	2026-10-20 14:25:55.315238122 +0200
++++ variant/hooks/read-state.ts	2026-10-20 14:30:57.131335191 +0200
+@@ -2,8 +2,8 @@
+ import type { AgentInfo, EngineInterface } from 'claude-code'
+ 
+ import type { TroupeMission, TroupeOrderState } from '../types'
+-import { readPlan, stepOf } from './plan'
+-import type { PlanRead } from './plan'
++import { readPlan, stepOf } from './plan.ts'
++import type { PlanRead } from './plan.ts'
+ 
+ // Reads the mission: finds plan.md, reads it when it changed (plan.ts),
+ // resolves the roles' skills and infers each order's state.
+diff -ru '--exclude=node_modules' '--exclude=types' '--exclude=.git' /home/tizh/repos/projects/troupe-p2-o1/hooks/register.tsx variant/hooks/register.tsx
+--- /home/tizh/repos/projects/troupe-p2-o1/hooks/register.tsx	2026-10-20 14:25:55.315238122 +0200
++++ variant/hooks/register.tsx	2026-10-20 14:30:57.129067287 +0200
+@@ -1,7 +1,7 @@
+ import type { EngineInterface, Register, Timer } from 'claude-code'
+ 
+-import { drawPane, paneRows } from './draw-pane'
+-import { refresh, setTarget } from './read-state'
++import { drawPane, paneRows } from './draw-pane.tsx'
++import { refresh, setTarget } from './read-state.ts'
+ 
+ // Phase 1: pane `troupe`, a read-only view of the mission in plan.md.
+ 
+diff -ru '--exclude=node_modules' '--exclude=types' '--exclude=.git' /home/tizh/repos/projects/troupe-p2-o1/hooks/view.ts variant/hooks/view.ts
+--- /home/tizh/repos/projects/troupe-p2-o1/hooks/view.ts	2026-10-20 14:25:55.315238122 +0200
++++ variant/hooks/view.ts	2026-10-20 14:30:57.131272425 +0200
+@@ -1,5 +1,5 @@
+ import type { TroupeMission, TroupeOrder, TroupeOrderState, TroupeRole } from '../types'
+-import { isLight, layersOf, STEPS } from './plan'
++import { isLight, layersOf, STEPS } from './plan.ts'
+ 
+ // The pane as lines of styled runs, in the OpenRig TUI's conventions: the
+ // header, the seat-table style TABLES and the detail-view DETAIL sections.
+diff -ru '--exclude=node_modules' '--exclude=types' '--exclude=.git' /home/tizh/repos/projects/troupe-p2-o1/hooks/yaml.ts variant/hooks/yaml.ts
+--- /home/tizh/repos/projects/troupe-p2-o1/hooks/yaml.ts	2026-10-20 14:25:55.315238122 +0200
++++ variant/hooks/yaml.ts	2026-10-20 14:30:57.128597754 +0200
+@@ -6,8 +6,10 @@
+ type Line = { no: number; indent: number; text: string }
+ 
+ class YamlError extends Error {
+-  constructor(readonly line: number, message: string) {
++  readonly line: number
++  constructor(line: number, message: string) {
+     super(`line ${line}: ${message}`)
++    this.line = line
+   }
+ }
+ 
+diff -ru '--exclude=node_modules' '--exclude=types' '--exclude=.git' /home/tizh/repos/projects/troupe-p2-o1/tests/graph.test.ts variant/tests/graph.test.ts
+--- /home/tizh/repos/projects/troupe-p2-o1/tests/graph.test.ts	2026-10-20 14:25:55.316170643 +0200
++++ variant/tests/graph.test.ts	2026-10-20 14:30:57.131568152 +0200
+@@ -1,9 +1,9 @@
+ import { expect, test } from 'claude-code/testing'
+ 
+-import { graph } from '../hooks/graph'
+-import { textOf } from '../hooks/view'
+-import { GRAPH_106, GRAPH_107, GRAPH_50 } from './graph-goldens'
+-import { P1 } from './p1'
++import { graph } from '../hooks/graph.ts'
++import { textOf } from '../hooks/view.ts'
++import { GRAPH_106, GRAPH_107, GRAPH_50 } from './graph-goldens.ts'
++import { P1 } from './p1.ts'
+ 
+ const drawn = (width: number) => graph(P1, width).map(line => textOf(line).trimEnd())
+ 
+diff -ru '--exclude=node_modules' '--exclude=types' '--exclude=.git' /home/tizh/repos/projects/troupe-p2-o1/tests/mock.test.ts variant/tests/mock.test.ts
+--- /home/tizh/repos/projects/troupe-p2-o1/tests/mock.test.ts	2026-10-20 14:25:55.316170643 +0200
++++ variant/tests/mock.test.ts	2026-10-20 14:30:57.131756846 +0200
+@@ -1,9 +1,9 @@
+ import { expect, test } from 'claude-code/testing'
+ 
+-import { paneLines } from '../hooks/draw-pane'
+-import { textOf } from '../hooks/view'
+-import { DOCKED, INLINE } from './mock-p1'
+-import { P1 } from './p1'
++import { paneLines } from '../hooks/draw-pane.tsx'
++import { textOf } from '../hooks/view.ts'
++import { DOCKED, INLINE } from './mock-p1.ts'
++import { P1 } from './p1.ts'
+ 
+ const text = (lines: ReturnType<typeof paneLines>) => lines.map(line => textOf(line).trimEnd())
+ 
+diff -ru '--exclude=node_modules' '--exclude=types' '--exclude=.git' /home/tizh/repos/projects/troupe-p2-o1/tests/p1.ts variant/tests/p1.ts
+--- /home/tizh/repos/projects/troupe-p2-o1/tests/p1.ts	2026-10-20 14:25:55.316170643 +0200
++++ variant/tests/p1.ts	2026-10-20 14:30:57.131528366 +0200
+@@ -1,5 +1,5 @@
+ import type { TroupeMission } from '../types'
+-import { STEPS } from '../hooks/plan'
++import { STEPS } from '../hooks/plan.ts'
+ 
+ // p1 as the approved mock shows it: its plan's goal, roles and o1, o1
+ // planned, the mission at "Plan OK?". A literal, so a later plan edit does
+diff -ru '--exclude=node_modules' '--exclude=types' '--exclude=.git' /home/tizh/repos/projects/troupe-p2-o1/tests/pane.test.tsx variant/tests/pane.test.tsx
+--- /home/tizh/repos/projects/troupe-p2-o1/tests/pane.test.tsx	2026-10-20 14:25:55.316170643 +0200
++++ variant/tests/pane.test.tsx	2026-10-20 14:31:32.770881960 +0200
+@@ -1,9 +1,9 @@
+ import { expect, mock, test } from 'claude-code/testing'
+ import type { On } from 'claude-code'
+ 
+-import { SKILLS_MS } from '../hooks/read-state'
+-import { POLL_MS } from '../hooks/register'
+-import { MISSING_SKILL, SESSION_SKILLS, VALID } from './fixtures'
++import { SKILLS_MS } from '../hooks/read-state.ts'
++import { POLL_MS } from '../hooks/register.tsx'
++import { MISSING_SKILL, SESSION_SKILLS, VALID } from './fixtures.ts'
+ 
+ // The engine hands fs hooks the path resolved against the session's directory.
+ const at = <T,>(table: Record<string, T>, path: string): T | undefined =>
+diff -ru '--exclude=node_modules' '--exclude=types' '--exclude=.git' /home/tizh/repos/projects/troupe-p2-o1/tests/read-state.test.ts variant/tests/read-state.test.ts
+--- /home/tizh/repos/projects/troupe-p2-o1/tests/read-state.test.ts	2026-10-20 14:25:55.316170643 +0200
++++ variant/tests/read-state.test.ts	2026-10-20 14:30:57.131658745 +0200
+@@ -1,10 +1,10 @@
+ import { expect, test } from 'claude-code/testing'
+ 
+ import type { TroupeOrderState } from '../types'
+-import { goalOf, isLight, layersOf, readPlan, stepOf, STEPS } from '../hooks/plan'
+-import { hasSkill, stateOf } from '../hooks/read-state'
+-import { parseYaml } from '../hooks/yaml'
+-import { BAD_YAML, MISSING_SKILL, OVERLAP, SESSION_SKILLS, VALID } from './fixtures'
++import { goalOf, isLight, layersOf, readPlan, stepOf, STEPS } from '../hooks/plan.ts'
++import { hasSkill, stateOf } from '../hooks/read-state.ts'
++import { parseYaml } from '../hooks/yaml.ts'
++import { BAD_YAML, MISSING_SKILL, OVERLAP, SESSION_SKILLS, VALID } from './fixtures.ts'
+ 
+ test('a valid plan reads with its roles, orders and no problems', async () => {
+   const plan = readPlan(VALID)
+diff -ru '--exclude=node_modules' '--exclude=types' '--exclude=.git' /home/tizh/repos/projects/troupe-p2-o1/tsconfig.json variant/tsconfig.json
+--- /home/tizh/repos/projects/troupe-p2-o1/tsconfig.json	2026-10-20 14:25:55.316170643 +0200
++++ variant/tsconfig.json	2026-10-20 14:31:59.062246879 +0200
+@@ -8,6 +8,8 @@
+     "strict": true,
+     "noUncheckedIndexedAccess": true,
+     "noEmit": true,
++    "allowImportingTsExtensions": true,
++    "erasableSyntaxOnly": true,
+     "skipLibCheck": true,
+     "jsx": "react",
+     "jsxFactory": "h",

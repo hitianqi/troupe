@@ -1,7 +1,7 @@
 {
   "name": "troupe",
-  "version": "0.2.0",
-  "description": "Shows the mission in plan.md in a pane: roles and their skills, plan problems, orders in dependency layers, the human gates",
+  "version": "0.3.0",
+  "description": "Shows the mission in plan.md beside the chat: in a tmux panel split right of the session, or in a pane; roles and their skills, plan problems, orders in dependency layers, the human gates",
   "author": {
     "name": "Tianqi Zhao"
   },

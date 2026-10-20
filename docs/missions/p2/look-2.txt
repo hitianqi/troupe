@@ -1,0 +1,66 @@
+# p2 look 2: a 158x57 tmux window, his tile's size. The session runs as a seat does (no TMUX in the
+# engine), cwd the main checkout; typed: /troupe ../troupe-p2-o2/docs/missions/p2
+# Left: the session pane %0 (94 columns, active). Right: troupe-panel %2 (63 columns, as reported).
+# The two captures (tmux capture-pane) set side by side; │ is the tmux border.
+ ▐▛███▛█   Claude Code v2.1.304                                                               │TROUPE · p2 · light · plan checks clean · Split the mission pl…
+▝▜██████▀  Opus 5.5 with high effort · Claude Team                                            │
+ ▝▝   ▝▝   ~/repos/projects/troupe                                                            │╔═ ▦ MISSION p2 ══════════════════════════════════════════════╗
+                                                                                              │║          ┌─ ≡ orchestrator ─────────────────────┐           ║
+                                                                                              │║          │ ┌──────────────────────────────────┐ │           ║
+❯ /troupe ../troupe-p2-o2/docs/missions/p2                                                    │║          │ │ ✓ plan                           │ │           ║
+  ⎿  troupe: troupe panel opened on the right (63 columns, pane %1).                          │║          │ └──────────────────────────────────┘ │           ║
+                                                                                              │║          │ ┌──────────────────────────────────┐ │           ║
+❯ /troupe close                                                                               │║          │ │ MR                               │ │           ║
+  ⎿  troupe: troupe panel closed; the in-session pane is back.                                │║          │ └──────────────────────────────────┘ │           ║
+                                                                                              │║          └──────────────────────────────────────┘           ║
+❯ /troupe ../troupe-p2-o2/docs/missions/p2                                                    │║                              ▼                              ║
+  ⎿  troupe: troupe panel opened on the right (63 columns, pane %2).                          │║                       ┌────────────┐                        ║
+                                                                                              │║                       │ ✓ Plan OK? │                        ║
+──────────────────────────────────────────────────────────────────────────────────────────────│║                       └────────────┘                        ║
+❯                                                                                             │║                              ▼                              ║
+──────────────────────────────────────────────────────────────────────────────────────────────│║          ┌─ ≡ builder ──────────────────────────┐           ║
+  ⚠ Transcript saving is off — inherited CLAUDE_CODE_CHILD_SESSION marker · restart with CL…  │║          │ ┌──────────────────────────────────┐ │           ║
+  ⏵⏵ accept edits on (shift+tab to cycle)                                                     │║          │ │ ✓ o1  opus                       │ │           ║
+                                                                                              │║          │ │   reviewed                       │ │           ║
+                                                                                              │║          │ └──────────────────────────────────┘ │           ║
+                                                                                              │║          │ ┌──────────────────────────────────┐ │           ║
+                                                                                              │║          │ │ ○ o2  opus                       │ │           ║
+                                                                                              │║          │ │   planned                        │ │           ║
+                                                                                              │║          │ └──────────────────────────────────┘ │           ║
+                                                                                              │║          └──────────────────────────────────────┘           ║
+                                                                                              │║                              ▼                              ║
+                                                                                              │║          ┌─ ≡ reviewer ─────────────────────────┐           ║
+                                                                                              │║          │ ┌──────────────────────────────────┐ │           ║
+                                                                                              │║          │ │ idle                             │ │           ║
+                                                                                              │║          │ └──────────────────────────────────┘ │           ║
+                                                                                              │║          └──────────────────────────────────────┘           ║
+                                                                                              │║            ↑ fix ≤ 2 → back to builder                      ║
+                                                                                              │║                              ▼                              ║
+                                                                                              │║                       ┌────────────┐                        ║
+                                                                                              │║                       │ ◆ MR OK?   │                        ║
+                                                                                              │║                       └────────────┘                        ║
+                                                                                              │║                              ▼                              ║
+                                                                                              │║                       ┌────────────┐                        ║
+                                                                                              │║                       │ ◆ Merged?  │                        ║
+                                                                                              │║                       └────────────┘                        ║
+                                                                                              │║                                                             ║
+                                                                                              │╚═════════════════════════════════════════════════════════════╝
+                                                                                              │
+                                                                                              │  ── ROLES · 3 ────────────────────────────────────────────────
+                                                                                              │  · orchestrator  opus    idle       —
+                                                                                              │  · builder       opus    idle       —
+                                                                                              │  · reviewer      sonnet  idle       —
+                                                                                              │
+                                                                                              │  ── ORDERS · 2 ───────────────────────────────────────────────
+                                                                                              │  ✓ o1     opus    reviewed
+                                                                                              │  ○ o2     opus    planned   ← o1
+                                                                                              │
+                                                                                              │  ── GOAL ─────────────────────────────────────────────────────
+                                                                                              │  goal:         Split the mission plan out to a panel on the
+                                                                                              │                right of the terminal, after proving the tmux
+                                                                                              │…
+# after /troupe close in the same window:
+%0 158x57 active=1
+  ⎿  troupe: troupe panel opened on the right (63 columns, pane %1).
+  ⎿  troupe: troupe panel closed; the in-session pane is back.
+│ TROUPE · p2 · light · plan checks clean · Split the mission plan out to a panel on the right of the terminal, after proving the tmux moves the dispatch d… │

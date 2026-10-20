@@ -1,6 +1,6 @@
 import type { TroupeOrderState } from '../types'
-import { parseYaml } from './yaml'
-import type { Yaml } from './yaml'
+import { parseYaml } from './yaml.ts'
+import type { Yaml } from './yaml.ts'
 
 // plan.md, read and checked: the goal, the roles, the orders block,
 // plan_lint's rules, the dependency layers and the workflow step.
@@ -44,6 +44,8 @@ const DEFAULT_ROLES: Record<string, Omit<PlanRole, 'name' | 'skills'> | undefine
   },
 }
 const KINDS = ['code', 'research']
+/** The efforts a role may name, lowest first; the pane's meter has one cell each. */
+export const EFFORTS = ['low', 'medium', 'high', 'xhigh', 'max']
 
 const isMap = (value: Yaml | undefined): value is { [key: string]: Yaml } =>
   typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -114,6 +116,9 @@ export const readPlan = (source: string): PlanRead => {
     })
     const roles = isMap(data.roles) ? Object.entries(data.roles).map(([name, value]) => roleOf(name, value)) : empty.roles
     if (data.roles !== undefined && !isMap(data.roles)) problems.push('`roles` is not a mapping of role to skills')
+    for (const role of roles) {
+      if (role.effort !== '' && !EFFORTS.includes(role.effort)) problems.push(`role ${role.name}: unknown effort "${role.effort}" (${EFFORTS.join(', ')})`)
+    }
 
     const goal = text(data.goal) || empty.goal
 
@@ -219,8 +224,8 @@ export const STEPS: Step[] = [
 ]
 const at = (label: string) => STEPS.findIndex(step => step.label === label)
 
-/** A light mission (one or two orders) skips the heavy steps: Slim, Cut and Final review. */
-export const isLight = (orders: unknown[]): boolean => orders.length <= 2
+/** A light mission (one or two orders) skips the heavy steps: Slim, Cut and Final review. A plan with no orders read is not light. */
+export const isLight = (orders: unknown[]): boolean => orders.length >= 1 && orders.length <= 2
 
 /**
  * The step the mission is at, as an index into STEPS, from what the pane

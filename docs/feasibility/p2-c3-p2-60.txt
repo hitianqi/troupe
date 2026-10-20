@@ -1,0 +1,105 @@
+TROUPE · p2 · light · plan checks clean · Split the mission…
+
+╔═ ▦ MISSION p2 ═══════════════════════════════════════════╗
+║         ┌─ ≡ orchestrator ─────────────────────┐         ║
+║         │ ┌──────────────────────────────────┐ │         ║
+║         │ │ ✓ plan                           │ │         ║
+║         │ └──────────────────────────────────┘ │         ║
+║         │ ┌──────────────────────────────────┐ │         ║
+║         │ │ MR                               │ │         ║
+║         │ └──────────────────────────────────┘ │         ║
+║         └──────────────────────────────────────┘         ║
+║                             ▼                            ║
+║                      ┌────────────┐                      ║
+║                      │ ◆ Plan OK? │                      ║
+║                      └────────────┘                      ║
+║                             ▼                            ║
+║         ┌─ ≡ builder ──────────────────────────┐         ║
+║         │ ┌──────────────────────────────────┐ │         ║
+║         │ │ ○ o1  opus                       │ │         ║
+║         │ │   planned                        │ │         ║
+║         │ └──────────────────────────────────┘ │         ║
+║         │ ┌──────────────────────────────────┐ │         ║
+║         │ │ ○ o2  opus                       │ │         ║
+║         │ │   planned                        │ │         ║
+║         │ └──────────────────────────────────┘ │         ║
+║         └──────────────────────────────────────┘         ║
+║                             ▼                            ║
+║         ┌─ ≡ reviewer ─────────────────────────┐         ║
+║         │ ┌──────────────────────────────────┐ │         ║
+║         │ │ idle                             │ │         ║
+║         │ └──────────────────────────────────┘ │         ║
+║         └──────────────────────────────────────┘         ║
+║           ↑ fix ≤ 2 → back to builder                    ║
+║                             ▼                            ║
+║                      ┌────────────┐                      ║
+║                      │ ◆ MR OK?   │                      ║
+║                      └────────────┘                      ║
+║                             ▼                            ║
+║                      ┌────────────┐                      ║
+║                      │ ◆ Merged?  │                      ║
+║                      └────────────┘                      ║
+║                                                          ║
+╚══════════════════════════════════════════════════════════╝
+
+ROLE             MODEL   EFFORT       …STATE       NOW
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+◐ orchestrator   opus    high ▪▪▪▫▫    needs you   ◆ Plan OK?
+····························································
+· builder        opus    high ▪▪▪▫▫    idle        —
+····························································
+· reviewer       sonnet  high ▪▪▪▫▫    idle        —
+
+ID     LAYER  MODEL   STATE     DEPENDS   GOAL
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+○ o1   1      opus    planned   —         Answer the three …
+····························································
+○ o2   2      opus    planned   o1        Ship bin/troupe-p…
+
+  ── GOAL ──────────────────────────────────────────────────
+  goal:         Split the mission plan out to a panel on the
+                right of the terminal, after proving the
+                tmux moves the dispatch design rests on.
+  plan:         docs/missions/p2/plan.md · plan checks clean
+                · light (2 orders)
+
+  ── ORDERS · 2 ────────────────────────────────────────────
+  o1:           opus · planned · layer 1 · depends — ·
+                Answer the three Phase 2 checks with
+                evidence in docs/FEASIBILITY.md: tmux
+                send-keys and a spawned child from a hook,
+                finding the session's own pane and splitting
+                right from a hook (with and without $TMUX),
+                and the pane's text drawn by a plain Node
+                script outside the engine on a poll.
+  o2:           opus · planned · layer 2 · depends o1 · Ship
+                bin/troupe-panel and the /troupe split-right
+                (pane id kept and reused, /troupe close,
+                session-end close, no-tmux fallback to the
+                in-session pane) on one shared drawing
+                module, fix the four Phase 1 leftovers, with
+                tests, README, RECORD.md, and the look seen
+                and approved by Tianqi.
+
+  ── ROLES · 3 ─────────────────────────────────────────────
+  orchestrator: opus · high · ▪▪▪▫▫
+                ▪ Writes the plan and gets it approved
+                ▪ Dispatches each order and merges it onto
+                  the mission branch
+                ▪ Opens the MR after the go, then tears
+                  down
+                ✓ messaging-the-human
+                ✓ queue-handoff
+  builder:      opus · high · ▪▪▪▫▫
+                ▪ Runs the tmux checks from a hook, with
+                  evidence
+                ▪ Builds troupe-panel and the split,
+                  sharing one drawing module with the pane
+                ▪ Fixes review findings, once per review
+                ✓ plugin-authoring
+  reviewer:     sonnet · high · ▪▪▪▫▫
+                ▪ Reviews each order for behaviour as it
+                  lands
+                ▪ On a light rig, the last review is also
+                  the final review
+                no skills

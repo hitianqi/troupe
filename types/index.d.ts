@@ -34,6 +34,16 @@ export type TroupeMission = {
   problems: string[]
 }
 
+/** troupe-panel's tmux pane, split beside the session's own: where it is and what it shows. */
+export type TroupePanel = {
+  /** The tmux server's socket, from the session's `TMUX`; absent for the default one. */
+  socket?: string
+  /** The panel's pane id, `%N`. */
+  pane: string
+  /** The mission folder it draws, as the session names it (relative to the session's directory, or absolute). */
+  dir: string
+}
+
 declare module 'claude-code' {
   interface PluginState {
     troupe: {
@@ -41,6 +51,8 @@ declare module 'claude-code' {
       target: string
       /** The mission drawn, or why there is none. */
       mission: TroupeMission | { missing: string } | null
+      /** The panel split beside the session, while it is open. */
+      panel: TroupePanel | null
     }
   }
 }

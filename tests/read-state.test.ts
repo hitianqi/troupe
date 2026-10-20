@@ -1,10 +1,12 @@
 import { expect, test } from 'claude-code/testing'
 
 import type { TroupeOrderState } from '../types'
-import { goalOf, isLight, layersOf, readPlan, stepOf, STEPS } from '../hooks/plan'
-import { hasSkill, stateOf } from '../hooks/read-state'
-import { parseYaml } from '../hooks/yaml'
-import { BAD_YAML, MISSING_SKILL, OVERLAP, SESSION_SKILLS, VALID } from './fixtures'
+import { goalOf, isLight, layersOf, readPlan, stepOf, STEPS } from '../hooks/plan.ts'
+import { gitFacts, hasSkill, missionBranchOf, stateOf } from '../hooks/mission.ts'
+import { detail, textOf } from '../hooks/view.ts'
+import { parseYaml } from '../hooks/yaml.ts'
+import { BAD_YAML, MISSING_SKILL, OVERLAP, SESSION_SKILLS, VALID } from './fixtures.ts'
+import { P1 } from './p1.ts'
 
 test('a valid plan reads with its roles, orders and no problems', async () => {
   const plan = readPlan(VALID)
@@ -151,4 +153,46 @@ test('the workflow step follows the plan, the order states and the mission files
   expect([isLight([1]), isLight([1, 2]), isLight([1, 2, 3])]).toEqual([true, true, false])
   expect(STEPS.filter(one => one.isGate).map(one => one.label)).toEqual(['Plan OK?', 'MR OK?', 'Merged?'])
   expect(STEPS.filter(one => one.isHeavy).map(one => one.label)).toEqual(['Slim', 'Cut', 'Final review'])
+})
+
+test('the Phase 1 leftovers: an unknown effort is a problem, no orders is not light, a long label is cut', async () => {
+  const plan = readPlan(VALID.replace('effort: max', 'effort: ultra'))
+  expect(plan.problems).toEqual(['role orchestrator: unknown effort "ultra" (low, medium, high, xhigh, max)'])
+  expect(isLight([])).toBe(false)
+  expect(readPlan('# Plan: x\n\nno block').problems.length).toBeGreaterThan(0)
+
+  const m = { ...P1, orders: P1.orders.map((order, index) => (index === 0 ? { ...order, id: 'o1-a-long-order-id' } : order)) }
+  const row = detail(m, 110).map(textOf).find(text => text.includes('o1-a-long-o'))
+  // Cut to the label column, so the value starts in its own column, as for a short label.
+  expect(row?.slice(0, 20)).toBe('  o1-a-long-o…: opus')
+})
+
+test('order state from git: a branch ahead is running, a merged order is done, merged beats ahead, a review beats both', async () => {
+  const git = { running: ['o2', 'o3'], merged: ['o1', 'o3'] }
+  expect(stateOf('o1', [], [], git)).toBe('done')
+  expect(stateOf('o2', [], [], git)).toBe('running')
+  expect(stateOf('o3', [], [], git)).toBe('done')
+  expect(stateOf('o4', [], [], git)).toBe('planned')
+  expect(stateOf('o2', ['REVIEW-o2.md'], [], git)).toBe('reviewed')
+  expect(missionBranchOf('p2', ['main', 'order/p2/o1', 'feature/NO-JIRA-p20', 'feature/NO-JIRA-p2'])).toBe('feature/NO-JIRA-p2')
+  expect(missionBranchOf('p2', ['main', 'order/p2/o1'])).toBeUndefined()
+})
+
+test('gitFacts asks git for the branches, the mission-only subjects and each order branch ahead', async () => {
+  const asked: string[][] = []
+  const run = async (args: string[]) => {
+    asked.push(args)
+    if (args[0] === 'for-each-ref') return 'feature/NO-JIRA-p2\nmain\norder/p2/o1\norder/p2/o2\norder/p2/o3\n'
+    if (args[0] === 'log') return 'Amend the plan\no1: answer the checks\nAdd the p2 plan\n'
+    // o2 is ahead; o3's branch was only cut.
+    return args.at(-1) === 'feature/NO-JIRA-p2..order/p2/o2' ? '4\n' : '0\n'
+  }
+  expect(await gitFacts(run, 'p2', ['o1', 'o2', 'o3', 'o4'])).toEqual({ running: ['o2'], merged: ['o1'] })
+  expect(asked[1]).toEqual([
+    'log', '--format=%s', 'feature/NO-JIRA-p2', '--not',
+    '--exclude=feature/NO-JIRA-p2', '--exclude=order/*', '--branches', '--exclude=*/feature/NO-JIRA-p2', '--exclude=*/order/*', '--remotes',
+  ])
+  // Merged o1 is not asked about; o4 has no branch.
+  expect(asked.filter(args => args[0] === 'rev-list').map(args => args.at(-1))).toEqual(['feature/NO-JIRA-p2..order/p2/o2', 'feature/NO-JIRA-p2..order/p2/o3'])
+  expect(await gitFacts(async () => undefined, 'p2', ['o1'])).toBeUndefined()
 })

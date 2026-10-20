@@ -1,0 +1,29 @@
+# the window dev-b1@tianqi-troupe-p2:0 as its one tmux client (/dev/pts/22, 76x27, the Herdr tile) draws it:
+# capture-pane %126 (45 cols) | capture-pane %129 (30 cols, the split made from the hook)
+● Bash(S=~/scratch/troupe/p2-o1/live; { echo │tprobe split from a hook
+      '$ rig capture dev-b1@tianqi-troupe-p2 │30
+      --lines 15   # the seat pane, now 45   │
+      columns'; rig capture                  │
+      dev-b1@tianqi-troupe-p2…)              │
+  ⎿  ───────────────────────────────────     │
+     ──────────                              │
+       ⏵⏵ auto mode on (shift+tab to cyc     │
+     … +40 lines (ctrl+o to expand)          │
+  ⎿  Allowed by auto mode classifier         │
+                                             │
+● Bash(S=~/scratch/troupe/p2-o1/live; tmux   │
+      capture-pane -p -t %126 > $S/p126.txt; │
+      tmux capture-pane -p -t %129 >         │
+      $S/p129.txt; python3 - $S <<'EOF' >    │
+      $S/c2-window.txt                       │
+      i…)                                    │
+  ⎿  Running…                                │
+                                             │
+✽ Ionizing… (2m 59s · ↓ 5.2k tokens)         │
+                                             │
+─────────────────── dev-b1@tianqi-troupe-p2 ─│
+❯                                            │
+─────────────────────────────────────────────│
+  ⏵⏵ auto mode on (shift+tab to cycle) · ←…  │
+                                             │
+                                             │
