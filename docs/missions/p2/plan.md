@@ -129,6 +129,16 @@ an order squash-merged onto the mission branch is done, and the builder is
 working while any order runs. RECORD.md says live subagent progress stays
 Phase 3.
 
+Sixth amendment (2026-10-20 14:18Z, Tianqi's look-3 verdict through
+大博士贴): the look passes; one fix remains, "这没法滚动". The panel owns a
+viewport over its full content, with the header pinned. It scrolls with
+↑/↓, j/k, PgUp/PgDn and Home/End, and with the mouse wheel under tmux
+`set -g mouse on` (README). A hint row says "↓ N more rows" below and
+"↑ N more" above, in place of the "…". The in-session pane does the same
+through the engine's `e.props.scroll` if it can, else RECORD.md says why.
+It never emits more rows than the pane has. Tests at 30x27, 63x57 and 79x57
+scroll to the last detail line.
+
 ## How the work is split
 
 Two orders in series, as the brief sets out. o1 is research by nature, but
