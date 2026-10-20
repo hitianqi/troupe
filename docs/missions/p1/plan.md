@@ -54,8 +54,9 @@ Done when:
   ranked goal, workflow, orders, roles, so nothing important is cut by the
   fold.
 - **The look is the third amendment below**: an OpenRig-TUI-like GRAPH
-  (nested boxes, docked or when the rows allow) and TABLE (roles, then
-  orders; inline shows header + table). A static text mock
+  (nested boxes, docked or when the rows allow), TABLE (roles, then
+  orders) and DETAIL sections (goal, orders, roles with duty bullets) as
+  in the addendum; inline shows header + detail sections first. A static text mock
   (`~/scratch/troupe/mock-p1.txt`, 110 columns, real p1 data) is approved
   by Tianqi through 大博士贴 before any drawing code; the built pane
   matches the approved mock.
@@ -111,6 +112,10 @@ Third amendment (2026-10-20 11:46Z, ruling qitem-20261020114624-b6ca0380c1f0814d
 > PROCESS CHANGE so this is the last round on the look: before coding, dev.b1 writes a static TEXT MOCK of the full pane (plain text in ~/scratch/troupe/mock-p1.txt, at 110 columns, with the real p1 data) and you send it to me as a row; I show it to Tianqi; he approves or marks it up; only then the drawing code. If the engine's Box cannot draw a particular glyph or border, say which and what you draw instead, in the mock.
 >
 > Plan amendment: still one order; append this ruling verbatim to the plan's amendment section; the fix round's other findings stand.
+
+Addendum (2026-10-20 11:47Z, from 大博士贴, verbatim):
+
+> ADDENDUM to the look ruling (row qitem-20261020114624), from Tianqi with his screenshot /tmp/claude-1000/-home-tizh-openrig-hq/1789fee0-4839-4717-89c9-32d06fbd9cb0/images/39.png (the OpenRig TUI seat DETAIL view: section title lines like '── CONTEXT · 18% ──────' as a rule with the title in it, then rows of dim left label + value, e.g. 'meter:  18% used ████░░░░', 'tokens: 45,810 input · 422 output', orange for needs-you words). He wants the text parts of the pane in EXACTLY that format: '── GOAL ──' with the goal text; '── ORDERS · <n> ──' with one row per order (id: model · state · layer · depends · goal); '── ROLES ──' then per role a sub-block 'builder: opus · high · ▪▪▪▫▫' followed by its duty BULLET POINTS and its skills ✓/✗. OpenRig draws that view in /home/tizh/.local/node/node-v22.23.2-linux-x64/lib/node_modules/@openrig/cli/tui/dist/detail.js — copy its conventions. So the pane is: header → GRAPH (nested boxes) → TABLE(s) → DETAIL sections (goal, orders, roles with bullets). Inline shows header + detail sections first if rows are short. Include all of it in the text mock.
 
 Out of scope: the deny rules and the Approve/Change dialog (Phase 2), the
 workflow skill and live stage tracking (Phase 3), gate state beyond
