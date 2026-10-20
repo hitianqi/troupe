@@ -1,12 +1,45 @@
 # troupe — roadmap (draft, 2026-10-20)
 
-troupe is an open-source Claude Code mod (a plugin with a hooks module) that
+troupe is a Claude Code mod (a plugin with a hooks module) that
 runs the core of the tianqi-rig-kit mission workflow inside one Claude Code
 session: Agent-tool subagents are the roles, and a read-only pane docked on
 the right shows the plan and its progress. It does not talk to OpenRig.
 
-Status: planning only. No code yet. Decisions of 2026-10-20 are the base
+Status: Phase 0 done (2026-10-20, mission p0; see `docs/FEASIBILITY.md`).
+Repo: GitLab `AI/troupe`, developed on the Prover account like the other
+projects; open source is a later call. Decisions of 2026-10-20 are the base
 (record: `~/.claude/projects/-home-tizh/memory/mission-pane-mod-plan.md`).
+Maintenance is deliberately lightweight: README, `check.sh`, plugin tests and
+the docs a phase produces; no feature map, harness, CI or ADRs unless a
+phase needs them.
+
+## Phase 0 outcome (2026-10-20, Claude Code 2.1.304)
+
+- Q1 yes: the engine asked "Turn on the mods…", Tianqi turned them on, the
+  mod loaded. The pane was not placed at 76 columns: unasked it needs 144,
+  110 once the person opened it with `/troupe`.
+- Q3 yes, live and tested: an Agent call can be refused with a reason the
+  model reads; without the `.catch` guard a throwing hook fails open.
+- Q4 yes from the types, not run live: `$.ui.ask` returns the chosen label or
+  the text typed under Other; a re-ask is a new call. There is no file
+  watcher: plan.md is polled with `$.fs.stat` on `$.clock.every`.
+- Q5 partly: skills come from `$.session.usage`; spellings differ
+  (`shared:x` shows as `x`); `agent.spawn` takes no `skills`; a missing skill
+  on an agent definition is dropped silently at spawn.
+- Q6 yes: worktrees are cut from the session HEAD, the engine merges nothing;
+  the model merges and cleans up.
+- Finding: the auto-mode classifier refuses any seat typing into a tile, its
+  own or a peer's; only a person can drive the dialog.
+- Leftovers: the probe tool hook lacks `.catch`; the clock timer may stack on
+  reload. Fix in Phase 1.
+
+Changes to the phases below, from that outcome: Phase 1 polls plan.md and
+checks skill names in both spellings; its done-when is "pane from 144
+columns unasked, 110 once opened with /troupe". Phase 2 first verifies live,
+with a person at the keyboard: the Approve/Change round trip, a person-opened
+pane, a 144-column screenshot, the agent rows drawing, the Change input.
+Phase 3's orchestrator runs from the mission checkout and merges each order
+itself.
 
 ## What was checked while drafting this (2026-10-20)
 
@@ -21,10 +54,9 @@ Status: planning only. No code yet. Decisions of 2026-10-20 are the base
 - Enabling: mods written in a session need the person to answer "Turn on the
   mods Claude writes in this session?" once; `claude --plugin-dir <folder>`
   loads a mod for one session without that question; `claude -p` never loads
-  hooks modules. Sharing is a GitHub repo with `.claude-plugin/marketplace.json`
-  and `/plugin install troupe --marketplace <owner>/<repo>`. Whether an
-  outside account's session loads the hooks module after install is the one
-  thing the docs do not promise. That is check 0b below.
+  hooks modules. Sharing, if it ever happens, is a repo with
+  `.claude-plugin/marketplace.json` and `/plugin install troupe --marketplace
+  <owner>/<repo>`.
 - Pane placement: docked beside the transcript in fullscreen from 110 columns
   once the person asked for that pane id (144 unasked); below that it waits
   undrawn and `$.ui.open` says why.
@@ -89,9 +121,9 @@ Delivers:
 - No `show_plan`, `report_order`, `report_checkpoint` tools. The pane
   watches the file.
 
-Done when: in a repo with a sample plan.md, the pane appears from 110
-columns, redraws within a second of a plan edit, and flags a skill that does
-not exist.
+Done when: in a repo with a sample plan.md, the pane appears from 144
+columns unasked and from 110 once opened with `/troupe`, redraws within the
+poll interval of a plan edit, and flags a skill that does not exist.
 
 Measured by: `claude plugin test` fixtures (a valid plan, an overlapping plan
 without depends_on, bad YAML, a missing skill); each hooks file under 300
@@ -156,8 +188,9 @@ issues they file.
 
 Phases 0–2 fit the "half a day to see the pane" expectation only if Phase 0 is
 clean. Mission p0 (Phase 0) was launched 2026-10-20 as a light rig. Phases 0–3 together are about two days; Phase 4 is an extra half day.
-Implementation goes to Opus/Sonnet subagents; the orchestrating session
-reviews. Local commits on a branch; no MR until Tianqi says so.
+Missions run on the kit rig `tianqi-troupe`; implementation goes to Opus and
+Sonnet builders. Branches and MRs on GitLab like the other projects; only
+Tianqi merges.
 
 ## Stays out (decided 2026-10-20)
 
