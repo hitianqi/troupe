@@ -70,6 +70,8 @@ orders:
       - types/
       - tsconfig.json
       - package.json
+      - package-lock.json
+      - tests/
       - check.sh
       - .gitignore
       - docs/FEASIBILITY.md

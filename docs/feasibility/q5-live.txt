@@ -1,0 +1,24 @@
+# Q5 live evidence, 2026-10-20, claude 2.1.304 (Claude Code)
+
+## mcp__troupe__probe { action: "skills", names: [...] } (reads $.session.usage({ breakdown: "summary" }).context.breakdown.skills)
+skills: 91 in the session, 91 listed
+sources: userSettings, projectSettings, plugin, built-in, syncedSkills
+asked: plugin-authoring, tianqi-taste, shared:systematic-debugging, troupe-no-such-skill; missing: shared:systematic-debugging, troupe-no-such-skill
+
+asked: systematic-debugging, tianqi-project-maintenance, tianqi-skills:tianqi-project-maintenance, codex:rescue, rescue; missing: tianqi-skills:tianqi-project-maintenance, rescue
+
+(The Skill tool's own list shows "shared:systematic-debugging" and "codex:rescue";
+the breakdown lists the first bare and the second with its prefix.)
+
+## mcp__troupe__probe { action: "agent", names: ["tianqi-taste", "troupe-no-such-skill"] }
+registered troupe:probe with skills: tianqi-taste, troupe-no-such-skill
+
+## Agent({ subagent_type: "troupe:probe" }) in the same turn
+Agent type 'troupe:probe' not found. Available agents: claude, claude-code-guide, codex:codex-rescue, Explore, general-purpose, Plan, statusline-setup
+
+## The same call in the next turn: spawned, and the subagent reported
+Preloaded skills: tianqi-taste. Its full instructions were loaded into my context before the request.
+
+## Transcript line for troupe's skill.prompt hook
+● troupe: its skill.prompt hook was skipped. "cc-plugin-sec-default"
+  runs first and sent the event on past it.

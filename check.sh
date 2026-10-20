@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+# The one check: validate the mod, run its tests, type-check it.
+set -euo pipefail
+cd "$(dirname "$0")"
+
+claude --version
+claude plugin validate .
+claude plugin test .
+
+# The engine lays the API types in .claude-plugin/types/ when it loads the
+# mod from this folder (claude --plugin-dir, or the session's mods folder).
+if [ ! -f .claude-plugin/types/claude-code/index.d.ts ]; then
+  echo "tsc skipped: no types laid in .claude-plugin/types/ (load the mod once with claude --plugin-dir . to lay them)"
+  exit 0
+fi
+if [ ! -x node_modules/.bin/tsc ]; then
+  echo "tsc missing: run npm install" >&2
+  exit 1
+fi
+node_modules/.bin/tsc -p .
+echo "tsc: clean"

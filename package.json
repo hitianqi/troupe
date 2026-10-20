@@ -1,0 +1,11 @@
+{
+  "name": "troupe",
+  "private": true,
+  "description": "Development tooling for the troupe mod: type-checking only",
+  "scripts": {
+    "check": "./check.sh"
+  },
+  "devDependencies": {
+    "typescript": "5.9.3"
+  }
+}

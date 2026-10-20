@@ -1,0 +1,9 @@
+{
+  "name": "troupe",
+  "version": "0.1.0",
+  "description": "Runs a planned mission with subagents and shows its plan in a pane (Phase 0: hello pane and API probes)",
+  "author": {
+    "name": "Tianqi Zhao"
+  },
+  "types": "./types/index.d.ts"
+}

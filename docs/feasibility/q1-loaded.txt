@@ -1,0 +1,8 @@
+# rig capture of dev.b1's tile, 2026-10-20, claude 2.1.304 (Claude Code)
+✻ Churned for 6m 2s · done 11:39 AM
+
+● troupe: troupe: pane not placed: unasked below 144 columns (76
+  now): placed when the person opens it, or when the terminal is
+  widened to 144 columns
+
+● troupe: This mod is now loaded.

@@ -1,0 +1,8 @@
+# Q6 evidence: git worktree list and branches while the two subagents ran (2026-10-20T09:38:27Z, claude 2.1.304 (Claude Code))
+/home/tizh/repos/projects/troupe                                            e363bbd [main]
+/home/tizh/repos/projects/troupe-p0-mission                                 88eeae6 [feature/p0]
+/home/tizh/repos/projects/troupe-p0-o1                                      b27deb8 [order/p0/o1]
+/home/tizh/repos/projects/troupe/.claude/worktrees/agent-a8c7756ff8944f8e2  e363bbd [worktree-agent-a8c7756ff8944f8e2] locked
+/home/tizh/repos/projects/troupe/.claude/worktrees/agent-af1db803f7ff7b13b  e363bbd [worktree-agent-af1db803f7ff7b13b] locked
++ worktree-agent-a8c7756ff8944f8e2
++ worktree-agent-af1db803f7ff7b13b
