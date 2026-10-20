@@ -1,0 +1,90 @@
+$ tmux list-panes -t dev-b1@tianqi-troupe-p2:0 -F "#{pane_id} #{pane_left},#{pane_top} #{pane_width}x#{pane_height} active=#{pane_active} #{pane_current_command}"
+%126 0,0 45x27 active=1 sh
+%129 46,0 30x27 active=0 sh
+exit 0
+
+$ tmux display -p -t dev-b1@tianqi-troupe-p2:0 "#{window_layout} clients=#{session_attached}"
+a670,76x27,0,0{45x27,0,0,126,30x27,46,0,129} clients=1
+
+$ tmux list-clients -t dev-b1@tianqi-troupe-p2
+/dev/pts/22 76x27 xterm-256color
+
+$ tmux capture-pane -p -t %129
+tprobe split from a hook
+30
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+$ rig capture dev-b1@tianqi-troupe-p2 --lines 15   # the seat pane, now 45 columns
+[rig capture: dev-b1@tianqi-troupe-p2: 25 earlier lines not shown; last 15 shown]
+  ⎿  Allowed by auto mode classifier
+
+  Bash(S=~/scratch/troupe/p2-o1/live; { echo
+      '$ rig capture dev-b1@tianqi-troupe-p2
+      --lines 15   # the seat pane, now 45
+      columns'; rig capture
+      dev-b1@tianqi-troupe-p2…)
+  ⎿  Running…
+
+✽ Ionizing… (2m 47s · ↓ 4.8k tokens)
+
+─────────────────── dev-b1@tianqi-troupe-p2 ─
+❯ 
+─────────────────────────────────────────────
+  ⏵⏵ auto mode on (shift+tab to cycle) · ←…
+
+
+# both panes side by side as the tmux client (the Herdr tile, 76x27) draws them: paste of capture-pane %126 | %129
+                                             �tprobe split from a hook
+● Bash(S=~/scratch/troupe/p2-o1/live; { echo �30
+      '$ tmux list-panes -t                  �
+      dev-b1@tianqi-troupe-p2:0 -F           �
+      "#{pane_id} #{pane_left},#{pane_top}   �
+      #{pane_width}x#{pane_height} activ…)   �
+  ⎿  $ tmux list-panes -t dev-b1@tianqi-     �
+     troupe-p2:0 -F "#{pane_id} #{pane_l     �
+     eft},#{pane_top} #{pane_width}x#{pa     �
+     … +14 lines (ctrl+o to expand)          �
+  ⎿  Allowed by auto mode classifier         �
+                                             �
+  Bash(S=~/scratch/troupe/p2-o1/live; { echo �
+      '$ rig capture dev-b1@tianqi-troupe-p2 �
+      --lines 15   # the seat pane, now 45   �
+      columns'; rig capture                  �
+      dev-b1@tianqi-troupe-p2…)              �
+  ⎿  Running…                                �
+                                             �
+✽ Ionizing… (2m 47s · ↓ 4.8k tokens)         �
+                                             �
+─────────────────── dev-b1@tianqi-troupe-p2 ─�
+❯                                            �
+─────────────────────────────────────────────�
+  ⏵⏵ auto mode on (shift+tab to cycle) · ←…  �
+                                             �
+                                             �
+# after close
+%126 76x27
+can't find session: tprobe-target
+has-session tprobe-target exit 1

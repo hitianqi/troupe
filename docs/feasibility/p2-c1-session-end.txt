@@ -1,0 +1,85 @@
+# check 1, session end: a scratch 'claude --plugin-dir endmod' (Claude Code 2.1.304) in a scratch tmux server -L tprobe-end, started with 'env -u TMUX -u TMUX_PANE', cwd the main checkout.
+# endmod (scratch, not committed): session.start spawns 'sh -c "echo $$ > child.pid; exec sleep 3600"' with $.process.spawn and records the pane lookup; session.end records its reason and whether the child is alive.
+
+## start.json (no TMUX, outside the default tmux server)
+{
+  "display": {
+    "argv": [
+      "tmux",
+      "display",
+      "-p",
+      "#{pane_id}"
+    ],
+    "exitCode": 0,
+    "stdout": "%113\n",
+    "stderr": ""
+  },
+  "ancestry": {
+    "argv": [
+      "sh",
+      "-c",
+      "p=$PPID; while [ \"$p\" -gt 1 ]; do echo $p; p=$(ps -o ppid= -p $p | tr -d \" \"); done"
+    ],
+    "exitCode": 0,
+    "stdout": "1695515\n1695514\n489\n488\n2\n",
+    "stderr": ""
+  },
+  "panes": {
+    "argv": [
+      "tmux",
+      "list-panes",
+      "-a",
+      "-F",
+      "#{pane_id} #{pane_pid}"
+    ],
+    "exitCode": 0,
+    "stdout": "%9 9899\n%126 1668731\n%113 1360258\n%10 10287\n%11 10569\n%125 1668341\n%114 1362181\n%127 1669103\n",
+    "stderr": ""
+  },
+  "noServer": {
+    "argv": [
+      "tmux",
+      "-L",
+      "tprobe-no-such-server",
+      "list-panes",
+      "-a"
+    ],
+    "exitCode": 1,
+    "stdout": "",
+    "stderr": "error connecting to /tmp/tmux-1000/tprobe-no-such-server (No such file or directory)\n"
+  }
+}
+## route 1: /exit typed into the session (tmux -L tprobe-end send-keys -t end '/exit' Enter, from the seat's Bash: not refused)
+{
+  "reason": "prompt_input_exit",
+  "childAtEnd": {
+    "argv": [
+      "sh",
+      "-c",
+      "kill -0 $(cat /home/tizh/scratch/troupe/p2-o1/end/child.pid) && echo alive || echo gone"
+    ],
+    "exitCode": 0,
+    "stdout": "gone\n",
+    "stderr": "sh: 1: kill: No such process\n\n"
+  }
+}
+after exit: ps -p <child> -> gone
+
+## route 2: the terminal closes (tmux -L tprobe-end kill-server: SIGHUP)
+{
+  "reason": "other",
+  "childAtEnd": {
+    "argv": [
+      "sh",
+      "-c",
+      "kill -0 $(cat /home/tizh/scratch/troupe/p2-o1/end/child.pid) && echo alive || echo gone"
+    ],
+    "exitCode": 0,
+    "stdout": "gone\n",
+    "stderr": "sh: 1: kill: No such process\n\n"
+  }
+}
+after: ps -p <child> -> gone
+
+## route 3: kill -KILL <claude pid> (no session.end runs: no end.json written)
+child 1697687, parent 1697534 'claude --plugin-dir .../endmod'; 2 s after SIGKILL: ps -p 1697687 -> gone

@@ -1,0 +1,3 @@
+$ node --experimental-transform-types --no-warnings docs/missions/p2/panel-probe.mjs --golden
+golden: 57 lines drawn, 57 in tests/mock-p1.ts DOCKED, identical: true
+exit 0
