@@ -80,6 +80,23 @@ ancestry against `tmux list-panes -a`. Two calls for o2 are approved:
    for what only the engine knows: order states from the agent list, and the
    skills' ✓/✗. git ignores it (`.gitignore`), and the README names it.
 
+Second amendment (2026-10-20 13:41Z, ruling qitem-20261020134143-96799456db392c61
+from 大博士贴, verbatim). The A/B question is settled as B, extended. It
+supersedes the panel's look rules in the first amendment and in Done when
+(width cap, one view at a time, content priority, no overflow):
+
+> RULING on the p2 look, from 大博士贴, after looking at dev-b1's tmux window myself (tmux list-panes / capture-pane on the daemon server, 13:4xZ). Tianqi's words: "啥也没看着" (first try, path cut to …/p), then "这一下子给我好多，而且根本没有 workflow graph". Verdict: NOT approved as it stands. What is actually on his screen:
+> - Window 158x57, two panes: %126 = the seat's Claude pane squeezed to 40 columns; %134 = the troupe-panel (node) at 117 columns and ACTIVE. The /troupe reply said "63 columns" but the panel holds 117 now, so the split took most of the window and the transcript is unreadable at 40.
+> - Inside the 40-column seat pane the IN-SESSION pane also opened (the TROUPE box with GOAL/ORDERS text wrapped at 38 cols). Two views at once, both mostly goal text. That is the "一下子好多".
+> - The 117x57 panel shows NO GRAPH: its content (header + detail + tables, ~78 lines) exceeds 57 rows, so the inline rule dropped the graph, and the overflow redraws so the capture shows the tail of one frame above the head of the next: it scrolls, which it must never do.
+> DECISIONS (A/B settled as B, extended):
+> 1. Width: the split is 40% of the window, min 30, MAX 50%; never more. If the window is narrower than ~80, say so and do not split. Report the width you actually got, from tmux, not the request.
+> 2. One view at a time: when the split panel is open, the in-session pane is NOT drawn (close it / skip ui.open); it comes back on /troupe close or outside tmux.
+> 3. Priority of content, both panel and pane, in this order, cutting from the bottom to fit the rows: header → GRAPH (roles + ◆ checkpoints; stacked below 107 cols, side by side above) → compact ROLES (one line each: glyph, name, model, state, now) → compact ORDERS (one line each: glyph, id, model, state, ← deps) → DETAIL only if rows remain. Goal text: one line, truncated with …; the long order goals only in DETAIL. The graph is the point of the panel and is never dropped while it fits; when even the graph does not fit, draw its stacked form cut to the rows and say "…" on the last row.
+> 4. Never overflow: the renderer takes the pane's real rows (tmux pane_height, or the engine's rows) and emits at most that many lines, every frame. A test for it at 30x27, 60x40, 117x57.
+> 5. The "63 columns" vs 117: find out why (resize after open? split -l misapplied?) and make the reported width the real one.
+> Then a new look: send me a rig capture of BOTH panes (seat pane and panel) at his tile size, and a row; he looks once more.
+
 ## How the work is split
 
 Two orders in series, as the brief sets out. o1 is research by nature, but
