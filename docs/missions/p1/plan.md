@@ -53,22 +53,12 @@ Done when:
   (`e.props.scroll.bodyRows`, about 9 at 76 columns): a compact layout
   ranked goal, workflow, orders, roles, so nothing important is cut by the
   fold.
-- **A real TUI, not lines of text** (Tianqi, third look, 11:25Z: "这太简陋了
-  … 搞点这种正儿八经的TUI图形化的东西，现在就完全是一堆文字啊", pointing at
-  the OpenRig TUI's topology view and seat table). The four parts are drawn
-  with the engine's `Box` borders, colour and glyphs, in the style of that
-  TUI: the workflow as bordered step boxes joined by arrows (wrapping into
-  rows like the kit's mission diagram), the human gates in their own
-  colour, the current step highlighted, done steps marked, skipped steps
-  dimmed; roles as bordered cards side by side, each with a status dot,
-  a model badge, the effort as a small level meter, duty bullets and skills
-  with ✓ / ✗; orders as bordered cards in dependency layers joined by
-  connectors (the spike's), with model badge and state dot, and a progress
-  meter of orders done. Thin dotted rules separate rows where a table fits
-  better than boxes. No backgrounds behind text blocks; badges may use a
-  coloured chip. Docked (fullscreen, from 110 columns) is where it shows in
-  full; inline, a compact graphic of the most important parts fits the
-  rows given.
+- **The look is the third amendment below**: an OpenRig-TUI-like GRAPH
+  (nested boxes, docked or when the rows allow) and TABLE (roles, then
+  orders; inline shows header + table). A static text mock
+  (`~/scratch/troupe/mock-p1.txt`, 110 columns, real p1 data) is approved
+  by Tianqi through 大博士贴 before any drawing code; the built pane
+  matches the approved mock.
 - **The pane does not scroll away.** Find what the engine allows to keep
   the inline pane in place above the prompt as the transcript scrolls
   (`rows` / `columns` on `$.ui.open`, the main-screen inline placement,
@@ -105,6 +95,22 @@ and the orders (assumed, being confirmed). He also asked "有没有什么办法�
 着滚动消失": the pane must not scroll away. Still one order. Anything he
 asks for beyond Phase 1 (live progress, dialogs, costs) is listed in
 RECORD.md as Phase 2/3, not built.
+
+Third amendment (2026-10-20 11:46Z, ruling qitem-20261020114624-b6ca0380c1f0814d from 大博士贴, verbatim; it supersedes the "A real TUI" bullet in Done when):
+
+> RULING on the p1 look, from 大博士贴 after Tianqi's verdict on f34d8ce ("太丑了"; "我只是想要 openrig 类似的 table + graph"; "他就是做不出来"). The one-row strip of boxes and cards (his screenshot /tmp/claude-1000/-home-tizh-openrig-hq/1789fee0-4839-4717-89c9-32d06fbd9cb0/images/36.png) is rejected. He wants the two things OpenRig's TUI draws, and nothing invented beyond them. Look at his two reference screenshots: /tmp/claude-1000/-home-tizh-openrig-hq/1789fee0-4839-4717-89c9-32d06fbd9cb0/images/37.png (the seat TABLE) and /tmp/claude-1000/-home-tizh-openrig-hq/1789fee0-4839-4717-89c9-32d06fbd9cb0/images/38.png (the rig TOPOLOGY graph). Then read how OpenRig draws them and copy the conventions: /home/tizh/.local/node/node-v22.23.2-linux-x64/lib/node_modules/@openrig/cli/tui/dist/render.js, /home/tizh/.local/node/node-v22.23.2-linux-x64/lib/node_modules/@openrig/cli/tui/dist/sections.js, /home/tizh/.local/node/node-v22.23.2-linux-x64/lib/node_modules/@openrig/cli/tui/dist/stylize.js (glyphs · → ↑ ↓ ━ ┃ ◆ ▶ and the box set; blue caps headers; dotted row separators; the % meter; the highlighted current box in orange; the dim/grey for idle).
+>
+> WHAT THE PANE IS, top to bottom (vertical, like the TUI; NOT one row):
+> 1. Header line: TROUPE · p1 · light · plan checks clean · <goal>.
+> 2. GRAPH (like 38.png): one outer double-bordered box titled "▦ MISSION p1". Inside, left to right, single-bordered group boxes titled "≡ plan", "≡ build", "≡ review", "≡ land", joined by ━━▶ arrows. Each group box holds its step boxes stacked vertically: plan: Intent, Plan, ◆ Plan OK?; build: one box per order (o1 opus 36%-style: status glyph ● ◐ ○ ✓, id, model, state); review: Order review, Slim, Cut, Final review (light: dimmed/struck); land: ◆ MR OK?, Open MR, ◆ Merged?, Teardown, main ✓. The current step's box is orange with bold text, done boxes green ✓, waiting grey. One feedback arrow drawn BELOW the boxes from review back to build labelled "fix ≤ 2", exactly like the loop arrow in 38.png.
+> 3. TABLE (like 37.png): blue caps header row, dotted separators (┄ or · line) between rows, columns: ROLE | MODEL | EFFORT | SKILLS | STATE | NOW. One row per role (orchestrator, builder, reviewer): EFFORT as the ▪▪▪▫▫ meter, SKILLS as names with ✓/✗, STATE idle / working / needs you (orange, like the TUI), NOW = the order it is on. Then a second small table for ORDERS: ID | LAYER | MODEL | STATE | DEPENDS | GOAL (goal truncated to the column).
+> 4. Nothing else. No cards, no chips, no colour not in the TUI.
+>
+> INLINE vs DOCKED: inline (main screen) gets the header + the TABLE (roles, then orders) — that fits ~9–16 rows; the GRAPH shows when docked or when the inline pane has the rows for it. Ask for the rows the graph needs; never collapse the graph into one row.
+>
+> PROCESS CHANGE so this is the last round on the look: before coding, dev.b1 writes a static TEXT MOCK of the full pane (plain text in ~/scratch/troupe/mock-p1.txt, at 110 columns, with the real p1 data) and you send it to me as a row; I show it to Tianqi; he approves or marks it up; only then the drawing code. If the engine's Box cannot draw a particular glyph or border, say which and what you draw instead, in the mock.
+>
+> Plan amendment: still one order; append this ruling verbatim to the plan's amendment section; the fix round's other findings stand.
 
 Out of scope: the deny rules and the Approve/Change dialog (Phase 2), the
 workflow skill and live stage tracking (Phase 3), gate state beyond
