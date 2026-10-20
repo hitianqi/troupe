@@ -17,7 +17,8 @@ sharing was removed first (e.g. the file was split) or serialized.>
 
 ## Orders
 
-`scripts/plan_lint.py` reads the YAML block below. Every `code` order declares
+The orders block below is checked before dispatch (the troupe pane lists its
+problems). Keep each value on one line. Every `code` order declares
 the files or directories it will change in `touches`, and in `why` why it is
 needed and what in the codebase it reuses, or why nothing there fits. Two
 orders whose `touches` overlap must be connected by `depends_on`; everything
@@ -39,7 +40,7 @@ roles:                    # optional; the pane flags a skill the session lacks
     effort: high
     duty:
       - "Builds its order in its own worktree"
-    skills: [plugin-authoring]
+    skills: []
   reviewer: []            # the short form: skills only, default model, effort and duty
 orders:
   - id: o1
@@ -69,11 +70,13 @@ orders:
 
 `model` is the orchestrator's call per order, shown to the human at plan
 approval: `opus` where the work needs judgement, `sonnet` where it is well
-bounded. It changes who writes the order's code, not the builder seat. An
-order that decides how something looks is always `opus`.
+bounded. It is the model of the builder that does the order. An order that
+decides how something looks is always `opus`.
 
 ## Review
 
-Each order is reviewed as it lands, and the integrated mission once more,
-across orders, after the slim cuts (`REVIEW.md`). Findings go to a fixer, at
-most two rounds per review; then the orchestrator rules.
+Each order is reviewed as it lands (`REVIEW-<id>.md`), and the integrated
+mission once more, across orders, after the slim cuts (`REVIEW.md`); with one
+or two orders, the last order review is also the final review. Findings go to
+a fixer: one fix round and one re-review per review, then the orchestrator
+rules.
