@@ -45,9 +45,9 @@ Status: planning only. No code yet. Decisions of 2026-10-20 are the base
    `claude --plugin-dir ~/repos/projects/troupe` in a fresh terminal. The
    2026-10-02 failure was "hooks modules are turned off in this process: the
    rollout switch served off".
-2. **Does it load for someone else?** Same hello mod installed from a private
-   GitHub repo on a second account (a colleague on the AI team). This decides
-   open source vs. a personal tool. Nothing else in the roadmap depends on it.
+2. ~~Does it load for someone else?~~ Dropped by Tianqi on 2026-10-20: the
+   outside-account install test is not run in Phase 0. Open source stays a
+   later call; nothing else in the roadmap depends on it.
 3. **Can the Agent call be intercepted and refused reliably?** `tool.call`
    with the `.catch` guard pattern from the reference (a thrown hook must
    still refuse). Also: does `e.input.description` carry the "o1: …" prefix
@@ -66,15 +66,14 @@ Status: planning only. No code yet. Decisions of 2026-10-20 are the base
 ### Phase 0 — Feasibility (about half a day)
 
 Delivers: a hello pane mod in the repo and `docs/FEASIBILITY.md` answering
-the six questions above with the exact output seen (engine line, dialog
-text, API gaps), plus the go/no-go for open source.
+questions 1 and 3–6 above with the exact output seen (engine line, dialog
+text, API gaps), plus a recommendation for Phase 1.
 
 Done when: every question has a yes/no with evidence, and Tianqi has picked
-one of: open-source plan / personal tool / stop.
+one of: go on as planned / go on with changes / stop.
 
-Measured by: `claude plugin validate` clean on the hello mod; a screenshot of
-the pane in a fresh session on this machine; one install attempt on a second
-account with its result pasted.
+Measured by: `claude plugin validate` clean on the hello mod; a capture of
+the pane docked in a session on this machine; `check.sh` green.
 
 ### Phase 1 — The pane reads plan.md (about half a day; "see the pane")
 
@@ -141,7 +140,7 @@ same size (nav 1h23m, formalize-ui 1h25m, both light); the number of hook
 refusals during the run (expected 0 in a well-behaved run); the cost,
 estimated before the run and asked for above 5 USD.
 
-### Phase 4 — Open-source release (about half a day; only if check 2 is yes)
+### Phase 4 — Open-source release (about half a day; only if Tianqi decides to open-source)
 
 Delivers: `.claude-plugin/marketplace.json`, README with the install line and
 a 60-second screenshot or gif, license, secret scan, a "how to tell it is
@@ -156,7 +155,7 @@ issues they file.
 ## Estimate
 
 Phases 0–2 fit the "half a day to see the pane" expectation only if Phase 0 is
-clean. Phases 0–3 together are about two days; Phase 4 is an extra half day.
+clean. Mission p0 (Phase 0) was launched 2026-10-20 as a light rig. Phases 0–3 together are about two days; Phase 4 is an extra half day.
 Implementation goes to Opus/Sonnet subagents; the orchestrating session
 reviews. Local commits on a branch; no MR until Tianqi says so.
 
