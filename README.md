@@ -16,14 +16,13 @@ in the OpenRig TUI's own style and colours, top to bottom:
 1. **Header**: `TROUPE · <mission> · light · plan checks clean · <goal>`. The
    goal is the `goal:` key of the plan's YAML block, else the first
    sentence of its Intent.
-2. **Graph**, like OpenRig's topology view: a double box "▦ MISSION" holding
-   the groups plan, build, review and land, joined by ━━▶. Each group stacks
-   its steps (Intent, Plan, ◆ Plan OK?; one box per order; Order review,
-   Slim, Cut, Final review; ◆ MR OK?, Open MR, ◆ Merged?, Teardown, main),
-   and a "fix ≤ 2" arrow loops from review back to build. The current step
-   is orange and bold, done steps green ✓, waiting ones grey. A plan of one
-   or two orders is `light`: Slim, Cut and Final review are struck out.
-   Below 107 columns the groups stack top to bottom.
+2. **Graph**, like OpenRig's topology view, and like it showing only the
+   roles and the human checkpoints: a double box "▦ MISSION" holding
+   ≡ orchestrator (the plan, the MR), ≡ builder (its orders) and ≡ reviewer
+   ("review <id>" or idle), joined by ━━▶, with ◆ Plan OK? after the plan
+   and ◆ MR OK? and ◆ Merged? at the end, and a "fix ≤ 2" arrow looping
+   from reviewer back to builder. The current box is orange and bold, done
+   green ✓, waiting grey. Below 107 columns the flow stacks top to bottom.
 3. **Tables**, like OpenRig's seat table: ROLE | MODEL | EFFORT | SKILLS |
    STATE | NOW, then ID | LAYER | MODEL | STATE | DEPENDS | GOAL. A role's
    state comes from what the pane reads: the orchestrator "needs you" at a

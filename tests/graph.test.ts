@@ -11,9 +11,9 @@ test('the dock Tianqi gets, about 50 columns: the stacked graph, as golden', asy
   expect(drawn(50)).toEqual(GRAPH_50)
 })
 
-test('the boundary: 106 columns still stacks, 107 sets the four groups side by side', async () => {
+test('the boundary: 106 columns still stacks, 107 sets the flow side by side', async () => {
   expect(drawn(106)).toEqual(GRAPH_106)
   expect(drawn(107)).toEqual(GRAPH_107)
   expect(GRAPH_106.some(line => line.includes('▼'))).toBe(true)
-  expect(GRAPH_107.some(line => line.includes('≡ plan') && line.includes('≡ land'))).toBe(true)
+  expect(GRAPH_107.some(line => line.includes('≡ orchestrator') && line.includes('≡ reviewer'))).toBe(true)
 })

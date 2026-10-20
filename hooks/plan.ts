@@ -199,26 +199,24 @@ export const layersOf = <O extends { id: string; dependsOn: string[] }>(orders: 
 
 // ---- the workflow ------------------------------------------------------------
 
-export type Group = 'plan' | 'build' | 'review' | 'land'
-export type Step = { label: string; group: Group; isGate?: true; isHeavy?: true }
+export type Step = { label: string; isGate?: true; isHeavy?: true }
 
-/** The key steps of the kit's tianqi-mission flow, by group; a gate waits for the human. Build is the orders themselves. */
+/** The key steps of the kit's tianqi-mission flow, for the step detection; a gate waits for the human. The graph draws only the gates. */
 export const STEPS: Step[] = [
-  { label: 'Intent', group: 'plan' },
-  { label: 'Plan', group: 'plan' },
-  { label: 'Plan OK?', group: 'plan', isGate: true },
-  { label: 'Build', group: 'build' },
-  { label: 'Order review', group: 'review' },
-  { label: 'Slim', group: 'review', isHeavy: true },
-  { label: 'Cut', group: 'review', isHeavy: true },
-  { label: 'Final review', group: 'review', isHeavy: true },
-  { label: 'MR OK?', group: 'land', isGate: true },
-  { label: 'Open MR', group: 'land' },
-  { label: 'Merged?', group: 'land', isGate: true },
-  { label: 'Teardown', group: 'land' },
-  { label: 'main', group: 'land' },
+  { label: 'Intent' },
+  { label: 'Plan' },
+  { label: 'Plan OK?', isGate: true },
+  { label: 'Build' },
+  { label: 'Order review' },
+  { label: 'Slim', isHeavy: true },
+  { label: 'Cut', isHeavy: true },
+  { label: 'Final review', isHeavy: true },
+  { label: 'MR OK?', isGate: true },
+  { label: 'Open MR' },
+  { label: 'Merged?', isGate: true },
+  { label: 'Teardown' },
+  { label: 'main' },
 ]
-export const GROUPS: Group[] = ['plan', 'build', 'review', 'land']
 const at = (label: string) => STEPS.findIndex(step => step.label === label)
 
 /** A light mission (one or two orders) skips the heavy steps: Slim, Cut and Final review. */

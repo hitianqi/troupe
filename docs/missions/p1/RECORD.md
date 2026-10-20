@@ -8,10 +8,10 @@ Run on 2026-10-20 in the OpenRig seat dev.b1 (rig tianqi-troupe-p1), on
 
 The pane `troupe` is the mock Tianqi approved (`mock-p1.txt`), in the
 OpenRig TUI's style and theme: a header; the GRAPH (a double box "▦ MISSION"
-holding the groups plan, build, review and land joined by ━━▶, their steps
-and orders stacked inside, the current step orange, done green ✓, light-skipped
-struck, a "fix ≤ 2" loop from review to build; stacked top to bottom below
-107 columns); the TABLES (roles, orders); the DETAIL sections (GOAL, ORDERS,
+holding the roles orchestrator, builder and reviewer and the human
+checkpoints ◆ Plan OK?, ◆ MR OK?, ◆ Merged? joined by ━━▶, the current box
+orange, done green ✓, a "fix ≤ 2" loop from reviewer to builder; stacked top
+to bottom below 107 columns); the TABLES (roles, orders); the DETAIL sections (GOAL, ORDERS,
 ROLES with duty bullets and skills ✓ / ✗). Inline it puts the header and
 DETAIL first.
 
@@ -146,9 +146,14 @@ Seen live (scratch session, `claude --plugin-dir` of the o1 worktree):
 **Deviation and ruling:** docked at ~50 columns the mock's four groups cannot sit side by side, so below 107 columns the graph stacks them, joined by ▼, with the loop as one line (`capture-docked-50cols.txt`).
 大博士贴 ruled (a), 12:00Z: keep the stacked graph below 107 columns, side by side from 107.
 
+## The fourth amendment: roles and checkpoints only
+
+Tianqi, before merge (MR !1): "Like OpenRig: draw the ROLES and the HUMAN CHECKPOINTS, nothing else; steps like Slim are our system design and must not be shown to users."
+The graph now holds ≡ orchestrator, ≡ builder, ≡ reviewer and the three ◆ checkpoints only (order o1b); `mock-p1.txt`'s graph, the mock test and the goldens follow it.
+
 ## Checks
 
-`./check.sh`: `claude plugin validate .` passes; `claude plugin test .` 21
+`./check.sh`: `claude plugin validate .` passes; `claude plugin test .` 22
 pass, 0 fail; `tsc: clean`. The tests:
 
 - the approved mock: the pane at 110 columns, docked and inline, equals
