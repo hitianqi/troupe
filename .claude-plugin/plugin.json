@@ -1,7 +1,7 @@
 {
   "name": "troupe",
-  "version": "0.3.0",
-  "description": "Shows the mission in plan.md beside the chat: in a tmux panel split right of the session, or in a pane; roles and their skills, plan problems, orders in dependency layers, the human gates",
+  "version": "0.4.0",
+  "description": "Shows the mission in plan.md beside the chat (a tmux panel split right of the session, or a pane), asks to approve the plan in an Approve / Change dialog, and dispatches its orders as Claude role windows in a tmux session of their own, each in its own worktree: troupe_dispatch, troupe_status, troupe_close",
   "author": {
     "name": "Tianqi Zhao"
   },
