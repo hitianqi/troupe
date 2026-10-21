@@ -81,7 +81,7 @@ cases in all; the ones that shaped the build:
   (0.4.0) and description.
 
 Integrated, `./check.sh` shows 71 plugin tests and 5 panel tests, and `tsc`
-clean.
+clean; after the final review's fix, 73 and 6.
 
 ## Reviews and fix rounds (rev.r1)
 
@@ -98,8 +98,19 @@ Tianqi's live check).
 The route ruled for the Act-on (call `AskUserQuestion` through `$.tool.call`
 and refuse a result carrying `afkTimeoutMs`) does not exist: the engine
 refuses a plugin's own call ("that is $.ui.ask"). The fix is the fail-closed
-reading above instead. The slim pass and the final review are not in this
-record; the orchestrator adds them if they ran.
+reading above instead.
+
+`REVIEW-o4.md` (PASS; its two Considers and one Noted went into the cuts).
+The slim pass (`SLIM.md`) listed six cuts (an unread state key, a fallback no
+caller used, one-use helpers, a field written and never read, the REVIEW-file
+pattern written three times); one builder round made all six plus five ruled
+one-liners, none skipped. The final review (`REVIEW.md`) passed with no
+Act-on; it drove Phase 2's done-when end to end on the integrated build in a
+scratch repository and tmux server. Its one Consider (the panel still asked
+"Plan OK?" right after Approve, since the step never read the record) was
+fixed before the MR at 大博士贴's ruling: the pane, the panel, the dialog and
+the dispatch rule now share one "valid record" rule in `mission.ts`; the
+re-review (`REVIEW-2.md`) passed.
 
 ## The dry run
 
@@ -121,9 +132,18 @@ server, 15 of 15. The dry run is not part of `./check.sh`: it needs a
 
 ## Seen live
 
-- **Live check pending.** Tianqi's check of the Approve / Change dialog in
-  dev.b2's tile, on 846836a (before o3's fix round). The orchestrator fills
-  in the result here.
+- **Tianqi's live check: passed** (2026-10-21, 17:09–17:11Z, dev.b2's tile,
+  the mod reloaded to the mission branch at 098409d, the scratch copy of the
+  sample in `~/scratch/troupe/live/sample`). `/troupe` opened the panel and
+  the dialog; Change with his words ("change reviewer to opus 5.5") answered
+  `Change asked: …`, and the `Tianqi asks: …; edit …/plan.md, then /troupe
+  again` prompt arrived in the conversation as a turn of its own; dev.b2
+  edited the plan; the next `/troupe` asked again and Approve wrote
+  `APPROVAL.json` (its hash equals `sha256sum plan.md`); the `/troupe` after
+  that answered `The plan is approved (…)` with no dialog. One snag, not
+  troupe's: the arrow keys did nothing at first, because the pane had gone
+  into tmux copy-mode (scrolled up 25 lines); `q` left it and the dialog
+  answered the keys.
 - rev.r1 drove the dialog in a scratch session on 2.1.306, answering it with
   tmux keys: the dialog draws, Approve writes `APPROVAL.json` (the hash equals
   `sha256sum plan.md`), an approved plan asks nothing, one appended newline
@@ -171,6 +191,8 @@ OpenRig's own server; a globally installed troupe loads in role windows too (`--
 plugin hooks but skips much else, so troupe does not pass it);
 the brief sits outside the worktree and an account not in auto mode may be
 asked to allow reading it; the `/proc` route is Linux only, as before.
+Seen in the live check: a pane in tmux copy-mode takes the arrow keys, so a
+dialog looks stuck until `q` leaves copy-mode.
 
 ## Left for Phase 3 and later
 
@@ -178,7 +200,9 @@ asked to allow reading it; the `/proc` route is Linux only, as before.
 - The one-hook guard for an auto-resolved dialog; a hook that denies writes
   to `APPROVAL.json`.
 - Live progress inside an order; the metrics file.
-- `Final review` was seen in tests only, not on a live full mission.
+- `Final review` was reached from real git facts on a three-order scratch
+  mission in the final review, not yet on a real mission run through troupe.
+- The step (Slim, Cut, Final review) is computed but no screen draws it yet.
 
 Not applied: `tianqi-project-maintenance` in full, per the lightweight
 maintenance decision; the README, `check.sh` and the tests only.

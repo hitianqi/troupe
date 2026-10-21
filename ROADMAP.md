@@ -73,13 +73,16 @@ Missions p2 (the split-right panel) and p3 (dispatch). Evidence:
   answer or a dismissed dialog. That the engine's auto-resolve of an
   unattended dialog cannot approve rests on a reading of the 2.1.306 build,
   not on a run.
-- Checked by: 71 plugin tests and 5 panel tests in `./check.sh`, a scripted
+- Checked by: 73 plugin tests and 6 panel tests in `./check.sh`, a scripted
   dry run in a scratch tmux server (15 of 15 checks,
-  `docs/missions/p3/dry-run/`), and the order reviews. Dispatch was run only in
-  scratch repositories on scratch tmux servers, never against this checkout.
-- Left: Tianqi's live check of the dialog is pending (its result goes in
-  `docs/missions/p3/RECORD.md`); prompts and dialogs inside role windows stay
-  the person's; `APPROVAL.json` is advisory.
+  `docs/missions/p3/dry-run/`), the order reviews and the final review, which
+  drove the done-when end to end. Dispatch was run only in scratch
+  repositories on scratch tmux servers, never against this checkout.
+- Seen live: Tianqi approved and changed a plan in the dialog himself
+  (Change's words came back as a prompt, Approve wrote the record;
+  `docs/missions/p3/RECORD.md`).
+- Left: prompts and dialogs inside role windows stay the person's;
+  `APPROVAL.json` is advisory.
 - Light mode (1-2 orders, serial, no slim) was not built. Tianqi's decision
   for p3 ("Light mode 先不做"): it moves to Phase 3 with the skill.
 
