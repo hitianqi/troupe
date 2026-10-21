@@ -2,7 +2,7 @@ import { expect, test } from 'claude-code/testing'
 
 import type { TroupeOrderState } from '../types'
 import { goalOf, isLight, layersOf, readPlan, stepOf, STEPS } from '../hooks/plan.ts'
-import { gitFacts, hasSkill, missionBranchOf, stateOf } from '../hooks/mission.ts'
+import { gitFacts, hasSkill, isApproved, missionBranchOf, planHash, stateOf } from '../hooks/mission.ts'
 import { detail, textOf } from '../hooks/view.ts'
 import { parseYaml } from '../hooks/yaml.ts'
 import { BAD_YAML, MISSING_SKILL, OVERLAP, SESSION_SKILLS, VALID } from './fixtures.ts'
@@ -230,4 +230,16 @@ test('the step reaches "Final review" once the mission branch holds SLIM.md, and
   expect(await gitFacts(run('a1b2c3d\n'), 'p3', ['o1'], ['plan.md', 'SLIM.md'])).toEqual({ running: [], merged: [], isSlimMerged: true })
   expect(asked.at(-1)).toEqual(['log', '-1', '--format=%h', 'feature/NO-JIRA-p3', '--', 'SLIM.md'])
   expect(await gitFacts(run(''), 'p3', ['o1'], ['SLIM.md'])).toEqual({ running: [], merged: [], isSlimMerged: false })
+})
+
+test('an approval record that holds for plan.md moves the step past "Plan OK?"; an edited plan, none or a bad one does not', async () => {
+  const step = (isApproved: boolean, states: TroupeOrderState[] = ['planned', 'planned']) =>
+    STEPS[stepOf({ problems: [], orders: states.map(state => ({ state })) }, [], false, isApproved)]?.label
+  expect([step(false), step(true), step(true, ['running', 'planned'])]).toEqual(['Plan OK?', 'Build', 'Build'])
+
+  const record = JSON.stringify({ planHash: await planHash(VALID), approvedAt: '2026-10-21T16:00:00.000Z' })
+  expect(await isApproved(VALID, record)).toBe(true)
+  expect(await isApproved(`${VALID} `, record)).toBe(false)
+  expect(await isApproved(VALID, undefined)).toBe(false)
+  expect(await isApproved(VALID, 'not json')).toBe(false)
 })

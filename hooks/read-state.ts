@@ -3,7 +3,7 @@ import type { EngineInterface } from 'claude-code'
 
 import type { TroupeMission } from '../types'
 import { collectResults } from './dispatch.ts'
-import { GIT_MS, gitFacts, missionOf, STATE_FILE } from './mission.ts'
+import { APPROVAL_FILE, GIT_MS, gitFacts, isApproved, missionOf, STATE_FILE } from './mission.ts'
 import type { EngineFacts, GitFacts } from './mission.ts'
 import { readPlan } from './plan.ts'
 // Kept here too for readers that took them from this module before mission.ts
@@ -24,7 +24,7 @@ const MISSIONS = 'docs/missions'
 export const SKILLS_MS = 30_000
 
 // What the poll last read; a hot reload starts both over, which costs one read.
-let parsed: { key: string; plan: PlanRead } | undefined
+let parsed: { key: string; source: string; plan: PlanRead } | undefined
 let skills: { at: number; names: string[] | undefined } | undefined
 let git: { at: number; key: string; facts: GitFacts | undefined } | undefined
 
@@ -90,13 +90,17 @@ export async function refresh($: EngineInterface): Promise<{ dir: string; facts:
     return undefined
   }
   const key = `${dir}@${stat.mtimeMs}`
-  if (parsed?.key !== key) parsed = { key, plan: readPlan(await $.fs.read(`${dir}/plan.md`)) }
+  if (parsed?.key !== key) {
+    const source = await $.fs.read(`${dir}/plan.md`)
+    parsed = { key, source, plan: readPlan(source) }
+  }
   // What the role windows wrote in their worktrees (done markers, reviews) comes into the folder first.
   await collectResults($, dir).catch(error => $.ui.log(`could not collect the role windows' results: ${String(error)}`))
   const files = (await $.fs.list(dir).catch(() => [])).map(entry => entry.name)
   const agents = await $.agent.list().catch(() => [])
   const facts: EngineFacts = { agents: agents.map(({ description, status }) => ({ description, status })), skills: await skillNames($) }
-  const next = missionOf(dir, parsed.plan, files, facts, await gitOf($, dir, parsed.plan.orders.map(order => order.id), files))
+  const approved = await isApproved(parsed.source, await $.fs.read(`${dir}/${APPROVAL_FILE}`).catch(() => undefined))
+  const next = missionOf(dir, parsed.plan, files, facts, await gitOf($, dir, parsed.plan.orders.map(order => order.id), files), approved)
   if (JSON.stringify(next) !== JSON.stringify(before)) await update($, mission, () => next)
 
   return { dir, facts }

@@ -27,7 +27,7 @@ try {
   console.error(`troupe-panel: cannot load the hooks (${error.message}); it needs Node 22.18 or later, this is ${process.version}`)
   process.exit(1)
 }
-const [{ readPlan }, { GIT_MS, gitFacts, missionOf, POLL_MS, STATE_FILE }, { actionsOf, frame, scrolled }] = shared
+const [{ readPlan }, { APPROVAL_FILE, GIT_MS, gitFacts, isApproved, missionOf, POLL_MS, STATE_FILE }, { actionsOf, frame, scrolled }] = shared
 
 const args = process.argv.slice(2)
 const valueOf = name => (args.includes(name) ? args[args.indexOf(name) + 1] : undefined)
@@ -69,7 +69,14 @@ async function read() {
   }
 
   // Shown as it was given, as the pane shows it; read from its resolved path.
-  return missionOf(given.replace(/\/+$/, ''), plan, files, facts, gitRead.facts)
+  let record
+  try {
+    record = readFileSync(`${dir}/${APPROVAL_FILE}`, 'utf8')
+  } catch {
+    // No approval record: the plan waits at "Plan OK?".
+  }
+
+  return missionOf(given.replace(/\/+$/, ''), plan, files, facts, gitRead.facts, await isApproved(source, record))
 }
 
 const isColour = !args.includes('--plain')

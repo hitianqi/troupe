@@ -2,7 +2,7 @@ import { expect, mock, test } from 'claude-code/testing'
 import type { On } from 'claude-code'
 
 import { SKILLS_MS } from '../hooks/read-state.ts'
-import { POLL_MS } from '../hooks/mission.ts'
+import { planHash, POLL_MS } from '../hooks/mission.ts'
 import { MISSING_SKILL, SESSION_SKILLS, VALID } from './fixtures.ts'
 
 // The engine hands fs hooks the path resolved against the session's directory.
@@ -170,7 +170,8 @@ const outsideTmux = (on: On) => {
   on('process.run', (_, e) => ({ value: { exitCode: 0, stdout: e.argv[0] === 'sh' ? '100\t\t\n1\t\t\n' : '', stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }))
 }
 
-const servesValid = (on: On) => {
+/** A checkout with docs/missions/p2 holding VALID; `read` and `mtime` stand in for its files when a test changes them. */
+const servesValid = (on: On, read: (path: string) => string | undefined = () => VALID, mtime: () => number = () => 1) => {
   on('command.register', () => ({ value: { command: 'troupe' } }))
   on('ui.open', () => ({ value: { isPlaced: true } }))
   on('ui.log', () => ({ value: undefined }))
@@ -178,8 +179,12 @@ const servesValid = (on: On) => {
   on('fs.list', (_, e) => ({
     value: e.path.endsWith('/docs/missions') ? [{ name: 'p2', kind: 'dir' as const, size: 0, mtimeMs: 0, isLink: false }] : [],
   }))
-  on('fs.stat', () => ({ value: { kind: 'file' as const, size: 1, mtimeMs: 1, isLink: false } }))
-  on('fs.read', () => ({ value: VALID }))
+  on('fs.stat', () => ({ value: { kind: 'file' as const, size: 1, mtimeMs: mtime(), isLink: false } }))
+  on('fs.read', (_, e) => {
+    const text = read(e.path)
+
+    return text === undefined ? { deny: 'ENOENT' } : { value: text }
+  })
   on('session.usage', () => ({
     value: { context: { breakdown: { skills: { skillFrontmatter: SESSION_SKILLS.map(name => ({ name, source: 'plugin', tokens: 1 })) } } } } as never,
   }))
@@ -229,5 +234,26 @@ test('narrow: the compact lines keep each role state, and DETAIL keeps the roles
   const ui = await $.ui.mount(inline(72, 200))
   expect(await ui.find({ type: 'Text', text: /^ {2}◐ orchestrator {2}fable {3}needs you {2}◆ Plan OK\?$/ })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /^ {2}orchestrator: fable · max · ▪▪▪▪▪$/ })).toBeDefined()
+  await ui.unmount()
+})
+
+test('the pane leaves "Plan OK?" once an approval record holds, and comes back to it when plan.md is edited', async ($, on) => {
+  const clock = mock.clock(on)
+  const files: Record<string, string | undefined> = { 'plan.md': VALID }
+  let mtime = 1
+  servesValid(on, path => at(files, path), () => mtime)
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  await clock.settle()
+  const ui = await $.ui.mount(inline(72, 200))
+  const orchestrator = async () => (await ui.findAll({ type: 'Text' })).map(one => one.text ?? '').find(text => /^ {2}. orchestrator /.test(text))
+
+  expect(await orchestrator()).toMatch(/needs you {2}◆ Plan OK\?$/)
+  files['APPROVAL.json'] = JSON.stringify({ planHash: await planHash(VALID), approvedAt: '2026-10-21T16:00:00.000Z' })
+  await clock.advance(POLL_MS)
+  expect(await orchestrator()).not.toMatch(/Plan OK/)
+  files['plan.md'] = `${VALID}\n`
+  mtime = 2
+  await clock.advance(POLL_MS)
+  expect(await orchestrator()).toMatch(/needs you {2}◆ Plan OK\?$/)
   await ui.unmount()
 })

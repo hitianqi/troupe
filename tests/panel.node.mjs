@@ -3,7 +3,8 @@
 // terminal, the command itself, and the git state rule on a real repository.
 import assert from 'node:assert/strict'
 import { execFileSync } from 'node:child_process'
-import { mkdtempSync, copyFileSync, rmSync } from 'node:fs'
+import { createHash } from 'node:crypto'
+import { appendFileSync, copyFileSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
@@ -95,5 +96,23 @@ test('git state in a real repository whose local main lags origin/main: earlier 
     assert.deepEqual(await gitFacts(run, 'p9', ['o1', 'o2']), { running: ['o2'], merged: ['o1'] })
   } finally {
     rmSync(repo, { recursive: true })
+  }
+})
+
+test('troupe-panel leaves "Plan OK?" once APPROVAL.json holds for plan.md, and comes back to it after an edit', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'troupe-approved-'))
+  try {
+    copyFileSync(new URL('../docs/missions/workflow/sample/plan.md', import.meta.url), join(dir, 'plan.md'))
+    const draw = () => execFileSync(process.execPath, [panel, dir, '--once', '--plain', '--width', '72'], { encoding: 'utf8' })
+    const waiting = /orchestrator +opus +needs you +◆ Plan OK\?/
+    assert.match(draw(), waiting)
+    const hash = createHash('sha256').update(readFileSync(join(dir, 'plan.md'))).digest('hex')
+    writeFileSync(join(dir, 'APPROVAL.json'), JSON.stringify({ planHash: `sha256:${hash}`, approvedAt: '2026-10-21T16:00:00.000Z' }))
+    assert.doesNotMatch(draw(), waiting)
+    assert.match(draw(), /✓ Plan OK\?/)
+    appendFileSync(join(dir, 'plan.md'), '\n')
+    assert.match(draw(), waiting)
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
   }
 })

@@ -1,4 +1,4 @@
-import type { TroupeMission, TroupeOrderState } from '../types'
+import type { TroupeApproval, TroupeMission, TroupeOrderState } from '../types'
 import { stepOf } from './plan.ts'
 import type { PlanRead } from './plan.ts'
 
@@ -35,6 +35,34 @@ export const hasSkill = (listed: string[], name: string): boolean =>
   listed.some(one => one === name || one === name.replace(SHARED, '') || name === one.replace(SHARED, ''))
 
 const LIVE = new Set(['pending', 'running', 'waiting', 'idle'])
+
+/** The approval record, in the mission folder beside plan.md (approval.ts writes it). */
+export const APPROVAL_FILE = 'APPROVAL.json'
+
+/** `sha256:<hex>` of the plan's text, as read. */
+export async function planHash(text: string): Promise<string> {
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text))
+
+  return `sha256:${[...new Uint8Array(digest)].map(byte => byte.toString(16).padStart(2, '0')).join('')}`
+}
+
+/** An approval record from its file's text; null when there is none or it cannot be read. */
+export function recordOf(text: string | undefined): TroupeApproval | null {
+  if (text === undefined) return null
+  try {
+    const record: unknown = JSON.parse(text)
+    if (typeof record !== 'object' || record === null) return null
+    const { planHash: hash, approvedAt } = record as Record<string, unknown>
+
+    return typeof hash === 'string' && typeof approvedAt === 'string' ? { planHash: hash, approvedAt } : null
+  } catch {
+    return null
+  }
+}
+
+/** Whether a record (its file's text) approves `plan` as it is now: approval.ts's rule, for both views. */
+export const isApproved = async (plan: string, recordText: string | undefined): Promise<boolean> =>
+  recordOf(recordText)?.planHash === (await planHash(plan))
 
 /** The file a builder's role window writes in its worktree when its order is built; the mod copies it into the mission folder. */
 export const doneMarker = (id: string) => `DONE-${id}.md`
@@ -93,8 +121,8 @@ export async function gitFacts(run: (args: string[]) => Promise<string | undefin
   return { running, merged, isSlimMerged: Boolean((await run(['log', '-1', '--format=%h', base, '--', 'SLIM.md']))?.trim()) }
 }
 
-/** The mission in `dir` from its plan, the folder's file names, the engine's facts and git's. */
-export const missionOf = (dir: string, plan: PlanRead, files: string[], facts: EngineFacts, git?: GitFacts): TroupeMission => {
+/** The mission in `dir` from its plan, the folder's file names, the engine's facts and git's, and whether an approval record holds for the plan. */
+export const missionOf = (dir: string, plan: PlanRead, files: string[], facts: EngineFacts, git?: GitFacts, isPlanApproved = false): TroupeMission => {
   const listed = facts.skills
   const orders = plan.orders.map(({ id, kind, goal, model, dependsOn }) => ({ id, kind, goal, model, dependsOn, state: stateOf(id, files, facts.agents, git) }))
 
@@ -103,7 +131,7 @@ export const missionOf = (dir: string, plan: PlanRead, files: string[], facts: E
     name: dir.slice(dir.lastIndexOf('/') + 1),
     title: plan.title,
     goal: plan.goal,
-    step: stepOf({ problems: plan.problems, orders }, files, git?.isSlimMerged),
+    step: stepOf({ problems: plan.problems, orders }, files, git?.isSlimMerged, isPlanApproved),
     hasRoles: plan.hasRoles,
     roles: plan.roles.map(role => ({
       ...role,

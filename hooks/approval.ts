@@ -1,7 +1,12 @@
 import type { EngineInterface } from 'claude-code'
 
 import type { TroupeApproval } from '../types'
+import { APPROVAL_FILE, planHash, recordOf } from './mission.ts'
 import { readPlan } from './plan.ts'
+
+// The file, the hash and the record's reading live in mission.ts, which
+// troupe-panel imports too: one rule for "approved" in both views.
+export { APPROVAL_FILE, planHash }
 
 // The approval record: the human's yes to one plan.md, kept beside it in the
 // mission folder as the plan's hash and the time. An edited plan (a
@@ -9,29 +14,9 @@ import { readPlan } from './plan.ts'
 // troupe_dispatch refuses without a record that holds (dispatch.ts). The
 // one writer is the Approve / Change dialog that /troupe raises (gate).
 
-/** In the mission folder, beside plan.md. */
-export const APPROVAL_FILE = 'APPROVAL.json'
-
-/** `sha256:<hex>` of the plan's text, as read. */
-export async function planHash(text: string): Promise<string> {
-  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text))
-
-  return `sha256:${[...new Uint8Array(digest)].map(byte => byte.toString(16).padStart(2, '0')).join('')}`
-}
-
 /** The record in mission folder `dir`, or null when there is none or it cannot be read. */
 export async function readApproval($: EngineInterface, dir: string): Promise<TroupeApproval | null> {
-  const text = await $.fs.read(`${dir}/${APPROVAL_FILE}`).catch(() => undefined)
-  if (text === undefined) return null
-  try {
-    const record: unknown = JSON.parse(text)
-    if (typeof record !== 'object' || record === null) return null
-    const { planHash: hash, approvedAt } = record as Record<string, unknown>
-
-    return typeof hash === 'string' && typeof approvedAt === 'string' ? { planHash: hash, approvedAt } : null
-  } catch {
-    return null
-  }
+  return recordOf(await $.fs.read(`${dir}/${APPROVAL_FILE}`).catch(() => undefined))
 }
 
 /** Records the human's yes to `plan`, the text they were shown; answers the record. */
