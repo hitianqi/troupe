@@ -34,6 +34,13 @@ type World = {
   /** Order branches and worktrees git has (the fake adds to both). */
   branches: string[]
   worktrees: string[]
+  /** File times (1 when not set), symbolic links, files git tracks in their worktree, and the mod's log lines. */
+  mtimes: Map<string, number>
+  links: Set<string>
+  tracked: Set<string>
+  logs: string[]
+  /** How many session looks fail before tmux answers again (a busy server). */
+  flaky: number
   calls: string[][]
   clock: ReturnType<typeof mock.clock>
 }
@@ -53,6 +60,11 @@ function world(on: On, given: Partial<World> = {}): World {
     isStuck: false,
     branches: [],
     worktrees: [ROOT],
+    mtimes: new Map(),
+    links: new Set(),
+    tracked: new Set(),
+    logs: [],
+    flaky: 0,
     calls: [],
     clock: mock.clock(on),
     ...given,
@@ -61,7 +73,11 @@ function world(on: On, given: Partial<World> = {}): World {
   on('tool.register', (_, e) => ({ value: { tool: `mcp__troupe__${e.name}` } }))
   on('command.register', () => ({ value: { command: 'troupe' } }))
   on('ui.open', () => ({ value: { isPlaced: true } }))
-  on('ui.log', () => ({ value: undefined }))
+  on('ui.log', (_, e) => {
+    w.logs.push(String((e as unknown as { text: unknown }).text))
+
+    return { value: undefined }
+  })
   on('session.start', (_, e) => ({ cwd: e.cwd }))
   on('session.cwd', () => ({ value: ROOT }))
   on('ui.close', () => ({ value: undefined }))
@@ -69,9 +85,18 @@ function world(on: On, given: Partial<World> = {}): World {
     const dir = `${local(e.path).replace(/\/+$/, '')}/`
     const names = [...w.files.keys()].filter(path => path.startsWith(dir) && !path.slice(dir.length).includes('/')).map(path => path.slice(dir.length))
 
-    return { value: names.map(name => ({ name, kind: 'file' as const, size: 1, mtimeMs: 1, isLink: false })) }
+    return {
+      value: names.map(name =>
+        w.links.has(dir + name)
+          ? { name, kind: 'other' as const, size: 0, mtimeMs: 0, isLink: true }
+          : { name, kind: 'file' as const, size: 1, mtimeMs: w.mtimes.get(dir + name) ?? 1, isLink: false },
+      ),
+    }
   })
-  on('fs.stat', (_, e) => (w.files.has(local(e.path)) ? { value: { kind: 'file' as const, size: 1, mtimeMs: 1, isLink: false } } : { deny: 'ENOENT' }))
+  on('fs.stat', (_, e) =>
+    w.files.has(local(e.path)) ? { value: { kind: 'file' as const, size: 1, mtimeMs: w.mtimes.get(local(e.path)) ?? 1, isLink: false } } : { deny: 'ENOENT' },
+  )
+  on('fs.exists', (_, e) => ({ value: w.files.has(local(e.path)) }))
   on('fs.read', (_, e) => {
     if (e.path.endsWith('/skills/troupe-mission/references/builder.md')) return { value: 'THE BUILDER ROLE' }
     if (e.path.endsWith('/skills/troupe-mission/references/reviewer.md')) return { value: 'THE REVIEWER ROLE' }
@@ -98,6 +123,8 @@ function world(on: On, given: Partial<World> = {}): World {
       if (args[0] === 'rev-parse') return ran(`${ROOT}/.git\n`)
       if (args[0] === 'for-each-ref') return ran(['main', 'feature/NO-JIRA-demo', ...w.branches].map(branch => `${branch}\n`).join(''))
       if (args[0] === 'log') return ran(w.merged.map(subject => `${subject}\n`).join(''))
+      if (args[0] === 'ls-files') return ran(w.tracked.has(`${argv[2]}/${args.at(-1)}`) ? `${args.at(-1)}\n` : '')
+      if (args[0] === 'checkout') return ran('')
       if (args[0] === 'show') return ran(w.committed ?? w.files.get(`${DIR}/plan.md`) ?? '')
       if (args[0] === 'worktree' && args[1] === 'list') return ran(w.worktrees.map(path => `worktree ${path}\nHEAD 0\n`).join('\n'))
       if (args[0] === 'worktree') {
@@ -123,6 +150,11 @@ function world(on: On, given: Partial<World> = {}): World {
     if (verb === 'display') {
       const format = argv.at(-1)
       if (format === '#{pane_id}') return w.panes.has(target) ? ran(`${target}\n`) : ran('', 1, "can't find pane")
+      if (w.flaky > 0) {
+        w.flaky--
+
+        return ran('', 1, 'server busy')
+      }
       const name = [...w.sessions].find(([, id]) => id === target)?.[0]
 
       return name ? ran(`${target} ${name}\n`) : ran('', 1, "can't find session")
@@ -439,4 +471,85 @@ test('troupe_close does not kill a session that has gone and whose name another 
 
   expect(await call($, w, 'troupe_close', { mission: 'demo' })).toContain('The role session troupe-demo had already gone; forgotten.')
   expect(w.calls.filter(argv => argv[3]?.startsWith('kill-'))).toEqual([])
+})
+
+test('the copy keeps what the orchestrator has: a newer file is left, an older one is replaced', async ($, on) => {
+  const w = world(on)
+  await approve(w)
+  await start($)
+  await call($, w, 'troupe_dispatch', { mission: 'demo', order: 'o1' })
+  const from = `/work/repo-demo-o1/${DIR}`
+  w.files.set(`${from}/REVIEW-o1.md`, 'the reviewer wrote this')
+  w.mtimes.set(`${from}/REVIEW-o1.md`, 100)
+  w.files.set(`${DIR}/REVIEW-o1.md`, 'the orchestrator edited this')
+  w.mtimes.set(`${DIR}/REVIEW-o1.md`, 200)
+  const poll = () => $.command.run({ command: 'troupe', args: 'demo' } as never)
+
+  await poll()
+  expect(w.files.get(`${DIR}/REVIEW-o1.md`)).toBe('the orchestrator edited this')
+  w.mtimes.set(`${from}/REVIEW-o1.md`, 300)
+  await poll()
+  expect(w.files.get(`${DIR}/REVIEW-o1.md`)).toBe('the reviewer wrote this')
+})
+
+test('the copy skips a symbolic link and a file committed in the worktree, and says once when a copy got committed', async ($, on) => {
+  const w = world(on)
+  await approve(w)
+  await start($)
+  await call($, w, 'troupe_dispatch', { mission: 'demo', order: 'o1' })
+  const from = `/work/repo-demo-o1/${DIR}`
+  w.files.set(`${from}/DONE-o1.md`, 'host name, read through a link')
+  w.links.add(`${from}/DONE-o1.md`)
+  w.files.set(`${from}/REVIEW-o1.md`, 'committed by the reviewer')
+  w.tracked.add(`/work/repo-demo-o1/${DIR}/REVIEW-o1.md`)
+  const poll = () => $.command.run({ command: 'troupe', args: 'demo' } as never)
+
+  await poll()
+  expect([w.files.has(`${DIR}/DONE-o1.md`), w.files.has(`${DIR}/REVIEW-o1.md`)]).toEqual([false, false])
+
+  // Copied while untracked, then committed on the branch: the copy would stop the merge.
+  w.links.clear()
+  w.files.set(`${from}/DONE-o1.md`, 'o1 built')
+  await poll()
+  expect(w.files.get(`${DIR}/DONE-o1.md`)).toBe('o1 built')
+  w.tracked.add(`/work/repo-demo-o1/${DIR}/DONE-o1.md`)
+  await poll()
+  await poll()
+  expect(w.logs.filter(line => line.includes('DONE-o1.md is committed on order/demo/o1 now: remove the copy in docs/missions/demo before merging it'))).toHaveLength(1)
+})
+
+test("a review is allowed by a done marker the builder committed in its worktree", async ($, on) => {
+  const w = world(on, { branches: ['order/demo/o1'] })
+  w.files.set(`/work/repo-demo-o1/${DIR}/DONE-o1.md`, 'committed')
+  await approve(w)
+  await start($)
+
+  expect(await call($, w, 'troupe_dispatch', { mission: 'demo', order: 'o1', role: 'reviewer' })).toContain('Dispatched the review of o1')
+})
+
+test("a reused reviewer's worktree is moved to the branch its brief names", async ($, on) => {
+  const w = world(on, { branches: ['order/demo/o1'] })
+  w.files.set(`${DIR}/DONE-o1.md`, 'built')
+  await approve(w)
+  await start($)
+  await call($, w, 'troupe_dispatch', { mission: 'demo', order: 'o1', role: 'reviewer' })
+  w.panes.clear()
+  w.branches.push('order/demo/o1-fix')
+  w.files.set(`${DIR}/REVIEW-o1.md`, 'FAIL')
+
+  expect(await call($, w, 'troupe_dispatch', { mission: 'demo', order: 'o1', role: 'reviewer' })).toContain('detached at order/demo/o1-fix')
+  expect(w.calls.filter(argv => argv.includes('checkout'))).toEqual([['git', '-C', '/work/repo-demo-review-o1', 'checkout', '--detach', 'order/demo/o1-fix']])
+  expect(w.calls.filter(argv => argv.includes('add'))).toHaveLength(1)
+})
+
+test('one failed look at the session does not forget its windows', async ($, on) => {
+  const w = world(on)
+  await approve(w)
+  await start($)
+  await call($, w, 'troupe_dispatch', { mission: 'demo', order: 'o1' })
+
+  w.flaky = 1
+  expect(await call($, w, 'troupe_status', {})).toContain('o1: order o1, builder, running')
+  w.flaky = 1
+  expect(await call($, w, 'troupe_dispatch', { mission: 'demo', order: 'o1' })).toContain('o1 already has a window')
 })

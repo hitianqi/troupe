@@ -60,6 +60,7 @@ export const argv = {
   /** A reviewer's worktree: the branch it reviews, detached. */
   worktreeAddDetached: (root: string, path: string, branch: string) => ['git', '-C', root, 'worktree', 'add', '--detach', path, branch],
   worktreeList: (root: string) => ['git', '-C', root, 'worktree', 'list', '--porcelain'],
+  checkoutDetached: (path: string, branch: string) => ['git', '-C', path, 'checkout', '--detach', branch],
   newSession: (socket: string | undefined, name: string, window: string, cwd: string, model: string) =>
     tmux(socket, 'new-session', '-d', '-s', name, '-n', window, '-c', cwd, '-P', '-F', IDS, ...claudeArgv(model)),
   newWindow: (socket: string | undefined, session: string, window: string, cwd: string, model: string) =>
@@ -140,7 +141,8 @@ export async function rule($: EngineInterface, name: unknown, id: unknown, role:
   if (role === 'reviewer') {
     const files = (await $.fs.list(dir).catch(() => [])).map(entry => entry.name)
     if (!branches.includes(`order/${name}/${id}`)) return { refused: `${id} has no branch order/${name}/${id} to review yet. Nothing was dispatched.` }
-    if (!files.includes(doneMarker(id))) return { refused: `${id} is not built yet (no ${doneMarker(id)} in ${dir}). Nothing was dispatched.` }
+    const isBuilt = files.includes(doneMarker(id)) || (await $.fs.exists(`${root}-${name}-${id}/${dir}/${doneMarker(id)}`).catch(() => false))
+    if (!isBuilt) return { refused: `${id} is not built yet (no ${doneMarker(id)} in ${dir}). Nothing was dispatched.` }
 
     return { mission: { name, dir, plan, order, root, base, branches } }
   }
@@ -168,7 +170,8 @@ async function ownSocket($: EngineInterface): Promise<{ socket: string } | undef
 async function liveSession($: EngineInterface, mission: string): Promise<TroupeRoleSession | undefined> {
   const kept = (await read($, roles))[mission]
   if (kept === undefined) return undefined
-  const named = (await ok(run($, argv.sessionName(kept.socket, kept.id))))?.trim()
+  // Asked twice: one failed look (a busy server) must not forget windows that run.
+  const named = ((await ok(run($, argv.sessionName(kept.socket, kept.id)))) ?? (await ok(run($, argv.sessionName(kept.socket, kept.id)))))?.trim()
 
   return named === `${kept.id} ${kept.name}` ? kept : undefined
 }
@@ -214,7 +217,13 @@ const forget = ($: EngineInterface, mission: string, window?: string) =>
 /** The worktree for a window: the one git already has at `path` (a reopen), else a new one. Answers an error text, or undefined. */
 async function worktreeFor($: EngineInterface, m: Mission, role: Role, path: string, branch: string): Promise<string | undefined> {
   const listed = (await ok(run($, argv.worktreeList(m.root)))) ?? ''
-  if (listed.split('\n').includes(`worktree ${path}`)) return undefined
+  if (listed.split('\n').includes(`worktree ${path}`)) {
+    if (role !== 'reviewer') return undefined
+    // A reviewer's worktree is reused for its re-review: on to the branch the brief names.
+    const moved = await run($, argv.checkoutDetached(path, branch))
+
+    return moved.exitCode === 0 ? undefined : `git could not move the reviewer's worktree ${path} to ${branch}: ${moved.stderr.trim() || `exit ${moved.exitCode}`}`
+  }
   const add =
     role === 'reviewer'
       ? argv.worktreeAddDetached(m.root, path, branch)
@@ -370,20 +379,36 @@ async function close($: EngineInterface, mission: unknown, window: unknown): Pro
   return { result: alive ? `Closed ${String(window)} (${one.window}) in ${kept.name}; its worktree ${one.worktree} stays.` : `${String(window)} had already gone; forgotten.` }
 }
 
+// The copies already said to be committed on their branch since (said once per copy).
+const told = new Set<string>()
+
 /**
  * Copies what the role windows of the mission in `dir` handed back (each
  * order's done marker and review reports, from its window's worktree) into
  * `dir`, where the pane and troupe-panel read the folder. Run on the poll.
+ *
+ * Only plain files git does not track there: a committed one comes with the
+ * merge, and an untracked copy of it would stop that merge. Only when the
+ * folder has none, or an older one: what the orchestrator has is kept.
  */
 export async function collectResults($: EngineInterface, dir: string): Promise<void> {
   const kept = (await read($, roles))[dir.slice(dir.lastIndexOf('/') + 1)]
   if (kept === undefined || !dir.startsWith(`${MISSIONS}/`)) return
   for (const one of Object.values(kept.windows)) {
     const from = `${one.worktree}/${dir}`
-    const names = (await $.fs.list(from).catch(() => [])).map(entry => entry.name).filter(name => isResultOf(one.order, name))
-    for (const name of names) {
-      const text = await $.fs.read(`${from}/${name}`)
-      if ((await $.fs.read(`${dir}/${name}`).catch(() => undefined)) !== text) await $.fs.write(`${dir}/${name}`, text)
+    const entries = (await $.fs.list(from).catch(() => [])).filter(entry => entry.kind === 'file' && !entry.isLink && isResultOf(one.order, entry.name))
+    for (const entry of entries) {
+      const to = await $.fs.stat(`${dir}/${entry.name}`).catch(() => undefined)
+      const isTracked = Boolean((await ok(run($, ['git', '-C', one.worktree, 'ls-files', '--', `${dir}/${entry.name}`])))?.trim())
+      if (isTracked) {
+        if (to !== undefined && !told.has(`${dir}/${entry.name}`)) {
+          told.add(`${dir}/${entry.name}`)
+          $.ui.log(`${entry.name} is committed on ${one.branch} now: remove the copy in ${dir} before merging it`)
+        }
+        continue
+      }
+      if (to !== undefined && to.mtimeMs >= entry.mtimeMs) continue
+      await $.fs.write(`${dir}/${entry.name}`, await $.fs.read(`${from}/${entry.name}`))
     }
   }
 }
