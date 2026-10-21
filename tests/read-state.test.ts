@@ -2,7 +2,7 @@ import { expect, test } from 'claude-code/testing'
 
 import type { TroupeOrderState } from '../types'
 import { goalOf, isLight, layersOf, readPlan, stepOf, STEPS } from '../hooks/plan.ts'
-import { gitFacts, hasSkill, missionBranchOf, stateOf } from '../hooks/mission.ts'
+import { gitFacts, hasSkill, isApproved, missionBranchOf, planHash, stateOf } from '../hooks/mission.ts'
 import { detail, textOf } from '../hooks/view.ts'
 import { parseYaml } from '../hooks/yaml.ts'
 import { BAD_YAML, MISSING_SKILL, OVERLAP, SESSION_SKILLS, VALID } from './fixtures.ts'
@@ -195,4 +195,51 @@ test('gitFacts asks git for the branches, the mission-only subjects and each ord
   // Merged o1 is not asked about; o4 has no branch.
   expect(asked.filter(args => args[0] === 'rev-list').map(args => args.at(-1))).toEqual(['feature/NO-JIRA-p2..order/p2/o2', 'feature/NO-JIRA-p2..order/p2/o3'])
   expect(await gitFacts(async () => undefined, 'p2', ['o1'])).toBeUndefined()
+})
+
+test('a done marker makes an order done; a fix round stays reviewed, whatever runs for it', async () => {
+  const fixing = [{ description: 'o1: fix the review', status: 'running' as const }]
+  expect(stateOf('o1', ['plan.md', 'DONE-o1.md'], [])).toBe('done')
+  expect(stateOf('o1', ['plan.md', 'DONE-o10.md'], [])).toBe('planned')
+  // The order branch ahead (the fix commits) and a fixer at work: still reviewed.
+  expect(stateOf('o1', ['DONE-o1.md', 'REVIEW-o1.md'], fixing, { running: ['o1'], merged: [] })).toBe('reviewed')
+  // A built order's branch is ahead too: the marker says done.
+  expect(stateOf('o1', ['DONE-o1.md'], [], { running: ['o1'], merged: [] })).toBe('done')
+})
+
+test('the step reaches "Final review" once the mission branch holds SLIM.md, and gitFacts asks only then', async () => {
+  const step = (files: string[], isSlimMerged?: boolean) => STEPS[stepOf({ problems: [], orders: [{ state: 'reviewed' }, { state: 'reviewed' }, { state: 'reviewed' }] }, files, isSlimMerged)]?.label
+  expect([step([]), step(['SLIM.md']), step(['SLIM.md'], false), step(['SLIM.md'], true), step(['SLIM.md', 'REVIEW.md'], true)]).toEqual([
+    'Slim',
+    'Cut',
+    'Cut',
+    'Final review',
+    'MR OK?',
+  ])
+
+  const asked: string[][] = []
+  const run = (slim: string) => async (args: string[]) => {
+    asked.push(args)
+    if (args[0] === 'for-each-ref') return 'feature/NO-JIRA-p3\nmain\n'
+    if (args.includes('SLIM.md')) return slim
+
+    return ''
+  }
+  expect(await gitFacts(run('a1b2c3d\n'), 'p3', ['o1'])).toEqual({ running: [], merged: [] })
+  expect(asked.some(args => args.includes('SLIM.md'))).toBe(false)
+  expect(await gitFacts(run('a1b2c3d\n'), 'p3', ['o1'], ['plan.md', 'SLIM.md'])).toEqual({ running: [], merged: [], isSlimMerged: true })
+  expect(asked.at(-1)).toEqual(['log', '-1', '--format=%h', 'feature/NO-JIRA-p3', '--', 'SLIM.md'])
+  expect(await gitFacts(run(''), 'p3', ['o1'], ['SLIM.md'])).toEqual({ running: [], merged: [], isSlimMerged: false })
+})
+
+test('an approval record that holds for plan.md moves the step past "Plan OK?"; an edited plan, none or a bad one does not', async () => {
+  const step = (isApproved: boolean, states: TroupeOrderState[] = ['planned', 'planned']) =>
+    STEPS[stepOf({ problems: [], orders: states.map(state => ({ state })) }, [], false, isApproved)]?.label
+  expect([step(false), step(true), step(true, ['running', 'planned'])]).toEqual(['Plan OK?', 'Build', 'Build'])
+
+  const record = JSON.stringify({ planHash: await planHash(VALID), approvedAt: '2026-10-21T16:00:00.000Z' })
+  expect(await isApproved(VALID, record)).toBe(true)
+  expect(await isApproved(`${VALID} `, record)).toBe(false)
+  expect(await isApproved(VALID, undefined)).toBe(false)
+  expect(await isApproved(VALID, 'not json')).toBe(false)
 })

@@ -11,6 +11,7 @@ requirement (split and cross-window typing); herdr comes second. It does
 not talk to OpenRig.
 
 Status: Phase 0 done (2026-10-20, mission p0; see `docs/FEASIBILITY.md`).
+Phase 2 built (2026-10-21, missions p2 and p3; outcome below).
 Repo: GitLab `AI/troupe`, developed on the Prover account like the other
 projects; open source is a later call. Decisions of 2026-10-20 are the base
 (record: `~/.claude/projects/-home-tizh/memory/mission-pane-mod-plan.md`).
@@ -46,6 +47,44 @@ pane, a 144-column screenshot, the agent rows drawing, the Change input.
 Phase 3's orchestrator runs from the mission checkout and merges each order
 itself. Phase 2 was re-planned the same day (windows and dispatch, tmux
 first) after Tianqi set the product shape.
+
+## Phase 2 outcome (2026-10-21, Claude Code 2.1.306)
+
+Missions p2 (the split-right panel) and p3 (dispatch). Evidence:
+`docs/FEASIBILITY.md` ("Phase 2" and "Phase 2 part 2"),
+`docs/missions/p2/RECORD.md`, `docs/missions/p3/RECORD.md`.
+
+- Typing into another tmux pane works from a hook, and an interactive
+  `claude` in a window of a separate tmux session acts on it. One finding
+  changed the design: a long prompt typed as raw keys into a claude that has
+  just started stays unsent, so the brief is pasted (bracketed paste) as a
+  one-line prompt naming a brief file. A permission prompt showing in a role
+  window eats the keys and the Enter approves it, so dispatch types only into
+  a window it has just opened.
+- Built: `troupe_dispatch` (refused before approval, and while a `depends_on`
+  order is not merged onto the mission branch; also a reviewer role),
+  `troupe_status`, `troupe_close` (one window or the whole session); role
+  windows in a tmux session of their own, `troupe-<mission>`; results back
+  as `DONE-<id>.md` and `REVIEW-<id>.md`, copied into the mission folder;
+  the Approve / Change dialog on `/troupe`, with `APPROVAL.json` (the plan's
+  hash). A gone window or session is opened again on the next dispatch.
+- The Q4 reading held, driven in a reviewer's scratch session: `$.ui.ask`
+  returns the label or the typed text. The dialog fails closed on a blank
+  answer or a dismissed dialog. That the engine's auto-resolve of an
+  unattended dialog cannot approve rests on a reading of the 2.1.306 build,
+  not on a run.
+- Checked by: 73 plugin tests and 6 panel tests in `./check.sh`, a scripted
+  dry run in a scratch tmux server (15 of 15 checks,
+  `docs/missions/p3/dry-run/`), the order reviews and the final review, which
+  drove the done-when end to end. Dispatch was run only in scratch
+  repositories on scratch tmux servers, never against this checkout.
+- Seen live: Tianqi approved and changed a plan in the dialog himself
+  (Change's words came back as a prompt, Approve wrote the record;
+  `docs/missions/p3/RECORD.md`).
+- Left: prompts and dialogs inside role windows stay the person's;
+  `APPROVAL.json` is advisory.
+- Light mode (1-2 orders, serial, no slim) was not built. Tianqi's decision
+  for p3 ("Light mode 先不做"): it moves to Phase 3 with the skill.
 
 ## What was checked while drafting this (2026-10-20)
 
@@ -158,7 +197,8 @@ Then the build:
 - Approval is `$.ui.ask` in the orchestrator window: Approve / Change, Change
   taking free text; the orchestrator edits plan.md, the panel redraws, the
   dialog comes back. Verified live with a person at the keyboard first.
-- Light mode: 1–2 orders, serial, no slim.
+- Light mode: 1–2 orders, serial, no slim. Moved to Phase 3 with the
+  skill (decided for p3, 2026-10-21); not part of Phase 2.
 
 Done when: `/troupe` with a two-order mission opens the panel on the right,
 the dialog approves the plan, two role windows open in their worktrees and
@@ -176,6 +216,8 @@ machine only, and the human watches the role windows for prompts.
 ### Phase 3 — The workflow skill and one real mission (about one day)
 
 Delivers:
+- Light mode, moved here from Phase 2: one or two orders, serial, no slim and
+  no final review, as the kit's `tianqi-mission-light` does.
 - `skills/troupe-mission/SKILL.md` plus de-personalized `plan.md`,
   `REVIEW.md`, `SLIM.md` templates: brief → plan (split by coupling, declared
   touches, per-order model) → approval → dispatch by dependency layer

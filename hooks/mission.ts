@@ -1,4 +1,4 @@
-import type { TroupeMission, TroupeOrderState } from '../types'
+import type { TroupeApproval, TroupeMission, TroupeOrderState } from '../types'
 import { stepOf } from './plan.ts'
 import type { PlanRead } from './plan.ts'
 
@@ -18,8 +18,12 @@ export type EngineFacts = {
 export const POLL_MS = 2000
 export const GIT_MS = 10_000
 
-/** From git: the orders whose branch has commits ahead of the mission branch, and those merged onto it. */
-export type GitFacts = { running: string[]; merged: string[] }
+/**
+ * From git: the orders whose branch has commits ahead of the mission branch,
+ * and those merged onto it; with SLIM.md in the folder, whether the mission
+ * branch holds it (the cuts merged: the final review is next).
+ */
+export type GitFacts = { running: string[]; merged: string[]; isSlimMerged?: boolean }
 
 /** In the mission folder, written by the mod, read by troupe-panel; git ignores it. */
 export const STATE_FILE = '.troupe-state.json'
@@ -32,15 +36,51 @@ export const hasSkill = (listed: string[], name: string): boolean =>
 
 const LIVE = new Set(['pending', 'running', 'waiting', 'idle'])
 
+/** The approval record, in the mission folder beside plan.md (approval.ts writes it). */
+export const APPROVAL_FILE = 'APPROVAL.json'
+
+/** `sha256:<hex>` of the plan's text, as read. */
+export async function planHash(text: string): Promise<string> {
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text))
+
+  return `sha256:${[...new Uint8Array(digest)].map(byte => byte.toString(16).padStart(2, '0')).join('')}`
+}
+
+/** An approval record from its file's text; null when there is none or it cannot be read. */
+export function recordOf(text: string | undefined): TroupeApproval | null {
+  if (text === undefined) return null
+  try {
+    const record: unknown = JSON.parse(text)
+    if (typeof record !== 'object' || record === null) return null
+    const { planHash: hash, approvedAt } = record as Record<string, unknown>
+
+    return typeof hash === 'string' && typeof approvedAt === 'string' ? { planHash: hash, approvedAt } : null
+  } catch {
+    return null
+  }
+}
+
+/** Whether a record (its file's text) approves `plan` as it is now: approval.ts's rule, for both views. */
+export const isApproved = async (plan: string, recordText: string | undefined): Promise<boolean> =>
+  recordOf(recordText)?.planHash === (await planHash(plan))
+
+/** The file a builder's role window writes in its worktree when its order is built; the mod copies it into the mission folder. */
+export const doneMarker = (id: string) => `DONE-${id}.md`
+
+/** A review report of order `id`: `REVIEW-<id>.md`, or `REVIEW-<id>-<n>.md` for its `n`th review. */
+export const isReviewOf = (id: string, name: string) => name === `REVIEW-${id}.md` || new RegExp(`^REVIEW-${id.replace(/\W/g, '\\$&')}-\\d+\\.md$`).test(name)
+
 /**
- * An order's state: `reviewed` with a review file; `done` once merged onto the
- * mission branch; `running` while a subagent named `<id>:` lives or its order
- * branch is ahead of the mission branch; `done` when such a subagent finished.
+ * An order's state: `reviewed` with a review file, whatever its verdict, so a
+ * fix round stays `reviewed`; `done` once merged onto the mission branch or
+ * with its done marker; `running` while a subagent named `<id>:` lives or its
+ * order branch is ahead of the mission branch; `done` when such a subagent
+ * finished.
  */
 export const stateOf = (id: string, files: string[], agents: EngineFacts['agents'], git?: GitFacts): TroupeOrderState => {
-  if (files.some(file => file === `REVIEW-${id}.md` || new RegExp(`^REVIEW-${id.replace(/\W/g, '\\$&')}-\\d+\\.md$`).test(file))) return 'reviewed'
+  if (files.some(file => isReviewOf(id, file))) return 'reviewed'
   // A squash-merged order's branch stays ahead of the mission branch: merged wins.
-  if (git?.merged.includes(id)) return 'done'
+  if (git?.merged.includes(id) || files.includes(doneMarker(id))) return 'done'
   const mine = agents.filter(agent => agent.description.startsWith(`${id}:`))
   if (mine.some(agent => LIVE.has(agent.status)) || git?.running.includes(id)) return 'running'
 
@@ -57,9 +97,10 @@ export const missionBranchOf = (mission: string, branches: string[]): string | u
  * What git says of the orders `ids` of `mission`: `run` runs one git command
  * in the mission's repository and answers its output, or undefined when it
  * fails. Orders are merged one commit each, titled `<id>: …`; an order's
- * branch is `order/<mission>/<id>`. Undefined with no mission branch.
+ * branch is `order/<mission>/<id>`. `files` are the mission folder's names
+ * (git runs in that folder). Undefined with no mission branch.
  */
-export async function gitFacts(run: (args: string[]) => Promise<string | undefined>, mission: string, ids: string[]): Promise<GitFacts | undefined> {
+export async function gitFacts(run: (args: string[]) => Promise<string | undefined>, mission: string, ids: string[], files: string[] = []): Promise<GitFacts | undefined> {
   const branches = (await run(['for-each-ref', '--format=%(refname:short)', 'refs/heads/']))?.split('\n').filter(Boolean)
   const base = branches && missionBranchOf(mission, branches)
   if (base === undefined) return undefined
@@ -75,12 +116,13 @@ export async function gitFacts(run: (args: string[]) => Promise<string | undefin
     if (merged.includes(id) || !branches?.includes(branch)) continue
     if (Number((await run(['rev-list', '--count', `${base}..${branch}`]))?.trim()) > 0) running.push(id)
   }
+  if (!files.includes('SLIM.md')) return { running, merged }
 
-  return { running, merged }
+  return { running, merged, isSlimMerged: Boolean((await run(['log', '-1', '--format=%h', base, '--', 'SLIM.md']))?.trim()) }
 }
 
-/** The mission in `dir` from its plan, the folder's file names, the engine's facts and git's. */
-export const missionOf = (dir: string, plan: PlanRead, files: string[], facts: EngineFacts, git?: GitFacts): TroupeMission => {
+/** The mission in `dir` from its plan, the folder's file names, the engine's facts and git's, and whether an approval record holds for the plan. */
+export const missionOf = (dir: string, plan: PlanRead, files: string[], facts: EngineFacts, git?: GitFacts, isPlanApproved = false): TroupeMission => {
   const listed = facts.skills
   const orders = plan.orders.map(({ id, kind, goal, model, dependsOn }) => ({ id, kind, goal, model, dependsOn, state: stateOf(id, files, facts.agents, git) }))
 
@@ -89,7 +131,7 @@ export const missionOf = (dir: string, plan: PlanRead, files: string[], facts: E
     name: dir.slice(dir.lastIndexOf('/') + 1),
     title: plan.title,
     goal: plan.goal,
-    step: stepOf({ problems: plan.problems, orders }, files),
+    step: stepOf({ problems: plan.problems, orders }, files, git?.isSlimMerged, isPlanApproved),
     hasRoles: plan.hasRoles,
     roles: plan.roles.map(role => ({
       ...role,

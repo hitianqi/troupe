@@ -1,14 +1,20 @@
 import type { EngineInterface, Register, Timer } from 'claude-code'
 
+import { gate } from './approval.ts'
+import { dispatchHooks, registerDispatch } from './dispatch.ts'
 import { drawPane, paneRows } from './draw-pane.tsx'
 import { POLL_MS } from './mission.ts'
+import type { EngineFacts } from './mission.ts'
 import { closePanel, openPanel, readPanel } from './panel.ts'
 import { refresh, setTarget, writeFacts } from './read-state.ts'
 
 // Phase 2: `/troupe` inside tmux splits troupe-panel to the right of the
 // session (panel.ts); outside tmux it opens the in-session pane `troupe`,
 // a read-only view of the mission in plan.md. One view at a time: while
-// the panel is open the pane is closed.
+// the panel is open the pane is closed. Once the plan is shown, approval.ts's
+// gate answers whether it is approved. Phase 2 part 2: the role-window tools
+// (troupe_dispatch, troupe_status, troupe_close) are declared and served by
+// dispatch.ts.
 
 const PANE = 'troupe'
 /** The width the pane is drawn for (the approved mock's): asked as the dock's columns, and to size the rows asked inline. */
@@ -58,6 +64,12 @@ async function troupe($: EngineInterface, want: string): Promise<string> {
 
     return opened.isPlaced ? 'troupe pane opened: no mission to show yet.' : `troupe pane not placed: ${opened.reason}`
   }
+
+  return `${await show($, read)} ${await gate($, read.dir)}`
+}
+
+/** Shows the mission read: the panel inside tmux, else the pane; answers what was shown. */
+async function show($: EngineInterface, read: { dir: string; facts: EngineFacts }): Promise<string> {
   const shown = await openPanel($, read.dir, await $.session.cwd(), () => writeFacts($, read))
   if (shown.kind === 'opened' || shown.kind === 'reused') {
     // One view at a time: the in-session pane closes while the panel is open.
@@ -70,7 +82,7 @@ async function troupe($: EngineInterface, want: string): Promise<string> {
   const opened = await openPane($)
   const why = shown.kind === 'no-tmux' ? 'no tmux' : `the split failed (${shown.reason})`
 
-  return `${why}: showing the in-session pane${opened.isPlaced ? '' : `, not placed: ${opened.reason}`}`
+  return `${why}: showing the in-session pane${opened.isPlaced ? '' : `, not placed: ${opened.reason}`}.`
 }
 
 export const register: Register = on => {
@@ -80,6 +92,7 @@ export const register: Register = on => {
       description: 'Show the mission plan in a panel on the right (inside tmux), or in the pane; /troupe close closes the panel',
       argumentHint: '[mission, a mission folder, or close]',
     })
+    await registerDispatch($).catch(error => $.ui.log(`could not declare the dispatch tools: ${String(error)}`))
     poll?.cancel()
     poll = $.clock.every(POLL_MS, () => void tick($))
     void tick($)
@@ -88,6 +101,8 @@ export const register: Register = on => {
 
     return next(e)
   })
+
+  dispatchHooks(on)
 
   on('command.run', { command: 'troupe' }, async ($, e) => ({ text: await troupe($, e.args.trim()) }))
 
