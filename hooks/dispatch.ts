@@ -3,7 +3,7 @@ import type { EngineInterface, On } from 'claude-code'
 
 import type { TroupeRoleSession, TroupeRoleWindow } from '../types'
 import { approvalOf } from './approval.ts'
-import { doneMarker, gitFacts, missionBranchOf } from './mission.ts'
+import { doneMarker, gitFacts, isReviewOf, missionBranchOf } from './mission.ts'
 import { ANCESTRY, ownPaneOf, tmux } from './panel.ts'
 import { readPlan } from './plan.ts'
 import type { PlanOrder, PlanRead } from './plan.ts'
@@ -38,10 +38,6 @@ export const READY_MS = 30_000
 const READY_POLL_MS = 500
 /** How long after the Enter dispatch looks whether the prompt left the input box. */
 export const SENT_MS = 1500
-
-export const DISPATCH = 'troupe_dispatch'
-export const STATUS = 'troupe_status'
-export const CLOSE = 'troupe_close'
 
 type Role = TroupeRoleWindow['role']
 /** A role window's name in the session: the order id for its builder, `review-<id>` for its reviewer. */
@@ -87,7 +83,7 @@ export const isUnsent = (screen: string, prompt: string) =>
   (screen.split('\n').findLast(line => line.startsWith('❯')) ?? '').replace(/^❯\s*/, '').startsWith(prompt.slice(0, 16))
 
 /** The files a role window hands back, by name: its order's done marker and review reports (`REVIEW-<id>.md`, `REVIEW-<id>-<n>.md`). */
-export const isResultOf = (id: string, name: string) => name === doneMarker(id) || name === `REVIEW-${id}.md` || new RegExp(`^REVIEW-${id}-\\d+\\.md$`).test(name)
+export const isResultOf = (id: string, name: string) => name === doneMarker(id) || isReviewOf(id, name)
 
 function run($: EngineInterface, command: string[], timeoutMs = 10_000) {
   return $.process.run(command, { timeoutMs }).catch(error => ({ exitCode: -1, stdout: '', stderr: String(error) }))
@@ -103,13 +99,6 @@ const ok = async (ran: Promise<{ exitCode: number; stdout: string; stderr: strin
 
 type Mission = { name: string; dir: string; plan: PlanRead; order: PlanOrder; root: string; base: string; branches: string[] }
 type Ruled = { mission: Mission } | { refused: string }
-
-/** The orders of `mission` that are done: merged onto the mission branch. */
-export async function doneOrders($: EngineInterface, root: string, mission: string, ids: string[]): Promise<string[] | undefined> {
-  const facts = await gitFacts(args => ok(run($, ['git', '-C', root, ...args])), mission, ids)
-
-  return facts?.merged
-}
 
 /** The hard rules and the checks before them; the mission to dispatch, or why not. */
 export async function rule($: EngineInterface, name: unknown, id: unknown, role: Role): Promise<Ruled> {
@@ -146,7 +135,8 @@ export async function rule($: EngineInterface, name: unknown, id: unknown, role:
 
     return { mission: { name, dir, plan, order, root, base, branches } }
   }
-  const done = (await doneOrders($, root, name, plan.orders.map(one => one.id))) ?? []
+  // Done: merged onto the mission branch.
+  const done = (await gitFacts(args => ok(run($, ['git', '-C', root, ...args])), name, plan.orders.map(one => one.id)))?.merged ?? []
   const waiting = order.dependsOn.filter(dep => !done.includes(dep))
   if (waiting.length > 0) return { refused: `${id} depends on ${waiting.join(', ')}, not done yet (not merged onto ${base}). Nothing was dispatched.` }
 
@@ -257,7 +247,7 @@ async function builderBrief($: EngineInterface, m: Mission, worktree: string, br
 async function reviewerBrief($: EngineInterface, m: Mission, worktree: string, branch: string): Promise<string> {
   const role = await $.fs.read(`${$.plugin.root}/skills/troupe-mission/references/reviewer.md`)
   const files = (await $.fs.list(m.dir).catch(() => [])).map(entry => entry.name)
-  const rounds = files.filter(name => name === `REVIEW-${m.order.id}.md` || new RegExp(`^REVIEW-${m.order.id}-\\d+\\.md$`).test(name)).length
+  const rounds = files.filter(name => isReviewOf(m.order.id, name)).length
   const report = rounds === 0 ? `REVIEW-${m.order.id}.md` : `REVIEW-${m.order.id}-${rounds + 1}.md`
 
   return [
@@ -315,7 +305,7 @@ async function dispatch($: EngineInterface, input: { mission?: unknown; order?: 
     return { deny: `tmux could not open the window ${window}: ${opened.stderr.trim() || `exit ${opened.exitCode}`}. The worktree ${worktree} is there; a dispatch again reuses it.` }
   }
   const session = live ?? { ...(socket && { socket }), name, id: sessionId, windows: {} }
-  const record: TroupeRoleWindow = { order: id, role, window: windowId, pane, worktree, branch, brief, isBriefSent: false }
+  const record: TroupeRoleWindow = { order: id, role, window: windowId, pane, worktree, branch, isBriefSent: false }
   await keepWindow($, m.name, session, window, record)
   const where = `${window} in ${name} (window ${windowId}, worktree ${worktree}, ${role === 'reviewer' ? `detached at ${branch}` : `branch ${branch}`})`
 
@@ -419,7 +409,7 @@ export async function collectResults($: EngineInterface, dir: string): Promise<v
 export async function registerDispatch($: EngineInterface): Promise<void> {
   const mission = { type: 'string', description: 'The mission folder name under docs/missions/, such as p3' }
   await $.tool.register({
-    name: DISPATCH,
+    name: 'troupe_dispatch',
     description:
       'Dispatch one order of an approved troupe mission, or its review: adds its worktree (order/<mission>/<order> from the mission branch; a review checks that branch out detached), opens a Claude window for it in the tmux session troupe-<mission>, and pastes its brief. Refused before the plan is approved (APPROVAL.json matching plan.md, committed on the mission branch), while an order it depends on is not merged onto the mission branch, and a review before the order is built (its DONE-<order>.md). A window that has gone is opened again in its worktree.',
     inputSchema: {
@@ -434,13 +424,13 @@ export async function registerDispatch($: EngineInterface): Promise<void> {
     isDeferred: false,
   })
   await $.tool.register({
-    name: STATUS,
+    name: 'troupe_status',
     description: 'Each troupe role window opened in this session: its order, its role, and whether it is still running.',
     inputSchema: { type: 'object', properties: { mission: { ...mission, description: 'One mission; all when left out' } } },
     isDeferred: false,
   })
   await $.tool.register({
-    name: CLOSE,
+    name: 'troupe_close',
     description: 'Close one troupe role window (window: an order id for its builder, review-<order> for its reviewer), or with no window the whole tmux session troupe-<mission>. Only what troupe opened; the worktrees stay.',
     inputSchema: { type: 'object', properties: { mission, window: { type: 'string', description: 'o1, or review-o1; all windows when left out' } }, required: ['mission'] },
     isDeferred: false,

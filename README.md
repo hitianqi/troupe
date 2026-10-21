@@ -102,7 +102,8 @@ start; the model calls them as `mcp__troupe__troupe_dispatch`,
 
 **`troupe_dispatch(mission, order, role?)`** opens one Claude window for an
 order. `role` is `builder` (the default) or `reviewer`. It has two hard
-rules, and refuses with a reason the model reads, before it runs anything:
+rules, and refuses with a reason the model reads, before it creates anything
+(it runs only read-only git commands first):
 
 1. **No dispatch before approval.** `APPROVAL.json` must exist and match
    `plan.md` as it is now. The approved `plan.md` must also be the one the
@@ -157,8 +158,9 @@ branches stay.
   worktree. A role session that has gone is forgotten and opened again.
 - Results come back as files. The builder writes `DONE-<id>.md` and the
   reviewer `REVIEW-<id>.md` (`REVIEW-<id>-<n>.md` for a re-review) in their
-  own worktrees, under `docs/missions/<mission>/`. The mod copies them
-  into the orchestrator's mission folder on its 2 s poll, only the files
+  own worktrees, under `docs/missions/<mission>/`. The mod copies these
+  per-order files back (not `REVIEW.md` or `SLIM.md`: the orchestrator
+  copies those by hand) into the orchestrator's mission folder on its 2 s poll, only the files
   git does not track in that worktree, and only when the folder has no such
   file or an older one. The panel then shows the order `done` (marker) or
   `reviewed` (review file).
@@ -191,9 +193,11 @@ branches stay.
   orchestrator's. Start the tmux server from a plain shell: one started from
   an OpenRig seat carried that seat's `OPENRIG_*` variables into the role
   windows. troupe has not been run on OpenRig's own tmux server.
-- **A globally installed troupe loads in role windows too**; no flag keeps a
-  plugin out of a `claude` it starts. Load it with `--plugin-dir` or from the
-  session's mods folder instead.
+- **A globally installed troupe loads in role windows too.** troupe starts
+  them with `claude --model <model>` only. `claude --bare` would skip the
+  hooks of installed plugins, but it also skips settings hooks, LSP,
+  auto-memory and more, so troupe does not pass it. Load troupe with
+  `--plugin-dir` or from the session's mods folder instead.
 - **Light mode** (one or two orders, serial, no slim) is not built; it moved
   to Phase 3 with the skill.
 - **The role windows' own progress** (what a window is doing) is not shown;

@@ -69,9 +69,10 @@ Missions p2 (the split-right panel) and p3 (dispatch). Evidence:
   the Approve / Change dialog on `/troupe`, with `APPROVAL.json` (the plan's
   hash). A gone window or session is opened again on the next dispatch.
 - The Q4 reading held, driven in a reviewer's scratch session: `$.ui.ask`
-  returns the label or the typed text. The dialog fails closed on a blank answer or a dismissed dialog. That the
-  engine's auto-resolve of an unattended dialog cannot approve rests on a
-  reading of the 2.1.306 build, not on a run.
+  returns the label or the typed text. The dialog fails closed on a blank
+  answer or a dismissed dialog. That the engine's auto-resolve of an
+  unattended dialog cannot approve rests on a reading of the 2.1.306 build,
+  not on a run.
 - Checked by: 71 plugin tests and 5 panel tests in `./check.sh`, a scripted
   dry run in a scratch tmux server (15 of 15 checks,
   `docs/missions/p3/dry-run/`), and the order reviews. Dispatch was run only in

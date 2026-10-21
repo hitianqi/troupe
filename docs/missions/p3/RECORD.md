@@ -167,7 +167,8 @@ In `README.md`, "Known limits": `APPROVAL.json` is advisory; done means
 merged (a marker shows `done` but does not release a dependent order); role
 windows inherit the tmux server's environment (a server started from an
 OpenRig seat carried its `OPENRIG_*` variables) and troupe has not been run on
-OpenRig's own server; a globally installed troupe loads in role windows too;
+OpenRig's own server; a globally installed troupe loads in role windows too (`--bare` would skip
+plugin hooks but skips much else, so troupe does not pass it);
 the brief sits outside the worktree and an account not in auto mode may be
 asked to allow reading it; the `/proc` route is Linux only, as before.
 

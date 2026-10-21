@@ -150,7 +150,7 @@ test('an edited plan, a whitespace edit too, invalidates the record and is asked
 
   w.files.set(`${DIR}/plan.md`, `${VALID}\n`)
   w.answers = [undefined]
-  expect(await troupe($)).toContain(`Plan.md changed since it was approved at ${approvedAt}: it must be approved again.`)
+  expect(await troupe($)).toContain(`plan.md changed since it was approved at ${approvedAt}: it must be approved again.`)
   expect(w.asked).toEqual(['Approve the plan?', 'Approve the plan?'])
 
   w.answers = ['Approve']

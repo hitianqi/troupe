@@ -328,7 +328,7 @@ test('the approval record: its hash is sha256 of the text as read, and /troupe s
   await approve(w)
   expect(await troupe()).toContain('The plan is approved (2026-10-21T14:00:00.000Z).')
   w.files.set(`${DIR}/plan.md`, VALID.replace('o3', 'o4'))
-  expect(await troupe()).toContain('Plan.md changed since it was approved at 2026-10-21T14:00:00.000Z: it must be approved again.')
+  expect(await troupe()).toContain('plan.md changed since it was approved at 2026-10-21T14:00:00.000Z: it must be approved again.')
   w.files.set(`${DIR}/${APPROVAL_FILE}`, 'not json')
   expect(await troupe()).toContain(`The plan is not approved: no ${APPROVAL_FILE}`)
 })

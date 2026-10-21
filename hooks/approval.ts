@@ -1,4 +1,3 @@
-import { atom, update } from 'claude-code'
 import type { EngineInterface } from 'claude-code'
 
 import type { TroupeApproval } from '../types'
@@ -12,8 +11,6 @@ import { readPlan } from './plan.ts'
 
 /** In the mission folder, beside plan.md. */
 export const APPROVAL_FILE = 'APPROVAL.json'
-
-const approval = atom({ plugin: 'troupe', key: 'approval' } as const, null)
 
 /** `sha256:<hex>` of the plan's text, as read. */
 export async function planHash(text: string): Promise<string> {
@@ -31,19 +28,18 @@ export async function readApproval($: EngineInterface, dir: string): Promise<Tro
     if (typeof record !== 'object' || record === null) return null
     const { planHash: hash, approvedAt } = record as Record<string, unknown>
 
-    return typeof hash === 'string' && typeof approvedAt === 'string' ? { dir, planHash: hash, approvedAt } : null
+    return typeof hash === 'string' && typeof approvedAt === 'string' ? { planHash: hash, approvedAt } : null
   } catch {
     return null
   }
 }
 
-/** Records the human's yes to `plan` (the text they were shown), else to plan.md as it is now; answers the record. */
-export async function writeApproval($: EngineInterface, dir: string, plan?: string): Promise<TroupeApproval> {
-  const record = { planHash: await planHash(plan ?? (await $.fs.read(`${dir}/plan.md`))), approvedAt: new Date(await $.clock.now()).toISOString() }
+/** Records the human's yes to `plan`, the text they were shown; answers the record. */
+export async function writeApproval($: EngineInterface, dir: string, plan: string): Promise<TroupeApproval> {
+  const record = { planHash: await planHash(plan), approvedAt: new Date(await $.clock.now()).toISOString() }
   await $.fs.write(`${dir}/${APPROVAL_FILE}`, `${JSON.stringify(record, null, 2)}\n`)
-  await update($, approval, () => ({ dir, ...record }))
 
-  return { dir, ...record }
+  return record
 }
 
 export type Approved = { isApproved: true; record: TroupeApproval } | { isApproved: false; reason: string }
@@ -51,7 +47,6 @@ export type Approved = { isApproved: true; record: TroupeApproval } | { isApprov
 /** Whether plan.md in `dir` is approved as it is now: a record whose hash is the plan's. */
 export async function approvalOf($: EngineInterface, dir: string): Promise<Approved> {
   const record = await readApproval($, dir)
-  await update($, approval, () => record)
   if (record === null) return { isApproved: false, reason: `the plan is not approved: no ${APPROVAL_FILE} in ${dir}` }
   const plan = await $.fs.read(`${dir}/plan.md`).catch(() => undefined)
   if (plan === undefined) return { isApproved: false, reason: `no plan.md in ${dir}` }
@@ -69,7 +64,8 @@ const NOT_NOW = 'Not now'
 // One dialog at a time: a second /troupe while one is up answers without asking.
 let isAsking = false
 
-const sentence = (reason: string) => `${reason[0]?.toUpperCase()}${reason.slice(1)}.`
+// A reason that opens with a file name keeps its spelling (`plan.md changed …`).
+const sentence = (reason: string) => (reason.startsWith('plan.md') ? `${reason}.` : `${reason[0]?.toUpperCase()}${reason.slice(1)}.`)
 
 /**
  * What the person answered: the label picked or the words typed, trimmed;

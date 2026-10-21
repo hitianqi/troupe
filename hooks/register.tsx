@@ -13,7 +13,8 @@ import { refresh, setTarget, writeFacts } from './read-state.ts'
 // a read-only view of the mission in plan.md. One view at a time: while
 // the panel is open the pane is closed. Once the plan is shown, approval.ts's
 // gate answers whether it is approved. Phase 2 part 2: the role-window tools
-// (troupe_dispatch, troupe_status) are declared and served by dispatch.ts.
+// (troupe_dispatch, troupe_status, troupe_close) are declared and served by
+// dispatch.ts.
 
 const PANE = 'troupe'
 /** The width the pane is drawn for (the approved mock's): asked as the dock's columns, and to size the rows asked inline. */

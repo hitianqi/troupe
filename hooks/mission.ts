@@ -39,6 +39,9 @@ const LIVE = new Set(['pending', 'running', 'waiting', 'idle'])
 /** The file a builder's role window writes in its worktree when its order is built; the mod copies it into the mission folder. */
 export const doneMarker = (id: string) => `DONE-${id}.md`
 
+/** A review report of order `id`: `REVIEW-<id>.md`, or `REVIEW-<id>-<n>.md` for its `n`th review. */
+export const isReviewOf = (id: string, name: string) => name === `REVIEW-${id}.md` || new RegExp(`^REVIEW-${id.replace(/\W/g, '\\$&')}-\\d+\\.md$`).test(name)
+
 /**
  * An order's state: `reviewed` with a review file, whatever its verdict, so a
  * fix round stays `reviewed`; `done` once merged onto the mission branch or
@@ -47,7 +50,7 @@ export const doneMarker = (id: string) => `DONE-${id}.md`
  * finished.
  */
 export const stateOf = (id: string, files: string[], agents: EngineFacts['agents'], git?: GitFacts): TroupeOrderState => {
-  if (files.some(file => file === `REVIEW-${id}.md` || new RegExp(`^REVIEW-${id.replace(/\W/g, '\\$&')}-\\d+\\.md$`).test(file))) return 'reviewed'
+  if (files.some(file => isReviewOf(id, file))) return 'reviewed'
   // A squash-merged order's branch stays ahead of the mission branch: merged wins.
   if (git?.merged.includes(id) || files.includes(doneMarker(id))) return 'done'
   const mine = agents.filter(agent => agent.description.startsWith(`${id}:`))
