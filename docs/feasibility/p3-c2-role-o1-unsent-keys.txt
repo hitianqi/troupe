@@ -1,0 +1,9 @@
+ ▐▛███▛█   Claude Code v2.1.306
+▝▜██████▀  Opus 5.5 with high effort · Claude Team
+ ▝▝   ▝▝   ~/scratch/troupe/p3-o1/repo-sample-o1
+────────────────────────────────────────────────────────────────────────────────
+❯ Read the brief in
+  /home/tizh/scratch/troupe/p3-o1/repo/.git/troupe/sample/o1.md and follow it.
+────────────────────────────────────────────────────────────────────────────────
+  claude-opus-5-5 · repo-sample-o1
+  ⏵⏵ auto mode on (shift+tab to cycle)

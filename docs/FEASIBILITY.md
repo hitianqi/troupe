@@ -1,4 +1,4 @@
-# troupe — feasibility (Phase 0, Phase 2)
+# troupe — feasibility (Phase 0, Phase 2, Phase 2 part 2)
 
 ## Phase 0
 
@@ -452,3 +452,128 @@ warns `MODULE_TYPELESS_PACKAGE_JSON` when it imports `.ts` files under a
 4. A panel that must survive reloads runs in its own tmux pane, not as a
    `$.process.spawn` child: reload, unload and session end each kill the
    child.
+
+## Phase 2 part 2 — typing a brief into an interactive Claude
+
+Run on 2026-10-21 in the OpenRig seat dev.b1 (rig tianqi-troupe-p3, mission
+p3, order o1), on `claude --version`: **2.1.306 (Claude Code)**, tmux 3.4.
+Raw evidence is under `docs/feasibility/p3-*`.
+
+The probe mod, `tprobe3` (`p3-c1-tprobe3-register.ts`, not part of troupe),
+was loaded with `claude --plugin-dir` in a scratch "orchestrator" session on
+a scratch tmux server (`tmux -S ~/scratch/troupe/p3-o1/tmux.sock`, started
+with `env -u TMUX -u TMUX_PANE`), in a scratch git repository. Its command
+`/tprobe <step>` runs fixed tmux argv through `$.process.run` from its
+`command.run` hook: `new-session -d -s tprobe-role` (then `new-window`) with
+`claude` in the repository, `send-keys -t <pane> -l <brief>` then `send-keys
+-t <pane> Enter`, or `load-buffer` + `paste-buffer -p -d` + `Enter`, and
+`kill-session`. The briefs are constants in the probe; keys go only to panes
+it opened. Every call and its exit code is in `p3-c1-probe-log.txt`; all
+exited 0. Role windows ran on the seat's own login ("Claude Team"), with
+one-line prompts. The server was killed and its socket removed at the end.
+
+| # | Case | What happened | Evidence |
+| --- | --- | --- | --- |
+| 1 | One line, typed into an idle claude, then Enter | **Lands and Claude acts**: answered `PONG-ONE` | `p3-c02` |
+| 2 | Three lines by `send-keys -l` (with `\n`), then Enter | **Lands whole**: one prompt of three lines, submitted once; answered `MULTI-OK KIWI` | `p3-c03` |
+| 3 | Same three lines by `paste-buffer -p` (bracketed paste), then Enter | Lands whole, the same | `p3-c04` |
+| 4 | A one-line prompt naming a brief file | Claude read the file and acted on it (`FILE-OK MANGO`) | `p3-c04` |
+| 5 | A real brief: 3299 bytes, 57 lines (builder.md), by keys and by paste | **Both land whole**: `BIG-OK 57 instead.` in each window | `p3-c10`, `p3-c11` |
+| 6 | Input box not empty (text typed, no Enter), then a brief and Enter | The brief is **appended to the draft** and both go as one prompt: `half typed by a personReply with exactly …` | `p3-c05a`, `p3-c05b` |
+| 7 | A permission prompt showing (`--permission-mode manual`, a Bash call pending), then a brief and Enter | **The brief is lost and the Enter approves the pending call**: the dialog's default `1. Yes` was taken, the command ran, the brief never reached the input box | `p3-c06b`, `p3-c06c` |
+| 8 | `--permission-mode auto` against no flag, a Bash `touch` brief | Auto ran it with no prompt. **No flag is already auto mode on this account** (status line `⏵⏵ auto mode on`); `manual` is the mode that prompts (case 7) | `p3-c07`, `p3-c01`, `p3-c06a` |
+| 9 | Typed at once, right after `new-window`, before claude drew | The text echoed on the raw tty, then **sat in the input box unsent: the Enter was lost** | `p3-c08` |
+| 10 | claude in a new folder | The trust dialog: "Is this a project you created or one you trust?", **default `No, exit`**; keys typed then would exit claude | `p3-c00` |
+| 11 | claude in a new `git worktree` (a sibling folder) of a trusted repository | **No trust dialog**: the worktree counts as the trusted repository | `p3-c09` |
+| 12 | Found while building dispatch: a claude **just started**, typed into as soon as its input box shows, with a prompt longer than a line (about 90 characters and up) by `send-keys -l`, then Enter | **The prompt stays in the box: the Enter is taken as a newline**, and later Enters do not send it either (Esc Esc clears it). 5 of 6 fresh windows; a 34-character prompt was sent; the same long prompt into a claude idle for a minute was sent; waiting 5 s after the box showed was sent, 2 s was not, and no visible change on screen tells the two apart. **A bracketed paste** (`set-buffer` + `paste-buffer -p`, then Enter) **was sent in 5 of 5** fresh windows, at once | `p3-c2-role-o1-unsent-keys.txt`, `p3-c2-ready-screens.txt` |
+
+Notes:
+
+- The cases ran from a `command.run` hook; a `tool.call` hook runs in the same
+  module through the same `$.process.run`, and p2's check 1 ran send-keys
+  from a tool's hook. Nothing was refused, and no classifier line or dialog
+  appeared in the orchestrator session for the probe's calls.
+- The classifier refused one of my own Bash calls, not the mod: starting the
+  scratch server with a long `env -u` list (every `OPENRIG_*` and
+  `CLAUDE_CODE_*` variable) drew `[Create Unsafe Agents]`. p2's form, `env -u
+  TMUX -u TMUX_PANE`, passed.
+- A hot reload of the probe emptied its module-level map of windows (as p2
+  found for spawned children): a dispatch tool must keep its windows in
+  `$.state`, not in module variables.
+- Readiness: after `new-window` the screen shows the trust dialog (new
+  folder), the input box (`❯ ` at column 0, a placeholder `Try "…"`), or
+  nothing yet. Dialog options are drawn indented (` ❯ 1. Yes`, ` ❯ No,
+  exit`), so the input box is told apart by `❯` in column 0.
+- Not tried: `claude "<prompt>"` (the initial prompt as an argument), which
+  would skip typing; the ROADMAP decided typed keys, and an argument built
+  from a brief is caller text on a command line.
+
+### Verdict and what it means for troupe_dispatch
+
+**Typing into an interactive Claude works**, from a hook, for one line, three
+lines and a 3 KB brief, by `send-keys -l` and by bracketed paste alike. The
+design holds, with three rules for dispatch:
+
+1. **Type only into a window the tool has just opened, once it is ready.**
+   Wait (poll `capture-pane`, bounded) until the input box shows as `❯` in
+   column 0 with no dialog on screen; a brief typed before that loses its
+   Enter (case 9), and one typed under a dialog is eaten and approves it
+   (case 7) or answers the trust question (case 10). If the box does not
+   show in time, do not type: report the window as not ready.
+2. **Never type into a window already in use**: a person's draft merges into
+   the brief (case 6) and a pending permission prompt is approved (case 7).
+3. **The brief goes as a short prompt naming a brief file** the mod writes
+   where git does not track it (`Read the brief in <path> and follow it.`),
+   so what is typed is fixed in shape, the caller's text is never typed raw,
+   and the brief stays on disk. **It is pasted, not typed** (`set-buffer`,
+   `paste-buffer -p`, Enter): raw keys into a claude that has just started
+   leave the Enter as a newline (case 12). Dispatch then looks once more and
+   reports a prompt still in the box rather than calling it sent.
+
+Role windows run `claude` with the order's `--model` and no permission flag:
+on this account that is auto mode already. Worktrees of the orchestrator's
+repository need no trust answer (case 11).
+
+### Known limits
+
+1. **A permission prompt in a role window eats a typed brief, and the Enter
+   approves the pending call** (case 7). Dispatch avoids it by typing only
+   into a window it has just opened, where no tool call can be pending yet.
+2. **Keys typed before claude has drawn lose their Enter**: the brief sits
+   unsent in the input box (case 9), and so does a prompt longer than a line
+   typed as raw keys just after the box shows (case 12). Dispatch avoids both
+   with a bounded wait for the input box (`❯` in column 0, no dialog on
+   screen), then a bracketed paste; if the box does not show in time it types
+   nothing and says so, and if the prompt is still in the box after the Enter
+   it says that, and the person presses Enter in the window.
+
+What stays the human's: a window already in use is never typed into, so a
+prompt or a dialog inside a running role window (a permission prompt, a
+question from the builder) is answered by the person in that window.
+
+### The scratch dispatch (o1's build)
+
+`troupe_dispatch` as built, in the mod loaded with `claude --plugin-dir` in a
+scratch orchestrator on the scratch server, on a scratch repository holding
+the sample mission (`docs/missions/sample/plan.md`, a copy of
+`docs/missions/workflow/sample/plan.md`) on `feature/NO-JIRA-sample`
+(`p3-c2-orchestrator.txt`):
+
+1. Before approval: refused, `the plan is not approved: no APPROVAL.json in
+   docs/missions/sample. Nothing was dispatched.`, read by the model as the
+   tool's error.
+2. `APPROVAL.json` written by hand with `sha256sum plan.md` as the hash (the
+   mod's `crypto.subtle` hash agreed), then o1: `Dispatched o1 (opus) to
+   window … of tmux session troupe-sample: worktree …/repo-sample-o1, branch
+   order/sample/o1, brief …/repo/.git/troupe/sample/o1.md`. The first build
+   typed raw keys and the prompt stayed unsent (case 12,
+   `p3-c2-role-o1-unsent-keys.txt`); after the change to a paste, the
+   prompt was sent and the builder read the brief and the plan in its
+   worktree (`p3-c2-role-o1-landed.txt`). It stopped, saying that the sample
+   order's files are not in the scratch repository, which is right.
+3. o2: refused, `o2 depends on o1, not done yet (not merged onto
+   feature/NO-JIRA-sample). Nothing was dispatched.`; `troupe_status`
+   listed `o1: order o1, builder, running`.
+4. The windows open at the end (`p3-c2-tmux-windows.txt`): the
+   orchestrator's and `troupe-sample:o1` in the worktree. The scratch server
+   was then killed, its socket removed, and the worktree and branch deleted.

@@ -1,0 +1,8 @@
+ ▐▛███▛█   Claude Code v2.1.306
+▝▜██████▀  Opus 5.5 with high effort · Claude Team
+ ▝▝   ▝▝   ~/scratch/troupe/p3-o1/repo-s-o1
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ Try "write a test for <filepath>"
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  claude-opus-5-5 · repo-s-o1                                                                         ● high · /effort
+  ⏵⏵ auto mode on (shift+tab to cycle) · ← 4 agents

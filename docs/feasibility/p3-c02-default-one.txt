@@ -1,0 +1,11 @@
+ ▐▛███▛█   Claude Code v2.1.306
+▝▜██████▀  Opus 5.5 with high effort · Claude Team
+ ▝▝   ▝▝   ~/scratch/troupe/p3-o1/repo
+❯ Reply with exactly the word PONG-ONE and nothing else.
+● PONG-ONE
+✻ Sautéed for 2s · done 4:29 PM
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ 
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  claude-opus-5-5 · ctx 5% · repo
+  ⏵⏵ auto mode on (shift+tab to cycle) · ← 4 agents

@@ -44,6 +44,43 @@ export type TroupePanel = {
   dir: string
 }
 
+/** The human's yes to one plan.md: APPROVAL.json in the mission folder, as last read or written. */
+export type TroupeApproval = {
+  /** The mission folder that holds the record. */
+  dir: string
+  /** `sha256:<hex>` of plan.md as it was approved. */
+  planHash: string
+  /** ISO time of the approval. */
+  approvedAt: string
+}
+
+/** One role window: a Claude instance troupe_dispatch opened for an order (or, later, its review). */
+export type TroupeRoleWindow = {
+  order: string
+  role: 'builder' | 'reviewer'
+  /** tmux's ids for the window and its one pane, `@N` and `%N`. */
+  window: string
+  pane: string
+  /** The window's worktree, absolute, and the branch checked out there. */
+  worktree: string
+  branch: string
+  /** The brief the window was told to read, absolute. */
+  brief: string
+  /** False until the prompt naming the brief has left claude's input box (no box in time, or still unsent). */
+  isBriefSent: boolean
+}
+
+/** The role session troupe opened for a mission, `troupe-<mission>`, a tmux session of its own on the orchestrator's server. */
+export type TroupeRoleSession = {
+  /** The tmux server's socket; absent for the default one. */
+  socket?: string
+  /** The session's name and tmux's id for it, `$N`: troupe acts only on the session with both. */
+  name: string
+  id: string
+  /** Keyed by the window's name: the order id for a builder. */
+  windows: Record<string, TroupeRoleWindow>
+}
+
 declare module 'claude-code' {
   interface PluginState {
     troupe: {
@@ -53,6 +90,10 @@ declare module 'claude-code' {
       mission: TroupeMission | { missing: string } | null
       /** The panel split beside the session, while it is open. */
       panel: TroupePanel | null
+      /** The approval record of the mission last asked about. */
+      approval: TroupeApproval | null
+      /** The role sessions troupe opened, keyed by mission name. */
+      roles: Record<string, TroupeRoleSession>
     }
   }
 }

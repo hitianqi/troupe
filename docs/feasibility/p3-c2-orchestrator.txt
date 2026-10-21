@@ -1,0 +1,44 @@
+ ▐▛███▛█   Claude Code v2.1.306
+▝▜██████▀  Opus 5.5 with high effort · Claude Team
+ ▝▝   ▝▝   ~/scratch/troupe/p3-o1/repo
+❯ Call the mcp__troupe__troupe_dispatch tool once with mission "sample" and order "o1". Report its answer verbatim and do nothing else.
+● troupe - troupe_dispatch (MCP)(mission: "sample", order: "o1")
+  ⎿  Error: the plan is not approved: no APPROVAL.json in docs/missions/sample. Nothing was dispatched.
+● The tool returned an error:
+  the plan is not approved: no APPROVAL.json in docs/missions/sample. Nothing was dispatched.
+✻ Cogitated for 6s · done 4:45 PM
+❯ Now call mcp__troupe__troupe_dispatch once with mission "sample" and order "o1". Report its answer verbatim and do nothing else.
+● troupe - troupe_dispatch (MCP)(mission: "sample", order: "o1")
+  ⎿  Dispatched o1 (opus) to window @1 of tmux session troupe-sample: worktree /home/tizh/scratch/troupe/p3-o1/repo-sample-o1, branch order/sample/o1, brie
+     f /home/tizh/scratch/troupe/p3-o1/repo/.git/troupe/sample/o1.md, typed.
+● Dispatched o1 (opus) to window @1 of tmux session troupe-sample: worktree /home/tizh/scratch/troupe/p3-o1/repo-sample-o1, branch order/sample/o1, brief
+  /home/tizh/scratch/troupe/p3-o1/repo/.git/troupe/sample/o1.md, typed.
+✻ Crunched for 10s · done 4:46 PM
+● troupe: reloaded (5 hooks: session.start, tool.call, command.run, session.end, ui.render)
+❯ Call mcp__troupe__troupe_dispatch once more with mission "sample" and order "o1". Report its answer verbatim and do nothing else.
+● troupe - troupe_dispatch (MCP)(mission: "sample", order: "o1")
+  ⎿  Dispatched o1 (opus) to window @14 of tmux session troupe-sample: worktree /home/tizh/scratch/troupe/p3-o1/repo-sample-o1, branch order/sample/o1, bri
+     ef /home/tizh/scratch/troupe/p3-o1/repo/.git/troupe/sample/o1.md, sent.
+● Dispatched o1 (opus) to window @14 of tmux session troupe-sample: worktree /home/tizh/scratch/troupe/p3-o1/repo-sample-o1, branch order/sample/o1, brief
+  /home/tizh/scratch/troupe/p3-o1/repo/.git/troupe/sample/o1.md, sent.
+  The tool didn't refuse a second dispatch of o1. It opened a new window (@14) and reused the worktree and branch from the first dispatch (@1). It also reported
+  "sent" this time, where the first dispatch said "typed".
+✻ Cogitated for 14s · done 4:53 PM
+❯ Call mcp__troupe__troupe_dispatch once with mission "sample" and order "o2", then call mcp__troupe__troupe_status once. Report both answers verbatim and do
+  nothing else.
+● troupe - troupe_dispatch (MCP)(mission: "sample", order: "o2")
+● troupe - troupe_status (MCP)
+  ⎿  sample: tmux session troupe-sample ($3) open
+       o1: order o1, builder, running; worktree /home/tizh/scratch/troupe/p3-o1/repo-sample-o1
+● Dispatch (o2):
+  o2 depends on o1, not done yet (not merged onto feature/NO-JIRA-sample). Nothing was dispatched.
+  Status:
+  sample: tmux session troupe-sample ($3) open
+    o1: order o1, builder, running; worktree /home/tizh/scratch/troupe/p3-o1/repo-sample-o1
+  Status lists o1 only once, but the two earlier dispatches opened two windows for it (@1 and @14).
+✻ Sautéed for 6s · done 4:53 PM
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ 
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  claude-opus-5-5 · ctx 5% · repo
+  ⏵⏵ auto mode on (shift+tab to cycle) · ← 4 agents
