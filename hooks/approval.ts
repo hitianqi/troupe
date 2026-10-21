@@ -2,11 +2,13 @@ import { atom, update } from 'claude-code'
 import type { EngineInterface } from 'claude-code'
 
 import type { TroupeApproval } from '../types'
+import { readPlan } from './plan.ts'
 
 // The approval record: the human's yes to one plan.md, kept beside it in the
 // mission folder as the plan's hash and the time. An edited plan (a
 // whitespace edit too) has another hash, so the record no longer holds.
-// troupe_dispatch refuses without a record that holds (dispatch.ts).
+// troupe_dispatch refuses without a record that holds (dispatch.ts). The
+// one writer is the Approve / Change dialog that /troupe raises (gate).
 
 /** In the mission folder, beside plan.md. */
 export const APPROVAL_FILE = 'APPROVAL.json'
@@ -35,9 +37,9 @@ export async function readApproval($: EngineInterface, dir: string): Promise<Tro
   }
 }
 
-/** Records the human's yes to plan.md as it is now; answers the record. */
-export async function writeApproval($: EngineInterface, dir: string): Promise<TroupeApproval> {
-  const record = { planHash: await planHash(await $.fs.read(`${dir}/plan.md`)), approvedAt: new Date(await $.clock.now()).toISOString() }
+/** Records the human's yes to `plan` (the text they were shown), else to plan.md as it is now; answers the record. */
+export async function writeApproval($: EngineInterface, dir: string, plan?: string): Promise<TroupeApproval> {
+  const record = { planHash: await planHash(plan ?? (await $.fs.read(`${dir}/plan.md`))), approvedAt: new Date(await $.clock.now()).toISOString() }
   await $.fs.write(`${dir}/${APPROVAL_FILE}`, `${JSON.stringify(record, null, 2)}\n`)
   await update($, approval, () => ({ dir, ...record }))
 
@@ -60,13 +62,71 @@ export async function approvalOf($: EngineInterface, dir: string): Promise<Appro
   return { isApproved: true, record }
 }
 
+const APPROVE = 'Approve'
+const CHANGE = 'Change'
+const NOT_NOW = 'Not now'
+
+// One dialog at a time: a second /troupe while one is up answers without asking.
+let isAsking = false
+
+const sentence = (reason: string) => `${reason[0]?.toUpperCase()}${reason.slice(1)}.`
+
 /**
- * Run by `/troupe` once the plan is shown: what the command answers about
- * approval. A stand-in for the Approve / Change dialog (o3), which asks when
- * the plan has no record that holds and writes it with writeApproval.
+ * What the person answered: the label picked or the words typed, trimmed;
+ * undefined when the dialog was dismissed or came back empty. A dialog that
+ * auto-resolves while the person is away submits only the answers already
+ * given (2.1.306), so a lone question comes back empty and approves nothing.
+ * The engine refuses a plugin's own AskUserQuestion call ("that is $.ui.ask"),
+ * so the result's afkTimeoutMs cannot be read here.
+ */
+async function askOnce($: EngineInterface, question: string, header: string, options: string[]): Promise<string | undefined> {
+  const answer = (await $.ui.ask(question, { options, header }).catch(() => undefined))?.trim()
+
+  return answer === '' ? undefined : answer
+}
+
+/** A typed answer counts as the label it spells, in any case. */
+const is = (answer: string | undefined, label: string) => answer?.toLowerCase() === label.toLowerCase()
+
+/** The person's answer: Approve, Not now, the words of a change, or undefined. */
+async function ask($: EngineInterface): Promise<string | undefined> {
+  const first = await askOnce($, 'Approve the plan?', 'Plan', [APPROVE, CHANGE])
+  if (!is(first, CHANGE)) return first
+
+  // Not now first, so a second Enter after Change does not approve.
+  return askOnce($, 'What should change in the plan? Type it under Other.', 'Change', [NOT_NOW, APPROVE])
+}
+
+/**
+ * Run by `/troupe` once the plan is shown, once per call: what the command
+ * answers about approval. A plan that passes the checks and has no record
+ * that holds raises the Approve / Change dialog: Approve writes the record;
+ * Change hands the person's words to the conversation as a prompt, and the
+ * next /troupe asks again. A plan with problems, or an approved one, is not
+ * asked about.
  */
 export async function gate($: EngineInterface, dir: string): Promise<string> {
   const approved = await approvalOf($, dir)
+  if (approved.isApproved) return `The plan is approved (${approved.record.approvedAt}).`
+  const why = sentence(approved.reason)
+  const plan = await $.fs.read(`${dir}/plan.md`).catch(() => undefined)
+  if (plan === undefined) return why
+  if (readPlan(plan).problems.length > 0) return `${why} Not asked: the plan has problems; fix plan.md first.`
+  if (isAsking) return `${why} The approval dialog is already open.`
+  isAsking = true
+  try {
+    const answer = await ask($)
+    if (is(answer, APPROVE)) return `The plan is approved (${(await writeApproval($, dir, plan)).approvedAt}).`
+    if (answer === undefined || is(answer, NOT_NOW)) return `${why} Not approved; /troupe asks again.`
+    // The engine refuses a submit from the command's own hook (it would wait on
+    // the turn the hook holds), so it goes from a timer once the command has
+    // answered. The words are in the answer too, so a refused prompt loses nothing.
+    $.clock.after(0, () =>
+      $.prompt.submit({ text: `Tianqi asks: ${answer}; edit ${dir}/plan.md, then /troupe again` }).catch(error => $.ui.log(`could not hand the change to the conversation: ${String(error)}`)),
+    )
 
-  return approved.isApproved ? `The plan is approved (${approved.record.approvedAt}).` : `${approved.reason[0]?.toUpperCase()}${approved.reason.slice(1)}.`
+    return `${why} Change asked: ${answer}`
+  } finally {
+    isAsking = false
+  }
 }
