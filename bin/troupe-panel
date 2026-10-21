@@ -63,8 +63,9 @@ async function read() {
 
   const plan = readPlan(source)
   const ids = plan.orders.map(order => order.id)
-  if (Date.now() - gitRead.at >= GIT_MS || gitRead.key !== ids.join(',')) {
-    gitRead = { at: Date.now(), key: ids.join(','), facts: await gitFacts(git, dir.slice(dir.lastIndexOf('/') + 1), ids) }
+  const key = `${ids.join(',')}|${files.includes('SLIM.md')}`
+  if (Date.now() - gitRead.at >= GIT_MS || gitRead.key !== key) {
+    gitRead = { at: Date.now(), key, facts: await gitFacts(git, dir.slice(dir.lastIndexOf('/') + 1), ids, files) }
   }
 
   // Shown as it was given, as the pane shows it; read from its resolved path.

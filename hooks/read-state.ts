@@ -2,6 +2,7 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface } from 'claude-code'
 
 import type { TroupeMission } from '../types'
+import { collectResults } from './dispatch.ts'
 import { GIT_MS, gitFacts, missionOf, STATE_FILE } from './mission.ts'
 import type { EngineFacts, GitFacts } from './mission.ts'
 import { readPlan } from './plan.ts'
@@ -51,16 +52,16 @@ async function skillNames($: EngineInterface): Promise<string[] | undefined> {
 }
 
 /** What git says of the mission's orders, asked at most every GIT_MS. */
-async function gitOf($: EngineInterface, dir: string, ids: string[]): Promise<GitFacts | undefined> {
+async function gitOf($: EngineInterface, dir: string, ids: string[], files: string[]): Promise<GitFacts | undefined> {
   const now = await $.clock.now()
-  const key = `${dir}|${ids.join(',')}`
+  const key = `${dir}|${ids.join(',')}|${files.includes('SLIM.md')}`
   if (git === undefined || git.key !== key || now - git.at >= GIT_MS) {
     const run = (args: string[]) =>
       $.process.run(['git', '-C', dir, ...args], { timeoutMs: 5000 }).then(
         ran => (ran.exitCode === 0 ? ran.stdout : undefined),
         () => undefined,
       )
-    git = { at: now, key, facts: await gitFacts(run, dir.slice(dir.lastIndexOf('/') + 1), ids) }
+    git = { at: now, key, facts: await gitFacts(run, dir.slice(dir.lastIndexOf('/') + 1), ids, files) }
   }
 
   return git.facts
@@ -90,10 +91,12 @@ export async function refresh($: EngineInterface): Promise<{ dir: string; facts:
   }
   const key = `${dir}@${stat.mtimeMs}`
   if (parsed?.key !== key) parsed = { key, plan: readPlan(await $.fs.read(`${dir}/plan.md`)) }
+  // What the role windows wrote in their worktrees (done markers, reviews) comes into the folder first.
+  await collectResults($, dir).catch(error => $.ui.log(`could not collect the role windows' results: ${String(error)}`))
   const files = (await $.fs.list(dir).catch(() => [])).map(entry => entry.name)
   const agents = await $.agent.list().catch(() => [])
   const facts: EngineFacts = { agents: agents.map(({ description, status }) => ({ description, status })), skills: await skillNames($) }
-  const next = missionOf(dir, parsed.plan, files, facts, await gitOf($, dir, parsed.plan.orders.map(order => order.id)))
+  const next = missionOf(dir, parsed.plan, files, facts, await gitOf($, dir, parsed.plan.orders.map(order => order.id), files))
   if (JSON.stringify(next) !== JSON.stringify(before)) await update($, mission, () => next)
 
   return { dir, facts }

@@ -229,11 +229,11 @@ export const isLight = (orders: unknown[]): boolean => orders.length >= 1 && ord
 
 /**
  * The step the mission is at, as an index into STEPS, from what the pane
- * already reads: the plan's problems, the order states and the mission
- * folder's SLIM.md and REVIEW.md. The gates are unknown until Phase 2, so it
- * never passes "MR OK?".
+ * already reads: the plan's problems, the order states, the mission folder's
+ * SLIM.md and REVIEW.md, and whether the mission branch holds SLIM.md (the
+ * cuts merged, so the final review runs). It never passes "MR OK?".
  */
-export const stepOf = (m: { problems: string[]; orders: { state: TroupeOrderState }[] }, files: string[]): number => {
+export const stepOf = (m: { problems: string[]; orders: { state: TroupeOrderState }[] }, files: string[], isSlimMerged = false): number => {
   const states = m.orders.map(order => order.state)
   if (states.length === 0 || m.problems.length > 0) return at('Plan')
   if (states.every(state => state === 'planned')) return at('Plan OK?')
@@ -241,5 +241,7 @@ export const stepOf = (m: { problems: string[]; orders: { state: TroupeOrderStat
   if (states.some(state => state !== 'reviewed')) return at('Order review')
   if (isLight(states) || files.includes('REVIEW.md')) return at('MR OK?')
 
-  return files.includes('SLIM.md') ? at('Cut') : at('Slim')
+  if (!files.includes('SLIM.md')) return at('Slim')
+
+  return isSlimMerged ? at('Final review') : at('Cut')
 }

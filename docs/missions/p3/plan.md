@@ -196,6 +196,7 @@ orders:
       - hooks/mission.ts
       - hooks/plan.ts
       - hooks/read-state.ts
+      - bin/troupe-panel                # gitFacts takes the folder's files: the panel's step reaches Final review too
       - types/index.d.ts
       - tests/dispatch.test.ts
       - tests/read-state.test.ts
