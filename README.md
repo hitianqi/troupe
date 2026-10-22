@@ -3,9 +3,12 @@
 A Claude Code mod that shows a planned mission beside the chat: inside tmux
 in a panel split to the right of the session, elsewhere in a pane of the
 session. It also asks the person to approve the plan, and gives the
-conversation three tools that run the mission's orders in Claude windows of
-their own: `troupe_dispatch`, `troupe_status` and `troupe_close`.
-`ROADMAP.md` holds the decisions and the phases; this is Phase 2.
+conversation four tools: three that run the mission's orders in Claude
+windows of their own (`troupe_dispatch`, `troupe_status` and `troupe_close`)
+and one that records what the mission cost (`troupe_metrics`). A mission of
+one or two orders runs in light mode. The plugin also carries the
+`troupe-mission` skill, which runs a mission from brief to merged MR.
+`ROADMAP.md` holds the decisions and the phases; this is Phase 3.
 
 ## Requirements
 
@@ -79,8 +82,8 @@ an earlier session is read as it stands.
   longer holds and the next `/troupe` asks again.
 - **Change** opens a second dialog, "What should change in the plan?", with
   **Not now**, **Approve** and a free-text row. The words typed there go to
-  the conversation as a prompt, `Tianqi asks: <words>; edit <mission
-  folder>/plan.md, then /troupe again`, and the answer of `/troupe` ends
+  the conversation as a prompt, `Change asked in the plan dialog: <words>;
+  edit <mission folder>/plan.md, then /troupe again`, and the answer of `/troupe` ends
   `Change asked: <words>`. The next `/troupe` asks again.
 - It fails closed. A blank answer, a dismissed dialog (Esc) and **Not now**
   approve nothing and say `Not approved; /troupe asks again.`. Only the
@@ -96,9 +99,10 @@ an earlier session is read as it stands.
 
 ## Dispatching the orders
 
-The conversation is the orchestrator. Three tools are registered at session
+The conversation is the orchestrator. Four tools are registered at session
 start; the model calls them as `mcp__troupe__troupe_dispatch`,
-`mcp__troupe__troupe_status` and `mcp__troupe__troupe_close`.
+`mcp__troupe__troupe_status`, `mcp__troupe__troupe_close` and
+`mcp__troupe__troupe_metrics` (see "Metrics").
 
 **`troupe_dispatch(mission, order, role?)`** opens one Claude window for an
 order. `role` is `builder` (the default) or `reviewer`. It has two hard
@@ -113,6 +117,9 @@ rules, and refuses with a reason the model reads, before it creates anything
 2. **No dispatch while an order it `depends_on` is not done.** Done means
    merged onto the mission branch (one commit titled `<id>: …` there), not
    merely built.
+
+In a light mission (below) a third rule holds: no dispatch of an order while
+an order before it is not merged.
 
 The reviewer is dispatched the same way (`role: "reviewer"`) and refused until
 the order is built: its branch `order/<mission>/<id>` exists and its
@@ -143,12 +150,29 @@ branches stay.
   tmux server, with one window per order (named for the order) or review
   (`review-<id>`). Never a pane or window in the orchestrator's session: in
   an OpenRig seat that would cut the seat off from `rig send`.
-- Each window runs `claude --model <model>` in its own worktree, beside the
-  repository: `../<repo>-<mission>-<order>`, on the branch
-  `order/<mission>/<order>` cut from the mission branch. A reviewer's is
-  `../<repo>-<mission>-review-<order>`, detached at the order's branch (its
-  `-fix` branch once there is one). No permission flag is passed, and troupe
+- Each window runs `claude --model <model> --effort <effort> --permission-mode
+  <mode>` in its own worktree, beside the repository:
+  `../<repo>-<mission>-<order>`, on the branch `order/<mission>/<order>` cut
+  from the mission branch. A reviewer's is `../<repo>-<mission>-review-<order>`,
+  detached at the order's branch (its `-fix` branch once there is one). troupe
   does not load the mod in them (see the limit on a global install).
+- **Pinned to the role.** The model is the order's `model` for a builder and
+  the reviewer role's for a reviewer; the effort is the role's `effort` in
+  the plan's `roles` block, so a window runs as the plan says, not as the
+  person's global settings do. A role named without an effort gets `high`,
+  and so does every role of a plan with no `roles` block; a role that a
+  `roles` block leaves out gets no flag for it. The answer to a dispatch
+  names what was pinned.
+- **Pinned to the orchestrator's permission mode.** Without the flag a window
+  would take the project's own mode (`settings.local.json`, for one), which
+  can differ from the orchestrator's. The engine does not hand a mod the
+  session's mode, so troupe reads it from the orchestrator's own transcript:
+  Claude Code writes a `permission-mode` record there at the start and at
+  each change, and the last one counts. Only a mode from a fixed list is
+  passed (`default`, `manual`, `acceptEdits`, `plan`, `auto`, `dontAsk`,
+  `bypassPermissions`), as one argument. With none readable no flag is
+  passed, and the answer says the window runs in the project's permission
+  mode. A mode of `bypassPermissions` is passed like any other.
 - The brief is a file the mod writes in the repository's git folder,
   `.git/troupe/<mission>/<window>.md` (git tracks nothing there). It holds
   the order's worktree and branch, where to write the result, and the role
@@ -164,6 +188,101 @@ branches stay.
   git does not track in that worktree, and only when the folder has no such
   file or an older one. The panel then shows the order `done` (marker) or
   `reviewed` (review file).
+- Role windows exist only for an order's build and its review; the other
+  jobs are Agent subagents (see "The skill").
+
+### Light mode
+
+A mission of one or two orders is light, in the dispatch rules, the pane and
+the panel:
+
+- **One after the other.** `troupe_dispatch` refuses an order while an order
+  before it is not merged onto the mission branch, whatever `depends_on` says.
+  "Before" is by dependency layer, then in the order `plan.md` lists them. The
+  refusal names the order it waits for. A mission of three orders or more is
+  untouched: independent orders can run at once.
+- **No slim, no separate final review.** The review of the order that runs
+  last is also the mission's final review. Its brief says so, gives the
+  mission's base commit (the merge-base of the mission branch with
+  `origin/HEAD`, else `main`, else `master`) and `git diff <base>..<branch>`,
+  and asks for the whole mission diff and every done-when criterion in
+  `plan.md`. With no base found the brief says so and tells the reviewer to
+  run `git merge-base`. A re-review of that order gets the same text.
+- **The view.** The header says `light`, and the steps line leaves out Slim,
+  Cut and Final review. Once every order is reviewed the mission is at
+  "MR OK?".
+
+## The skill
+
+The plugin carries `skills/troupe-mission/`, with its `references/` and the
+`templates/` folder (`plan.md`, `REVIEW.md`, `SLIM.md`). It tells the
+orchestrator, for anyone and not only for one team, how to run a mission in
+the file shapes the pane reads. Its steps:
+
+1. **Brief**: who wants the outcome, what it is for, what counts as done.
+2. **Plan**: `docs/missions/<mission>/plan.md` on the mission branch, split by
+   coupling, with declared `touches` and a `model` per order.
+3. **Approve** the plan in the `/troupe` dialog (the one human gate before
+   work starts).
+4. **Dispatch** the orders by dependency layer with `troupe_dispatch`, one
+   role window and worktree each; **review** each order as it lands, then the
+   orchestrator alone merges it onto the mission branch.
+5. In full mode (three orders or more): the **slim pass** and one round of
+   cuts, then one **final review** across orders. Light mode has neither.
+6. **Fix rounds**: one fix and one re-review per review, then the
+   orchestrator rules.
+7. **MR gate**, then the MR is opened; **merged gate**, where only a human
+   merges.
+8. **Teardown**: confirm with the forge, call `troupe_metrics`, then close the
+   windows and remove the worktrees and branches.
+
+`troupe_dispatch` takes an order's build and its review. Agent subagents take
+what it does not: an order's fixer, the slim pass and its cuts, and the final
+review. They are also the fallback when there is no tmux or the troupe tools
+are not loaded: the skill then runs the orders as Agent subagents too. A
+project's `verify-<app>` skill is used when the plan names it, else skipped.
+
+## Metrics
+
+**`troupe_metrics {mission}`** writes `docs/missions/<mission>/metrics.json`
+and answers its path and a one-line summary. The skill calls it at teardown,
+before anything is removed (it finds the role windows by their worktree
+paths) and before any fetch after the merge (the base commit is read with the
+mission branch not yet merged into its base). It reads `plan.md`,
+`APPROVAL.json`, the review files in the mission folder, git, and the Claude
+Code transcripts of the orchestrator, of its subagents and of the role
+windows, found by worktree path. The fields:
+
+- `mode` (`light` or `full`), `mission_branch`, `base_commit`,
+  `base_commit_from`, `mr_ready_commit`, `claude_version`.
+- `orders`: per order `model`, `merged`, `review_rounds`, `fix_rounds`,
+  `wall_time_s` (its dispatch to its merge) and `diff_size`.
+- `review_rounds` (`orders`, `final`, `total`), `fix_rounds`, and
+  `refused_dispatches` (a `count` and the `reasons`).
+- `time`: `approved_at`, `mr_ready_at`, `plan_approved_to_mr_ready_s` and
+  `wall_time_s`.
+- `tokens`: per role (`orchestrator`, `builder`, `reviewer`) and `total`,
+  `input_tokens`, `output_tokens`, `cache_write_tokens`, `cache_read_tokens`,
+  `cost_usd`, and per role `model_effective` and `effort_effective`, read
+  back from the transcripts. `coordination_share` is the orchestrator's and
+  the reviewers' tokens over all.
+- `quality.diff_size` and `rework` (`fix_rounds`, `refusals` by kind,
+  `prompts_in_role_windows`), `subagents`, and `prices`.
+
+Cost is at API list prices, for comparison; nothing is billed per token on a
+login. Cache reads and the 5-minute and 1-hour cache writes are priced apart,
+and `prices` lists the table used. `diff_size` leaves out the mission folder,
+whose plan, approval and review records are not the product change; the
+sheet says so in `diff_size_from`.
+
+What troupe cannot know is `null`, with its reason under `nulls`, keyed by
+the field's path, never a guess: the human's attention, interruptions and
+waiting time, the blind review, the project's own check, the hand test,
+churn, and time blocked on a refusal. The same goes for a transcript not
+found, a model with no price in the table (Haiku), or an order not merged.
+The sheet is the one `docs/missions/p4/compare.md` asks for. The transcript
+format is Claude Code's and moves: a line that is not JSON is skipped and
+noted under `nulls`, and the counts may then be low.
 
 ## Known limits
 
@@ -194,12 +313,25 @@ branches stay.
   an OpenRig seat carried that seat's `OPENRIG_*` variables into the role
   windows. troupe has not been run on OpenRig's own tmux server.
 - **A globally installed troupe loads in role windows too.** troupe starts
-  them with `claude --model <model>` only. `claude --bare` would skip the
-  hooks of installed plugins, but it also skips settings hooks, LSP,
-  auto-memory and more, so troupe does not pass it. Load troupe with
+  them with `claude --model`, `--effort` and `--permission-mode` only.
+  `claude --bare` would skip the hooks of installed plugins, but it also
+  skips settings hooks, LSP, auto-memory and more, so troupe does not pass
+  it. Load troupe with
   `--plugin-dir` or from the session's mods folder instead.
-- **Light mode** (one or two orders, serial, no slim) is not built; it moved
-  to Phase 3 with the skill.
+- **The base commit is a guess.** Light mode's final review and
+  `metrics.json` take the merge-base of the mission branch with `origin/HEAD`,
+  `main` or `master`. A mission cut from another branch gets a base that is
+  too old.
+- **A research order** has no `<id>: ` merge commit, so in a light mission
+  the serial rule would wait for it for ever.
+- **`metrics.json` prices Sonnet 5.5 from the claude-api skill's list, which
+  is not confirmed.** Claude Code's own per-session cost tally disagrees with
+  it on some sessions.
+- **A resumed orchestrator session under a new id is missed** by
+  `troupe_metrics`: it reads the transcript of the session it runs in.
+- **Role windows exist only for an order's build and review.** A fixer, the
+  slim pass and the final review run as Agent subagents on the orchestrator's
+  login, with no window to watch.
 - **The role windows' own progress** (what a window is doing) is not shown;
   the panel knows an order only as planned, running (its branch is ahead of
   the mission branch), done or reviewed.
@@ -254,7 +386,7 @@ The mission branch is the local branch named for the mission
 (`feature/NO-JIRA-p2`, or `p2`); git is asked at most every 10 s. A review
 that fails still counts as reviewed, so an order in a fix round stays
 `reviewed`. The step reaches "Final review" once `SLIM.md` is on the mission
-branch. Live progress inside an order is Phase 3.
+branch. A light mission is at "MR OK?" once every order is reviewed.
 
 The header says whether the plan passes the rules of the kit's
 `plan_lint.py`: a code order without `touches` or `why`, an unknown or cyclic
@@ -297,8 +429,7 @@ a running session (it restarts and resumes it, and saves `"tui":
 
 ## Loading it
 
-The plugin carries a skill, `troupe-mission`, that runs a mission from brief
-to merged MR in the file shapes the pane reads.
+The plugin carries the skill `troupe-mission` (see "The skill").
 
 - From a checkout: `claude --plugin-dir <this repo>`.
 - While developing: load the `plugin-authoring` skill in a session, and write
@@ -314,3 +445,10 @@ walkthrough check (`docs/missions/workflow/check-sample.mjs`) and
 `tsc -p .` (after `npm install`). `tsc` needs the API types the engine lays
 in `.claude-plugin/types/` when it loads the mod from this folder; without
 them the script says so and skips `tsc`.
+
+The acceptance run, a real two-order mission run through troupe, is not done:
+it was deferred, and GitLab issue AI/troupe#3
+(https://git.i.prover.com/AI/troupe/-/work_items/3) holds the task, the recipe
+to attach and `docs/missions/p4/compare.md`, the protocol it follows. So
+light mode and `troupe_metrics` are covered by the plugin tests and the
+order reviews, not yet by a mission of their own.
