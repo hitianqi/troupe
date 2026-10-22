@@ -197,6 +197,7 @@ orders:
       - tests/pane.test.tsx
       - tests/graph-goldens.ts
       - tests/panel.node.mjs
+      - tests/mock-p1.ts
     depends_on: []
     model: opus
     risks: "dispatch.ts holds the two hard rules; a light rule that is too wide would refuse a full mission's parallel orders. The panel and the pane share step text with the Phase 1 goldens."

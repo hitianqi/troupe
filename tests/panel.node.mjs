@@ -116,3 +116,21 @@ test('troupe-panel leaves "Plan OK?" once APPROVAL.json holds for plan.md, and c
     rmSync(dir, { recursive: true, force: true })
   }
 })
+
+test('troupe-panel: a light mission names no Slim, Cut or Final review and reaches "MR OK?" once its last order is reviewed', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'troupe-light-'))
+  try {
+    copyFileSync(new URL('../docs/missions/workflow/sample/plan.md', import.meta.url), join(dir, 'plan.md'))
+    const hash = createHash('sha256').update(readFileSync(join(dir, 'plan.md'))).digest('hex')
+    writeFileSync(join(dir, 'APPROVAL.json'), JSON.stringify({ planHash: `sha256:${hash}`, approvedAt: '2026-10-22T12:00:00.000Z' }))
+    const draw = () => execFileSync(process.execPath, [panel, dir, '--once', '--plain', '--width', '120'], { encoding: 'utf8' })
+    writeFileSync(join(dir, 'REVIEW-o1.md'), 'PASS')
+    assert.match(draw(), /steps: +Plan → ◆ Plan OK\? → Build → Order review → ◆ MR OK\? → Open MR → ◆ Merged\? → Teardown\n/)
+    assert.doesNotMatch(draw(), /Slim|Cut|Final review/)
+    assert.doesNotMatch(draw(), /needs you +◆ MR OK\?/)
+    writeFileSync(join(dir, 'REVIEW-o2.md'), 'PASS')
+    assert.match(draw(), /orchestrator +opus +needs you +◆ MR OK\?/)
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+})

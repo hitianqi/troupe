@@ -1,7 +1,7 @@
 import { expect, test } from 'claude-code/testing'
 
 import type { TroupeOrderState } from '../types'
-import { goalOf, isLight, layersOf, readPlan, stepOf, STEPS } from '../hooks/plan.ts'
+import { goalOf, isLight, layersOf, readPlan, stepOf, STEPS, stepsOf } from '../hooks/plan.ts'
 import { gitFacts, hasSkill, isApproved, missionBranchOf, planHash, stateOf } from '../hooks/mission.ts'
 import { detail, textOf } from '../hooks/view.ts'
 import { parseYaml } from '../hooks/yaml.ts'
@@ -242,4 +242,25 @@ test('an approval record that holds for plan.md moves the step past "Plan OK?"; 
   expect(await isApproved(`${VALID} `, record)).toBe(false)
   expect(await isApproved(VALID, undefined)).toBe(false)
   expect(await isApproved(VALID, 'not json')).toBe(false)
+})
+
+test('a light mission names its steps without Slim, Cut and Final review, and reaches "MR OK?" once its last order is reviewed', async () => {
+  const labels = (orders: unknown[]) => stepsOf(orders).map(one => one.label)
+  const light = ['Plan', 'Plan OK?', 'Build', 'Order review', 'MR OK?', 'Open MR', 'Merged?', 'Teardown']
+  expect([labels([1]), labels([1, 2])]).toEqual([light, light])
+  expect(labels([1, 2, 3])).toEqual(['Plan', 'Plan OK?', 'Build', 'Order review', 'Slim', 'Cut', 'Final review', 'MR OK?', 'Open MR', 'Merged?', 'Teardown'])
+  const step = (states: TroupeOrderState[]) => STEPS[stepOf({ problems: [], orders: states.map(state => ({ state })) }, [], false, true)]?.label
+  expect([step(['done', 'planned']), step(['reviewed', 'running']), step(['reviewed', 'done']), step(['reviewed', 'reviewed'])]).toEqual([
+    'Build',
+    'Build',
+    'Order review',
+    'MR OK?',
+  ])
+  // A light plan with no roles block: its reviewer's default duty says the last review is the final one.
+  const reviewer = (source: string) => readPlan(source).roles.find(one => one.name === 'reviewer')?.duty
+  expect(reviewer(OVERLAP)).toEqual(['Reviews each order for behaviour as it lands', "Its review of the last order is also the mission's final review"])
+  expect(reviewer(OVERLAP.replace(/```\n$/, '  - id: o3\n    kind: research\n    goal: x\n```\n'))).toEqual([
+    'Reviews each order for behaviour as it lands',
+    'Runs the final review across the orders',
+  ])
 })
