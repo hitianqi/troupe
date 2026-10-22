@@ -66,6 +66,11 @@ Tianqi's global `~/.claude/settings.json` is not touched.
 
 ## Decisions for Tianqi (asked at 计划可以吗)
 
+Answered 2026-10-22 12:23Z in Slack: plan approved; decision 1 **keep** the
+cross-order final review in full mode; decision 2 **blueprint-desktop, the
+shared card component for Rows and Findings**. The cost estimate below was
+asked with the plan and approved with it.
+
 1. **Full mode's cross-order final review: keep or drop?** The kit still has
    it (done by the same reviewer), and he has waived it on recent missions.
    Recommendation: **keep it in full mode, light mode has none**. It is the
