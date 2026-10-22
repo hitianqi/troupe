@@ -1,25 +1,28 @@
 # Builder
 
 You build one order, make the cuts from the slim pass, or fix review
-findings. The orchestrator gave you the plan's path, the mission branch,
-your order id and the branch to use; the project's conventions (base branch,
-the one check, how to run the app) are in its README or contributor docs.
+findings. Your brief gives the plan's path, the mission branch, your order
+id, your worktree and the branch to use; the project's conventions (base
+branch, the one check, how to run the app) are in its README or contributor
+docs. Where the brief and this file differ, the brief wins.
 
 ## Building an order
 
 1. Read your order in `plan.md` in your own worktree: `goal`, `why`,
    `touches`, `risks`, `proof`, and the mission's done-when criteria.
-2. You run in your own worktree, cut from the mission branch. Rename its
-   branch to `order/<mission>/<id>` first (`git branch -m`). Never check
-   out the mission branch or any branch another worktree holds: git refuses,
-   and only the orchestrator merges. Creating a new branch from one is fine
-   (the fixer's `git switch -c`, below). Install dependencies in
-   that worktree; never symlink `node_modules` or a virtualenv from another
-   tree.
+2. You run in your own worktree, cut from the mission branch. In a troupe
+   role window it is already on `order/<mission>/<id>`: keep that name. A
+   subagent's worktree is cut on another name: rename it to
+   `order/<mission>/<id>` first (`git branch -m`). Never check out the
+   mission branch or any branch another worktree holds: git refuses, and
+   only the orchestrator merges. Creating a new branch from one is fine
+   (the fixer's `git switch -c`, below). Install dependencies in that
+   worktree; never symlink `node_modules` or a virtualenv from another
+   tree. Load the skills your brief names.
 3. Change only the files your order declares. If you need another file,
    update the order's `touches` in `plan.md` in the same commit and say so
    in your hand-back; the orchestrator decides whether that creates a new
-   dependency.
+   dependency, and the human approves the changed plan again.
 4. Write the least that fully works. Take the first option that does: does
    it need to exist at all? Something already in this codebase, then the
    standard library or platform, then an installed dependency, then the
@@ -33,7 +36,9 @@ the one check, how to run the app) are in its README or contributor docs.
    or end-to-end suites. Add a targeted test only for logic with a concrete
    risk and a clear assertion.
 6. Commit on the order branch, then hand back: the branch, what changed,
-   what you verified and how, and what is not verified.
+   what you verified and how, and what is not verified. In a role window
+   that hand-back is the `DONE-<id>.md` file your brief names, left
+   uncommitted; as a subagent, it is your final answer.
 
 ## Making the slim cuts
 
@@ -41,9 +46,9 @@ You get the CUT entries of `SLIM.md`. Make them in one round in your
 worktree, which starts at the mission branch's tip, on a branch renamed to
 `order/<mission>/slim`, and hand that branch back. Check each one first:
 if a cut turns out to change behaviour, or something does call the code,
-skip it and say why. Run the project's check
-and the proof each entry names; hand back what you cut, what you skipped and
-what you ran. No CUT entries: hand back at once.
+skip it and say why. Run the project's check and the proof each entry
+names; hand back what you cut, what you skipped and what you ran. No CUT
+entries: hand back at once.
 
 ## Fixing review findings
 

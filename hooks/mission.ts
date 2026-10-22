@@ -121,6 +121,23 @@ export async function gitFacts(run: (args: string[]) => Promise<string | undefin
   return { running, merged, isSlimMerged: Boolean((await run(['log', '-1', '--format=%h', base, '--', 'SLIM.md']))?.trim()) }
 }
 
+/**
+ * The mission's base commit: where `missionBranch` left the base branch, its
+ * merge-base with origin's default branch, else with main, else with master.
+ * `run` as for gitFacts. The light final-review brief and metrics.json both
+ * read it, so they cannot name different commits.
+ */
+export async function baseOf(run: (args: string[]) => Promise<string | undefined>, missionBranch: string): Promise<{ commit: string; branch: string } | undefined> {
+  const head = (await run(['symbolic-ref', '--short', 'refs/remotes/origin/HEAD']))?.trim()
+  for (const branch of [head, 'main', 'master']) {
+    if (!branch || branch === missionBranch) continue
+    const commit = (await run(['merge-base', branch, missionBranch]))?.trim()
+    if (commit) return { commit, branch }
+  }
+
+  return undefined
+}
+
 /** The mission in `dir` from its plan, the folder's file names, the engine's facts and git's, and whether an approval record holds for the plan. */
 export const missionOf = (dir: string, plan: PlanRead, files: string[], facts: EngineFacts, git?: GitFacts, isPlanApproved = false): TroupeMission => {
   const listed = facts.skills

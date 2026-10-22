@@ -31,6 +31,7 @@ export const DOCKED = [
   "  goal:         Show a mission in a pane: its goal, the workflow and where it stands, the roles, and the",
   "                orders.",
   "  plan:         docs/missions/p1/plan.md · plan checks clean · light (1 order)",
+  "  steps:        Plan → ◆ Plan OK? → Build → Order review → ◆ MR OK? → Open MR → ◆ Merged? → Teardown",
   "",
   "  ── ORDERS · 1 ──────────────────────────────────────────────────────────────────────────────────────────────",
   "  o1:           opus · planned · layer 1 · depends — · Turn the troupe pane into a read-only view of the",
@@ -87,7 +88,7 @@ export const VIEW_30 = [
   "  goal:         Show a mission in a pane: its goal, the workflow and where it stands, the roles, and the",
   "                orders.",
   "  plan:         docs/missions/p1/plan.md · plan checks clean · light (1 order)",
+  "  steps:        Plan → ◆ Plan OK? → Build → Order review → ◆ MR OK? → Open MR → ◆ Merged? → Teardown",
   "",
-  "  ── ORDERS · 1 ──────────────────────────────────────────────────────────────────────────────────────────────",
-  "↓ 23 more rows · ↑↓ PgUp PgDn"
+  "↓ 24 more rows · ↑↓ PgUp PgDn"
 ]

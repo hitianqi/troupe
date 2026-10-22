@@ -12,6 +12,8 @@ not talk to OpenRig.
 
 Status: Phase 0 done (2026-10-20, mission p0; see `docs/FEASIBILITY.md`).
 Phase 2 built (2026-10-21, missions p2 and p3; outcome below).
+Phase 3 built (2026-10-22, mission p4; outcome below); its real-mission
+acceptance run is deferred to GitLab issue AI/troupe#3.
 Repo: GitLab `AI/troupe`, developed on the Prover account like the other
 projects; open source is a later call. Decisions of 2026-10-20 are the base
 (record: `~/.claude/projects/-home-tizh/memory/mission-pane-mod-plan.md`).
@@ -85,6 +87,44 @@ Missions p2 (the split-right panel) and p3 (dispatch). Evidence:
   `APPROVAL.json` is advisory.
 - Light mode (1-2 orders, serial, no slim) was not built. Tianqi's decision
   for p3 ("Light mode 先不做"): it moves to Phase 3 with the skill.
+
+## Phase 3 outcome (2026-10-22, Claude Code 2.1.308)
+
+Mission p4. Evidence: `docs/missions/p4/RECORD.md`, the order reviews beside
+it, `docs/missions/p4/compare.md`.
+
+- Built: light mode in the mod (one or two orders run one after the other,
+  by dependency layer and then plan order, whatever `depends_on` says; no
+  slim and no separate final review; the review of the order that runs last
+  is also the final review, and its brief gives the base commit; the pane and
+  the panel leave out Slim, Cut and Final review); the `troupe-mission` skill
+  and the `templates/`, rewritten for role windows, the approval dialog and
+  metrics, usable by anyone and not only by Tianqi's rig; `troupe_metrics`,
+  which writes `docs/missions/<mission>/metrics.json` at teardown (tokens and
+  cost at list prices per role, review and fix rounds, refused dispatches,
+  wall times, `diff_size`; what troupe cannot know is `null` with a reason);
+  role windows pinned to the role's model and effort and to the
+  orchestrator's own permission mode.
+- Checked by: `./check.sh` exit 0 on the integrated branch with 88 plugin
+  tests, 7 panel tests, the walkthrough check and `tsc: clean` (engine types
+  laid); every order reviewed by rev.r1. o2 and o3 each failed the first
+  review on one Act-on finding and passed the re-review after one fix round.
+  Found and fixed: the skill said effort was shown and not passed, while
+  dispatch pins it (o2); `diff_size` counted the mission's own record files
+  (o3). A follow-up to o1, found when the acceptance run was set up (role
+  windows opened in a project's `acceptEdits` while the orchestrator ran in
+  `auto`), passed its review.
+- Decisions: Tianqi approved the plan on 2026-10-22 at 12:23Z and kept the
+  full-mode cross-order final review (light mode has none). The comparison
+  protocol `docs/missions/p4/compare.md` was added at 12:32Z (one task, three
+  arms; troupe's `metrics.json` carries its fields).
+- Not done: the done-when item "One real mission through troupe" was not run.
+  Tianqi deferred it at 14:11Z, after the run's set-up. GitLab issue
+  AI/troupe#3 holds the task, the recipe to attach and `compare.md`. Light
+  mode and the serial rule have been run only against a fake git and tmux in
+  tests; `troupe_metrics` was also read against real transcripts in the
+  reviews. None has run in a mission of its own.
+- Left: see `RECORD.md`, "Considers left open" and "Left for later".
 
 ## What was checked while drafting this (2026-10-20)
 

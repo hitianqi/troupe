@@ -1,5 +1,5 @@
 import type { TroupeMission, TroupeOrder, TroupeOrderState, TroupeRole } from '../types'
-import { EFFORTS, isLight, layersOf, STEPS } from './plan.ts'
+import { EFFORTS, isLight, layersOf, STEPS, stepsOf } from './plan.ts'
 
 // The view as lines of styled runs, in the OpenRig TUI's conventions: the
 // header, compact ROLES and ORDERS, and the detail-view DETAIL sections.
@@ -183,6 +183,23 @@ const under = (text: string, width: number, paint: (text: string) => Line): Line
 const paintOrder = (order: TroupeOrder) => (text: string): Line =>
   text.split(new RegExp(`\\b(${order.state})\\b`)).map(part => (part === order.state ? { text: part, tone: STATE_TONE[order.state] } : { text: part }))
 
+/** The mission's steps, ` → ` between: done green, the one it is at orange and bold, the rest grey; a gate marked ◆. */
+const stepsField = (m: TroupeMission, width: number): Line[] => {
+  const steps = stepsOf(m.orders)
+  const tones = new Map(
+    steps.map((step): [string, Run] => {
+      const index = STEPS.indexOf(step)
+      const text = step.isGate ? `◆ ${step.label}` : step.label
+
+      return [text, index === m.step ? { text, tone: 'warn', bold: true } : { text, tone: index < m.step ? 'ok' : 'dim' }]
+    }),
+  )
+
+  return field('steps', [...tones.keys()].join(' → '), width, text =>
+    text.split(/( → )/).filter(Boolean).map(part => tones.get(part) ?? { text: part, tone: 'dim' }),
+  )
+}
+
 export function detail(m: TroupeMission, width: number): Line[] {
   const layerOf = new Map(layersOf(m.orders).layers.flatMap((layer, index) => layer.map(order => [order.id, index + 1] as const)))
   const check = m.problems.length === 0 ? 'plan checks clean' : `${m.problems.length} plan problem${m.problems.length > 1 ? 's' : ''}`
@@ -197,6 +214,7 @@ export function detail(m: TroupeMission, width: number): Line[] {
       ),
     ),
     ...m.problems.flatMap(problem => under(`✗ ${problem}`, width, text => [{ text, tone: 'error' }])),
+    ...stepsField(m, width),
     [],
     sectionRule(`ORDERS · ${m.orders.length}`, width),
   ]

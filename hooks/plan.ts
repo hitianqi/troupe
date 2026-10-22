@@ -43,6 +43,8 @@ const DEFAULT_ROLES: Record<string, Omit<PlanRole, 'name' | 'skills'> | undefine
     duty: ['Reviews each order for behaviour as it lands', 'Runs the final review across the orders'],
   },
 }
+/** A light mission's reviewer runs no final review of its own. */
+const LIGHT_REVIEWER_DUTY = ['Reviews each order for behaviour as it lands', "Its review of the last order is also the mission's final review"]
 const KINDS = ['code', 'research']
 /** The efforts a role may name, lowest first; the pane's meter has one cell each. */
 export const EFFORTS = ['low', 'medium', 'high', 'xhigh', 'max']
@@ -62,9 +64,9 @@ export const goalOf = (source: string): string => {
 }
 
 /** A role is `name: [skills]`, or `name: { model, effort, duty: [lines], skills }`; what it leaves out is the default. */
-const roleOf = (name: string, value: Yaml): PlanRole => {
+const roleOf = (name: string, value: Yaml, light = false): PlanRole => {
   const own = isMap(value) ? value : { skills: value }
-  const fallback = DEFAULT_ROLES[name]
+  const fallback = light && name === 'reviewer' ? { ...DEFAULT_ROLES.reviewer, duty: LIGHT_REVIEWER_DUTY } : DEFAULT_ROLES[name]
   const duty = texts(own.duty)
 
   return {
@@ -114,7 +116,10 @@ export const readPlan = (source: string): PlanRead => {
         model: text(one.model),
       }
     })
-    const roles = isMap(data.roles) ? Object.entries(data.roles).map(([name, value]) => roleOf(name, value)) : empty.roles
+    const light = isLight(orders)
+    const roles = isMap(data.roles)
+      ? Object.entries(data.roles).map(([name, value]) => roleOf(name, value, light))
+      : Object.keys(DEFAULT_ROLES).map(name => roleOf(name, [], light))
     if (data.roles !== undefined && !isMap(data.roles)) problems.push('`roles` is not a mapping of role to skills')
     for (const role of roles) {
       if (role.effort !== '' && !EFFORTS.includes(role.effort)) problems.push(`role ${role.name}: unknown effort "${role.effort}" (${EFFORTS.join(', ')})`)
@@ -226,6 +231,10 @@ const at = (label: string) => STEPS.findIndex(step => step.label === label)
 
 /** A light mission (one or two orders) skips the heavy steps: Slim, Cut and Final review. A plan with no orders read is not light. */
 export const isLight = (orders: unknown[]): boolean => orders.length >= 1 && orders.length <= 2
+
+/** The steps a mission of `orders` goes through, as the pane names them: from Plan to Teardown, a light one without the heavy steps. */
+export const stepsOf = (orders: unknown[]): Step[] =>
+  STEPS.filter(step => step.label !== 'Intent' && step.label !== 'main' && !(step.isHeavy && isLight(orders)))
 
 /**
  * The step the mission is at, as an index into STEPS, from what the pane

@@ -8,6 +8,12 @@ Done when:
 
 Out of scope: <what this mission deliberately does not do>
 
+## Decisions for the human
+
+<Each question the code cannot answer, with the options and your
+recommendation. Approve in the /troupe dialog accepts the recommendations; a
+different answer is a Change. Leave the section out when there is none.>
+
 ## How the work is split
 
 <Why the orders are cut where they are. Files that change together sit in one
@@ -22,8 +28,10 @@ problems). Keep each value on one line. Every `code` order declares
 the files or directories it will change in `touches`, and in `why` why it is
 needed and what in the codebase it reuses, or why nothing there fits. Two
 orders whose `touches` overlap must be connected by `depends_on`; everything
-else runs in parallel. If an order turns out to need a file it did not declare, update this
-plan in the same commit.
+else runs in parallel. With one or two orders the mission is light: they run
+one after the other, whatever `depends_on` says. If an order turns out to need
+a file it did not declare, update this plan in the same commit; a changed plan
+is approved again before the next dispatch.
 
 ```yaml
 goal: "<the mission in one sentence: what it delivers>"   # the pane's first line; else Intent's first sentence
@@ -40,7 +48,7 @@ roles:                    # optional; the pane flags a skill the session lacks
     effort: high
     duty:
       - "Builds its order in its own worktree"
-    skills: []
+    skills: []            # e.g. [verify-<app>] when the project has that skill
   reviewer: []            # the short form: skills only, default model, effort and duty
 orders:
   - id: o1
@@ -51,7 +59,7 @@ orders:
       - src/example/      # a trailing slash means the whole directory
       - src/types.ts
     depends_on: []
-    model: opus           # opus | sonnet: who does the order's work (see below)
+    model: opus           # opus | sonnet | haiku | fable: who does the order's work (see below)
     risks: "<what could break, and who else depends on these files>"
     proof: "<how the builder shows it works: a command, or an app path to drive>"
 
@@ -70,13 +78,16 @@ orders:
 
 `model` is the orchestrator's call per order, shown to the human at plan
 approval: `opus` where the work needs judgement, `sonnet` where it is well
-bounded. It is the model of the builder that does the order. An order that
-decides how something looks is always `opus`.
+bounded. It is the model of the builder that does the order; the role window
+runs `claude --model <model> --effort <the builder role's effort>
+--permission-mode <the orchestrator's mode>`. An order that decides how
+something looks is always `opus`.
 
 ## Review
 
 Each order is reviewed as it lands (`REVIEW-<id>.md`), and the integrated
 mission once more, across orders, after the slim cuts (`REVIEW.md`); with one
-or two orders, the last order review is also the final review. Findings go to
+or two orders there is no slim pass, and the last order review is also the
+final review. Findings go to
 a fixer: one fix round and one re-review per review, then the orchestrator
 rules.

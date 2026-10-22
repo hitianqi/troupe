@@ -257,3 +257,23 @@ test('the pane leaves "Plan OK?" once an approval record holds, and comes back t
   expect(await orchestrator()).toMatch(/needs you {2}◆ Plan OK\?$/)
   await ui.unmount()
 })
+
+test('the pane names the mission\'s steps: a full one with Slim, Cut and Final review, a light one without', async ($, on) => {
+  const clock = mock.clock(on)
+  const light = VALID.replace(/ {2}- id: o3[\s\S]*?(?=```)/, '')
+  expect(light).not.toContain('id: o3')
+  let plan = VALID
+  let mtime = 1
+  servesValid(on, path => (path.endsWith('/plan.md') ? plan : undefined), () => mtime)
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  await clock.settle()
+  const ui = await $.ui.mount(inline(150, 200))
+  const steps = async () => (await ui.findAll({ type: 'Text' })).map(one => one.text ?? '').find(text => text.startsWith('  steps:'))
+
+  expect(await steps()).toBe('  steps:        Plan → ◆ Plan OK? → Build → Order review → Slim → Cut → Final review → ◆ MR OK? → Open MR → ◆ Merged? → Teardown')
+  plan = light
+  mtime = 2
+  await clock.advance(POLL_MS)
+  expect(await steps()).toBe('  steps:        Plan → ◆ Plan OK? → Build → Order review → ◆ MR OK? → Open MR → ◆ Merged? → Teardown')
+  await ui.unmount()
+})

@@ -3,9 +3,10 @@ import type { EngineInterface, On } from 'claude-code'
 
 import type { TroupeRoleSession, TroupeRoleWindow } from '../types'
 import { approvalOf } from './approval.ts'
-import { doneMarker, gitFacts, isReviewOf, missionBranchOf } from './mission.ts'
+import { baseOf, doneMarker, gitFacts, isReviewOf, missionBranchOf } from './mission.ts'
 import { ANCESTRY, ownPaneOf, tmux } from './panel.ts'
-import { readPlan } from './plan.ts'
+import { ownTranscript } from './metrics.ts'
+import { isLight, layersOf, readPlan } from './plan.ts'
 import type { PlanOrder, PlanRead } from './plan.ts'
 
 // troupe_dispatch, troupe_status and troupe_close: one Claude window per
@@ -14,7 +15,9 @@ import type { PlanOrder, PlanRead } from './plan.ts'
 // prompt. The home of the two hard rules: no dispatch before the plan is
 // approved (approval.ts) and committed on the mission branch as approved,
 // none while an order it depends on is not done (merged onto the mission
-// branch); a review only of an order that is built.
+// branch); a review only of an order that is built. A light mission (one or
+// two orders) runs its orders one after the other, whatever depends_on says,
+// and its last order's review is also the mission's final review.
 //
 // Every command has a fixed shape: the mission and order ids are checked
 // against NAME and the plan before they reach a path, a branch or a window
@@ -33,6 +36,8 @@ const MISSIONS = 'docs/missions'
 const NAME = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/
 /** The models a role window may run, as `claude --model` takes them. */
 export const MODELS = ['opus', 'sonnet', 'haiku', 'fable']
+/** The permission modes a role window may run: `claude --permission-mode`'s choices (2.1.308), and `default`, which transcripts record and the flag still takes. */
+export const PERMISSION_MODES = ['default', 'manual', 'acceptEdits', 'plan', 'auto', 'dontAsk', 'bypassPermissions']
 /** How long dispatch waits for claude's input box before it types, and how often it looks. */
 export const READY_MS = 30_000
 const READY_POLL_MS = 500
@@ -45,7 +50,13 @@ export const windowName = (role: Role, id: string) => (role === 'reviewer' ? `re
 
 // ---- the commands, each a fixed shape ---------------------------------------
 
-export const claudeArgv = (model: string) => ['claude', ...(model ? ['--model', model] : [])]
+/** `claude` pinned to the role's model and effort and the orchestrator's permission mode; a flag is left out when there is no value for it. */
+export const claudeArgv = (model: string, effort: string, mode = '') => [
+  'claude',
+  ...(model ? ['--model', model] : []),
+  ...(effort ? ['--effort', effort] : []),
+  ...(mode ? ['--permission-mode', mode] : []),
+]
 /** What tmux prints of a session or window it opened: `$N @N %N`. */
 const IDS = '#{session_id} #{window_id} #{pane_id}'
 
@@ -57,10 +68,10 @@ export const argv = {
   worktreeAddDetached: (root: string, path: string, branch: string) => ['git', '-C', root, 'worktree', 'add', '--detach', path, branch],
   worktreeList: (root: string) => ['git', '-C', root, 'worktree', 'list', '--porcelain'],
   checkoutDetached: (path: string, branch: string) => ['git', '-C', path, 'checkout', '--detach', branch],
-  newSession: (socket: string | undefined, name: string, window: string, cwd: string, model: string) =>
-    tmux(socket, 'new-session', '-d', '-s', name, '-n', window, '-c', cwd, '-P', '-F', IDS, ...claudeArgv(model)),
-  newWindow: (socket: string | undefined, session: string, window: string, cwd: string, model: string) =>
-    tmux(socket, 'new-window', '-d', '-t', `${session}:`, '-n', window, '-c', cwd, '-P', '-F', IDS, ...claudeArgv(model)),
+  newSession: (socket: string | undefined, name: string, window: string, cwd: string, model: string, effort: string, mode = '') =>
+    tmux(socket, 'new-session', '-d', '-s', name, '-n', window, '-c', cwd, '-P', '-F', IDS, ...claudeArgv(model, effort, mode)),
+  newWindow: (socket: string | undefined, session: string, window: string, cwd: string, model: string, effort: string, mode = '') =>
+    tmux(socket, 'new-window', '-d', '-t', `${session}:`, '-n', window, '-c', cwd, '-P', '-F', IDS, ...claudeArgv(model, effort, mode)),
   hasSession: (socket: string | undefined, name: string) => tmux(socket, 'has-session', '-t', `=${name}`),
   sessionName: (socket: string | undefined, id: string) => tmux(socket, 'display', '-p', '-t', id, '#{session_id} #{session_name}'),
   paneId: (socket: string | undefined, pane: string) => tmux(socket, 'display', '-p', '-t', pane, '#{pane_id}'),
@@ -139,12 +150,56 @@ export async function rule($: EngineInterface, name: unknown, id: unknown, role:
   const done = (await gitFacts(args => ok(run($, ['git', '-C', root, ...args])), name, plan.orders.map(one => one.id)))?.merged ?? []
   const waiting = order.dependsOn.filter(dep => !done.includes(dep))
   if (waiting.length > 0) return { refused: `${id} depends on ${waiting.join(', ')}, not done yet (not merged onto ${base}). Nothing was dispatched.` }
+  // A light mission: one order at a time, each after the one before it is merged.
+  const serial = serialOf(plan)
+  const before = serial.slice(0, serial.indexOf(order)).filter(one => !done.includes(one.id)).map(one => one.id).join(', ')
+  if (isLight(plan.orders) && before !== '') {
+    return {
+      refused: `${id} waits for ${before}: a light mission (one or two orders) runs its orders one after the other, whatever depends_on says, and ${before} is not merged onto ${base} yet. Nothing was dispatched.`,
+    }
+  }
 
   return { mission: { name, dir, plan, order, root, base, branches } }
 }
 
+/** The orders one after the other: by dependency layer, then as plan.md lists them. A light mission runs them in this order. */
+const serialOf = (plan: PlanRead): PlanOrder[] => layersOf(plan.orders).layers.flat()
+
 /** A builder runs the order's model; a reviewer, the reviewer role's. */
 const modelOf = (plan: PlanRead, order: PlanOrder, role: Role) => (role === 'reviewer' ? (plan.roles.find(one => one.name === 'reviewer')?.model ?? '') : order.model)
+/** A window runs its role's effort, as the plan reads it (a role that names none gets the default the pane shows). */
+const effortOf = (plan: PlanRead, role: Role) => plan.roles.find(one => one.name === role)?.effort ?? ''
+
+/** The last mode Claude Code recorded in a transcript (`{"type":"permission-mode", …}`), if it is one a window may run. */
+export function lastPermissionMode(transcript: string): string {
+  const lines = transcript.split('\n')
+  for (let index = lines.length - 1; index >= 0; index--) {
+    const line = lines[index] ?? ''
+    if (!line.includes('"permission-mode"')) continue
+    try {
+      const entry: unknown = JSON.parse(line)
+      const mode = typeof entry === 'object' && entry !== null && (entry as { type?: unknown }).type === 'permission-mode' ? (entry as { permissionMode?: unknown }).permissionMode : undefined
+      if (typeof mode === 'string') return PERMISSION_MODES.includes(mode) ? mode : ''
+    } catch {
+      // A line cut mid-write: look further back.
+    }
+  }
+
+  return ''
+}
+
+/**
+ * The orchestrator's own permission mode, so role windows run as the person
+ * set it rather than as a project's settings would. The engine does not hand
+ * a mod the session's mode; Claude Code records each mode the session takes
+ * in its transcript, so the last one recorded is the mode now. '' when the
+ * transcript cannot be read: then no mode is passed, and the answer says so.
+ */
+async function ownPermissionMode($: EngineInterface): Promise<string> {
+  const own = await ownTranscript($)
+
+  return own ? lastPermissionMode(own.text) : ''
+}
 
 // ---- the role session and its windows ----------------------------------------
 
@@ -243,17 +298,35 @@ async function builderBrief($: EngineInterface, m: Mission, worktree: string, br
   ].join('\n')
 }
 
+/** A light mission's last order: its review is also the mission's final review, over the whole mission diff. */
+async function finalDuty($: EngineInterface, m: Mission, branch: string): Promise<string[]> {
+  if (!isLight(m.plan.orders) || serialOf(m.plan).at(-1) !== m.order) return []
+  const base = await baseOf(args => ok(run($, ['git', '-C', m.root, ...args])), m.base)
+  const from = base
+    ? `the mission's base commit ${base.commit} (the merge-base of ${m.base} with ${base.branch})`
+    : `the mission's base commit, the merge-base of ${m.base} with the repository's default branch (troupe could not find it: run git merge-base yourself)`
+
+  return [
+    `This is a light mission (${m.plan.orders.length} order${m.plan.orders.length === 1 ? '' : 's'}): this review is also the mission's final review. There is no slim pass and no other final review.`,
+    `Review the whole mission diff, from ${from} to ${branch}${base ? ` (git diff ${base.commit}..${branch})` : ''}, not only this order's commits, and check every done-when criterion in plan.md, one by one, on this branch.`,
+  ]
+}
+
 /** The reviewer's brief: what to check out, the report's name and where to write it, then the reviewer role. */
 async function reviewerBrief($: EngineInterface, m: Mission, worktree: string, branch: string): Promise<string> {
   const role = await $.fs.read(`${$.plugin.root}/skills/troupe-mission/references/reviewer.md`)
   const files = (await $.fs.list(m.dir).catch(() => [])).map(entry => entry.name)
   const rounds = files.filter(name => isReviewOf(m.order.id, name)).length
   const report = rounds === 0 ? `REVIEW-${m.order.id}.md` : `REVIEW-${m.order.id}-${rounds + 1}.md`
+  const final = await finalDuty($, m, branch)
+  const skills = m.plan.roles.find(one => one.name === 'reviewer')?.skills ?? []
 
   return [
-    `You are the reviewer of order ${m.order.id} of mission ${m.name}: an order review.`,
+    `You are the reviewer of order ${m.order.id} of mission ${m.name}: ${final.length > 0 ? "an order review and the mission's final review" : 'an order review'}.`,
     `Your worktree is ${worktree}, detached at ${branch}, the branch to review, against the mission branch ${m.base}.`,
+    ...final,
     `The plan is ${m.dir}/plan.md there. The report template is ${$.plugin.root}/templates/REVIEW.md.`,
+    `Skills the plan names for the reviewer: ${skills.length > 0 ? skills.join(', ') : 'none'}.`,
     `Write the report to ${worktree}/${m.dir}/${report} and leave it untracked: troupe copies it into the mission folder. Then say so in this window.`,
     ...(rounds > 0 ? [`This is a re-review: the earlier reports are in the orchestrator's ${m.dir}/ (${m.root}/${m.dir}).`] : []),
     '',
@@ -271,6 +344,8 @@ async function dispatch($: EngineInterface, input: { mission?: unknown; order?: 
   const m = ruled.mission
   const id = m.order.id
   const model = modelOf(m.plan, m.order, role)
+  const effort = effortOf(m.plan, role)
+  const mode = await ownPermissionMode($)
   const own = await ownSocket($)
   if (own === undefined) return { deny: 'the session is not inside tmux: troupe_dispatch opens role windows in a tmux session of their own' }
   const socket = own.socket || undefined
@@ -299,7 +374,7 @@ async function dispatch($: EngineInterface, input: { mission?: unknown; order?: 
   const brief = `${gitDir ?? `${m.root}/.git`}/troupe/${m.name}/${window}.md`
   await $.fs.write(brief, await (role === 'reviewer' ? reviewerBrief($, m, worktree, branch) : builderBrief($, m, worktree, branch)))
 
-  const opened = await run($, live === undefined ? argv.newSession(socket, name, window, worktree, model) : argv.newWindow(live.socket, live.id, window, worktree, model))
+  const opened = await run($, live === undefined ? argv.newSession(socket, name, window, worktree, model, effort, mode) : argv.newWindow(live.socket, live.id, window, worktree, model, effort, mode))
   const [sessionId, windowId, pane] = opened.stdout.trim().split(' ')
   if (opened.exitCode !== 0 || !sessionId?.startsWith('$') || !windowId || !pane) {
     return { deny: `tmux could not open the window ${window}: ${opened.stderr.trim() || `exit ${opened.exitCode}`}. The worktree ${worktree} is there; a dispatch again reuses it.` }
@@ -308,9 +383,10 @@ async function dispatch($: EngineInterface, input: { mission?: unknown; order?: 
   const record: TroupeRoleWindow = { order: id, role, window: windowId, pane, worktree, branch, isBriefSent: false }
   await keepWindow($, m.name, session, window, record)
   const where = `${window} in ${name} (window ${windowId}, worktree ${worktree}, ${role === 'reviewer' ? `detached at ${branch}` : `branch ${branch}`})`
+  const pinned = `${model || 'the default model'}, effort ${effort || 'the default'}, ${mode ? `permission mode ${mode}` : "the project's permission mode (this session's could not be read)"}`
 
   if (!(await waitReady($, session.socket, pane))) {
-    return { result: `Opened ${where}, but claude showed no input box in ${READY_MS / 1000} s, so the brief was not typed. It is at ${brief}; the person can type: ${typedPrompt(brief)}` }
+    return { result: `Opened ${where} (${pinned}), but claude showed no input box in ${READY_MS / 1000} s, so the brief was not typed. It is at ${brief}; the person can type: ${typedPrompt(brief)}` }
   }
   const buffer = `troupe-${m.name}-${window}`
   await run($, argv.setBuffer(session.socket, buffer, typedPrompt(brief)))
@@ -318,11 +394,11 @@ async function dispatch($: EngineInterface, input: { mission?: unknown; order?: 
   await run($, argv.enter(session.socket, pane))
   await $.clock.sleep(SENT_MS)
   if (isUnsent((await ok(run($, argv.capture(session.socket, pane)))) ?? '', typedPrompt(brief))) {
-    return { result: `Opened ${where} and pasted the brief's prompt, but it is still in claude's input box: the person presses Enter there. The brief is at ${brief}.` }
+    return { result: `Opened ${where} (${pinned}) and pasted the brief's prompt, but it is still in claude's input box: the person presses Enter there. The brief is at ${brief}.` }
   }
   await keepWindow($, m.name, session, window, { ...record, isBriefSent: true })
 
-  return { result: `Dispatched ${role === 'reviewer' ? `the review of ${id}` : id} (${model || 'the default model'}) to ${where}: brief ${brief}, sent.` }
+  return { result: `Dispatched ${role === 'reviewer' ? `the review of ${id}` : id} (${pinned}) to ${where}: brief ${brief}, sent.` }
 }
 
 /** Each role window kept: its order, role and whether it still lives. */
@@ -411,7 +487,7 @@ export async function registerDispatch($: EngineInterface): Promise<void> {
   await $.tool.register({
     name: 'troupe_dispatch',
     description:
-      'Dispatch one order of an approved troupe mission, or its review: adds its worktree (order/<mission>/<order> from the mission branch; a review checks that branch out detached), opens a Claude window for it in the tmux session troupe-<mission>, and pastes its brief. Refused before the plan is approved (APPROVAL.json matching plan.md, committed on the mission branch), while an order it depends on is not merged onto the mission branch, and a review before the order is built (its DONE-<order>.md). A window that has gone is opened again in its worktree.',
+      'Dispatch one order of an approved troupe mission, or its review: adds its worktree (order/<mission>/<order> from the mission branch; a review checks that branch out detached), opens a Claude window for it in the tmux session troupe-<mission>, pinned to the model and effort its role has in plan.md and to the permission mode this session runs in, and pastes its brief. Refused before the plan is approved (APPROVAL.json matching plan.md, committed on the mission branch), while an order it depends on is not merged onto the mission branch (in a light mission of one or two orders, while the order before it is not), and a review before the order is built (its DONE-<order>.md). A window that has gone is opened again in its worktree.',
     inputSchema: {
       type: 'object',
       properties: {

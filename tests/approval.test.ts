@@ -105,7 +105,7 @@ test('Change hands the words to the conversation, writes no record, and the next
   expect(w.submitted).toEqual([])
   await w.clock.advance(1)
   expect(w.asked).toEqual(['Approve the plan?', 'What should change in the plan? Type it under Other.'])
-  expect(w.submitted).toEqual([`Tianqi asks: Split o1 in two; edit ${DIR}/plan.md, then /troupe again`])
+  expect(w.submitted).toEqual([`Change asked in the plan dialog: Split o1 in two; edit ${DIR}/plan.md, then /troupe again`])
   expect(answer).toContain('Change asked: Split o1 in two')
   expect(record(w)).toBeNull()
 
@@ -114,7 +114,7 @@ test('Change hands the words to the conversation, writes no record, and the next
   await troupe($)
   await w.clock.advance(1)
   expect(w.asked).toHaveLength(3)
-  expect(w.submitted.at(-1)).toBe(`Tianqi asks: Drop o3; edit ${DIR}/plan.md, then /troupe again`)
+  expect(w.submitted.at(-1)).toBe(`Change asked in the plan dialog: Drop o3; edit ${DIR}/plan.md, then /troupe again`)
   expect(record(w)).toBeNull()
 })
 
