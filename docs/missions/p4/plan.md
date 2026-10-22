@@ -77,8 +77,8 @@ Tianqi deferred the acceptance run ("先不测了，这周事情有点多，去�
 o4 is cancelled after its set-up, and the run, the chosen task, the attach
 recipe and `compare.md` are in GitLab issue AI/troupe#3
 (https://git.i.prover.com/AI/troupe/-/work_items/3). o5 follows o1–o3
-directly; the slim pass and the final review run as the workflow says. The
-o4 text below is kept as planned.
+directly; the slim pass and the final review run as the workflow says. o4 is
+out of the orders block; the acceptance-run section below is kept as planned.
 
 ## Decisions for Tianqi (asked at 计划可以吗)
 
