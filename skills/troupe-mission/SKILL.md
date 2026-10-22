@@ -56,9 +56,11 @@ The troupe mod, loaded in this session, adds the pane or panel, the
   on branch `order/<mission>/<id>`, cut from the mission branch. The
   reviewer's is `../<repo>-<mission>-review-<id>`, detached at that branch,
   or at `order/<mission>/<id>-fix` once that branch exists. The window runs
-  `claude --model <model> --effort <effort>`: the order's `model` for a
-  builder, the reviewer role's for a reviewer, and the effort of its role in
-  `roles` (`high` when the plan names none). troupe writes the brief (the
+  `claude --model <model> --effort <effort> --permission-mode <mode>`: the
+  order's `model` for a builder, the reviewer role's for a reviewer, the
+  effort of its role in `roles` (`high` when the plan names none), and this
+  session's own permission mode, so a window inherits `acceptEdits` or
+  `bypassPermissions` when you run in it. troupe writes the brief (the
   role reference included) into the repository's git folder and pastes one
   sentence naming it. troupe refuses a dispatch, with a reason you read, when:
   - the mission or order is not a plain name (letters, digits, `_`, `-`),

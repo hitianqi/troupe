@@ -79,8 +79,9 @@ orders:
 `model` is the orchestrator's call per order, shown to the human at plan
 approval: `opus` where the work needs judgement, `sonnet` where it is well
 bounded. It is the model of the builder that does the order; the role window
-runs `claude --model <model> --effort <the builder role's effort>`. An order
-that decides how something looks is always `opus`.
+runs `claude --model <model> --effort <the builder role's effort>
+--permission-mode <the orchestrator's mode>`. An order that decides how
+something looks is always `opus`.
 
 ## Review
 

@@ -6,9 +6,9 @@ o1 and did the o4 set-up; dev.b2 built o2, o3, the o1-mode follow-up and o5.
 Plan: `plan.md` here; the comparison protocol it serves is `compare.md`.
 
 The mission's last done-when item, one real mission run through troupe, was
-not run: see "The scope change". The slim pass and the final review of the
-integrated branch run after o5, as the workflow says; their reports go beside
-this record.
+not run: see "The scope change". The slim pass and the final review ran on
+the integrated branch after o5 (below); their reports, `SLIM.md` and
+`REVIEW.md`, are beside this record.
 
 ## What was built
 
@@ -54,6 +54,50 @@ rev.r1 with the engine types laid; the builders' own worktrees had none).
   a builder's (`roleOfSubagent` tests fix and cut first), and the sheet names
   the branch its base commit came from (`base_commit_from`).
 - `REVIEW-o1-mode.md`: PASS, no Act-on finding and no Consider.
+
+## The slim pass (`SLIM.md`)
+
+rev.r1's slim pass listed six CUT entries; dev.b1 made all of them, merged as
+1d4f56f:
+
+1. One owner for the mission's base commit: `baseOf` in `hooks/mission.ts`,
+   used by both the light final-review brief (`dispatch.ts`) and
+   `metrics.json`, so the two cannot name different base commits.
+2. One owner for this session's transcript: `ownTranscript` in
+   `hooks/metrics.ts`, used for the permission mode in `dispatch.ts` and by
+   `troupe_metrics`.
+3. A dispatch test that duplicated another, removed.
+4. Dead `originHead` scaffolding in the dispatch test's fake git, removed.
+5. The sheet's top-level `fix_rounds`, a copy of `rework.fix_rounds`,
+   removed.
+6. A README bullet said three times, kept once.
+
+With them: `SKILL.md` names four tools (`troupe_metrics` was missing), and
+one test of `baseOf` covers both callers (origin's default branch, then
+`main`, then `master`), per the slim pass's notes.
+
+## The final review (`REVIEW.md`)
+
+rev.r1, on the integrated branch at 1d4f56f: PASS, no Act-on finding. It
+drove the mod live on a scratch light mission, in a scratch tmux server with
+a `claude --plugin-dir` orchestrator:
+
+- the light serial refusal of the second order, then its dispatch once the
+  first was merged;
+- the role windows' argv: `claude --model … --effort … --permission-mode
+  auto`;
+- the light last order's review brief (the final-review duty and the base
+  commit);
+- the panel's light steps;
+- `troupe_metrics` after `troupe_close`, with the windows found by worktree
+  path.
+
+Its one Consider, that `SKILL.md` and `templates/plan.md` gave a window's
+command line without `--permission-mode`, was fixed before the MR. Noted and
+left as is: `approved_at` is written in UTC while `mr_ready_at` keeps the
+committer's offset; `plan_approved_to_mr_ready_s` is right. Not driven live:
+the in-session pane, the approval dialog (p3 and the tests), a full-mode
+mission, and the reviewer's report copy-back.
 
 ## The scope change
 
