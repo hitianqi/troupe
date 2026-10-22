@@ -3,6 +3,7 @@ import type { EngineInterface, Register, Timer } from 'claude-code'
 import { gate } from './approval.ts'
 import { dispatchHooks, registerDispatch } from './dispatch.ts'
 import { drawPane, paneRows } from './draw-pane.tsx'
+import { metricsHooks, registerMetrics } from './metrics.ts'
 import { POLL_MS } from './mission.ts'
 import type { EngineFacts } from './mission.ts'
 import { closePanel, openPanel, readPanel } from './panel.ts'
@@ -14,7 +15,8 @@ import { refresh, setTarget, writeFacts } from './read-state.ts'
 // the panel is open the pane is closed. Once the plan is shown, approval.ts's
 // gate answers whether it is approved. Phase 2 part 2: the role-window tools
 // (troupe_dispatch, troupe_status, troupe_close) are declared and served by
-// dispatch.ts.
+// dispatch.ts. Phase 3: troupe_metrics (metrics.ts) writes metrics.json at
+// teardown.
 
 const PANE = 'troupe'
 /** The width the pane is drawn for (the approved mock's): asked as the dock's columns, and to size the rows asked inline. */
@@ -93,6 +95,7 @@ export const register: Register = on => {
       argumentHint: '[mission, a mission folder, or close]',
     })
     await registerDispatch($).catch(error => $.ui.log(`could not declare the dispatch tools: ${String(error)}`))
+    await registerMetrics($).catch(error => $.ui.log(`could not declare troupe_metrics: ${String(error)}`))
     poll?.cancel()
     poll = $.clock.every(POLL_MS, () => void tick($))
     void tick($)
@@ -103,6 +106,7 @@ export const register: Register = on => {
   })
 
   dispatchHooks(on)
+  metricsHooks(on)
 
   on('command.run', { command: 'troupe' }, async ($, e) => ({ text: await troupe($, e.args.trim()) }))
 

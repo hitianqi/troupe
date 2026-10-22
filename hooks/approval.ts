@@ -103,7 +103,7 @@ export async function gate($: EngineInterface, dir: string): Promise<string> {
     // the turn the hook holds), so it goes from a timer once the command has
     // answered. The words are in the answer too, so a refused prompt loses nothing.
     $.clock.after(0, () =>
-      $.prompt.submit({ text: `Tianqi asks: ${answer}; edit ${dir}/plan.md, then /troupe again` }).catch(error => $.ui.log(`could not hand the change to the conversation: ${String(error)}`)),
+      $.prompt.submit({ text: `Change asked in the plan dialog: ${answer}; edit ${dir}/plan.md, then /troupe again` }).catch(error => $.ui.log(`could not hand the change to the conversation: ${String(error)}`)),
     )
 
     return `${why} Change asked: ${answer}`
