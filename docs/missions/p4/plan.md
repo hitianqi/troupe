@@ -71,6 +71,15 @@ branch is a real MR candidate; whether it becomes one is Tianqi's call
 afterwards); any paid run on Tianqi's API key; publishing before the MR gate.
 Tianqi's global `~/.claude/settings.json` is not touched.
 
+## Scope change (2026-10-22, 14:11Z)
+
+Tianqi deferred the acceptance run ("先不测了，这周事情有点多，去仓库提个issue就行"):
+o4 is cancelled after its set-up, and the run, the chosen task, the attach
+recipe and `compare.md` are in GitLab issue AI/troupe#3
+(https://git.i.prover.com/AI/troupe/-/work_items/3). o5 follows o1–o3
+directly; the slim pass and the final review run as the workflow says. The
+o4 text below is kept as planned.
+
 ## Decisions for Tianqi (asked at 计划可以吗)
 
 Answered 2026-10-22 12:23Z in Slack: plan approved; decision 1 **keep** the
@@ -231,17 +240,6 @@ orders:
     risks: "Reading session transcripts for refusals or tokens depends on Claude Code's transcript format, which moves; a wrong count would mislead the baseline comparison, so an unknown stays null with a reason. register.tsx wires every hook: a mistake there stops the whole mod."
     proof: "./check.sh green; plugin tests for a fixture mission: the fields, a refused dispatch counted, review rounds counted from REVIEW files, a field troupe cannot know is null with a reason."
 
-  - id: o4
-    kind: code
-    goal: "Run one real two-order mission through troupe on the repository and issue Tianqi picks, from brief to a local MR-ready branch, and record it"
-    why: "ROADMAP Phase 3's done-when: troupe has never run a real mission. Reuses p3's dry-run set-up (docs/missions/p3/dry-run/run.sh) for the scratch tmux server, and the integrated troupe-p4 worktree as the plugin."
-    touches:
-      - docs/missions/p4/acceptance/
-    depends_on: [o1, o2, o3]
-    model: opus
-    risks: "Tianqi's time at the keyboard for the brief, the dialog and the role windows' prompts; a run that stalls costs his attention. The run's branch is in another repository where AI-79 is under way: disjoint files, rebase if !47 lands first. Scratch servers, role sessions and worktrees must be closed at the end (p2 once left dead sockets)."
-    proof: "docs/missions/p4/acceptance/ holds the run's log, its metrics.json, the hook refusals counted, and the comparison with nav 1h23m and formalize-ui 1h25m; the product branch exists locally in the other repository with both orders merged and their reviews."
-
   - id: o5
     kind: code
     goal: "README, ROADMAP's Phase 3 outcome and the mission record"
@@ -251,7 +249,7 @@ orders:
       - ROADMAP.md
       - docs/missions/p4/RECORD.md
       - .claude-plugin/plugin.json
-    depends_on: [o4]
+    depends_on: [o1, o2, o3]
     model: sonnet
     risks: "Claims the code does not back; checked against hooks/ and the acceptance record."
     proof: "Every tool, file and number named in the docs exists in hooks/, skills/ or docs/missions/p4/acceptance/; ./check.sh green."
