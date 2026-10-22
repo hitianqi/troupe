@@ -223,6 +223,8 @@ orders:
       - hooks/register.tsx
       - types/index.d.ts
       - tests/metrics.test.ts
+      - hooks/approval.ts       # o2's follow-up: the Change prompt says "Tianqi asks"; for anyone it names no person
+      - tests/approval.test.ts
     depends_on: []
     model: opus
     risks: "Reading session transcripts for refusals or tokens depends on Claude Code's transcript format, which moves; a wrong count would mislead the baseline comparison, so an unknown stays null with a reason. register.tsx wires every hook: a mistake there stops the whole mod."
