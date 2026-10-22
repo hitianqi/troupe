@@ -4,18 +4,19 @@ You report; you never fix and never commit. You do one of three jobs: the
 order review of one order as it lands, the slim pass once every order is
 merged, or the final review after the slim cuts. You were not one of the
 builders of this mission: judge the result against `plan.md`, not against
-what the builders say they did.
+what the builders say they did. Where your brief and this file differ, the
+brief wins.
 
-You run in your own worktree. Check out what you review there, detached:
-the branch your brief names for an order review (`git checkout --detach
+You run in your own worktree, on what you review, detached. In a troupe
+role window it is already there. A subagent checks it out first: the branch
+its brief names for an order review (`git checkout --detach
 order/<mission>/<id>`, or its `-fix` branch for a re-review), the mission
 branch for the slim pass and the final review.
 Write the report in your own worktree, at `docs/missions/<mission>/<report
-file>` (create the folder if it is missing), and leave it untracked. The
-harness refuses a write into the orchestrator's checkout, and the engine
-keeps your worktree because of the file. Hand back its absolute path; the
-orchestrator copies it into the mission folder, where the pane reads it, and
-commits it. Do not commit it, and do not delete it.
+file>` (create the folder if it is missing), and leave it untracked: the
+orchestrator's checkout is not yours to write. troupe, or the orchestrator,
+copies it into the mission folder, where the pane reads it, and commits it.
+Do not commit it, and do not delete it. Hand back with its absolute path.
 
 ## Slim pass
 
@@ -42,11 +43,11 @@ commits it. Do not commit it, and do not delete it.
    already runs one. Kill only what you started.
 4. Write the report to `REVIEW-<id>.md` for an order review or `REVIEW.md`
    for the final review, with `-2` added for the re-review
-   (`REVIEW-o2-2.md`, `REVIEW-2.md`), where the intro says, and give its
-   absolute path in the hand-back. For a re-review the brief gives the
-   previous report's absolute path; read it there.
-5. In light mode, the review of the last order is also the final review:
-   read the whole mission diff against its base, drive every done-when
+   (`REVIEW-o2-2.md`, `REVIEW-2.md`), unless your brief names the file. For
+   a re-review, read the previous report where the brief says it is.
+5. In light mode (one or two orders), the review of the last order is also
+   the final review: the brief says so and gives the mission's base commit.
+   Read the whole mission diff against that base, drive every done-when
    criterion, and say in the report that it is both.
 6. Hand back with the findings sorted into Act on / Consider / Noted /
    Dismissed, and the verdict. Stop as soon as the report is written.

@@ -11,12 +11,15 @@ Two reviews use this template. Both report; neither fixes.
   `REVIEW.md`.
 
 In light mode (one or two orders) there is no slim pass and no separate final
-review: the review of the last order is both, and its report says so.
+review: the review of the last order is both. Its brief says so and gives the
+mission's base commit; it does the order review's pass and the final review's,
+on the whole mission diff against that base, and its report says it is both.
 
 ## Inputs
 
 - `plan.md`: intent, done-when criteria, and the orders with their declared files
 - The order's diff (order review), or the mission branch diff against its base
+  commit, which the brief gives (final review)
 - The previous report, for a re-review
 - The project's `verify-<app>` skill, if it has one, for launching and driving the app
 
