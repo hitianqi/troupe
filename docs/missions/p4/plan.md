@@ -34,6 +34,13 @@ Done when:
   used when present, else skipped. The skill, the mod and the kit's workflow
   say the same thing about the final review; a kit change, if any, is a
   follow-up note for 大博士贴, not an edit.
+- **Comparison protocol** (`compare.md`, 大博士贴's addendum of 12:32Z,
+  approved by Tianqi): dispatch pins `--model` and `--effort` per role from the
+  plan's `roles` (`claude --effort` exists on 2.1.308), and `metrics.json`
+  carries every field of compare.md's "Metrics" that troupe can know, naming
+  the ones it cannot; the acceptance run keeps the human reply log, the
+  task's brief text and its base commit, so arms 1 and 2 start from the same
+  point.
 - **Metrics.** At teardown the orchestrator has troupe write
   `docs/missions/<mission>/metrics.json`: orders, each order's model, review
   rounds per order and for the mission, refused dispatches, wall time (plan
@@ -177,7 +184,7 @@ roles:
 orders:
   - id: o1
     kind: code
-    goal: "Light mode in the mod: serial dispatch, the last order's review is the final review, and the pane and panel name the light steps"
+    goal: "Light mode in the mod: serial dispatch, the last order's review is the final review, and the pane and panel name the light steps; dispatch pins --model and --effort per role"
     why: "ROADMAP Phase 3 and the skill's isLight rule; plan.ts already has isLight and stepOf skips the heavy steps, but dispatch lets a light mission's two orders run in parallel and the review brief never says it is the final review. Reuses rule() and reviewerBrief() in dispatch.ts, gitFacts in mission.ts and the STEPS list."
     touches:
       - hooks/dispatch.ts
