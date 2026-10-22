@@ -5,6 +5,7 @@ import type { TroupeRoleSession, TroupeRoleWindow } from '../types'
 import { approvalOf } from './approval.ts'
 import { doneMarker, gitFacts, isReviewOf, missionBranchOf } from './mission.ts'
 import { ANCESTRY, ownPaneOf, tmux } from './panel.ts'
+import { slugOf } from './metrics.ts'
 import { isLight, layersOf, readPlan } from './plan.ts'
 import type { PlanOrder, PlanRead } from './plan.ts'
 
@@ -35,6 +36,8 @@ const MISSIONS = 'docs/missions'
 const NAME = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/
 /** The models a role window may run, as `claude --model` takes them. */
 export const MODELS = ['opus', 'sonnet', 'haiku', 'fable']
+/** The permission modes a role window may run: `claude --permission-mode`'s choices (2.1.308), and `default`, which transcripts record and the flag still takes. */
+export const PERMISSION_MODES = ['default', 'manual', 'acceptEdits', 'plan', 'auto', 'dontAsk', 'bypassPermissions']
 /** How long dispatch waits for claude's input box before it types, and how often it looks. */
 export const READY_MS = 30_000
 const READY_POLL_MS = 500
@@ -47,8 +50,13 @@ export const windowName = (role: Role, id: string) => (role === 'reviewer' ? `re
 
 // ---- the commands, each a fixed shape ---------------------------------------
 
-/** `claude` pinned to the role's model and effort; a flag is left out when the plan gives neither (nor a default). */
-export const claudeArgv = (model: string, effort: string) => ['claude', ...(model ? ['--model', model] : []), ...(effort ? ['--effort', effort] : [])]
+/** `claude` pinned to the role's model and effort and the orchestrator's permission mode; a flag is left out when there is no value for it. */
+export const claudeArgv = (model: string, effort: string, mode = '') => [
+  'claude',
+  ...(model ? ['--model', model] : []),
+  ...(effort ? ['--effort', effort] : []),
+  ...(mode ? ['--permission-mode', mode] : []),
+]
 /** What tmux prints of a session or window it opened: `$N @N %N`. */
 const IDS = '#{session_id} #{window_id} #{pane_id}'
 
@@ -60,10 +68,10 @@ export const argv = {
   worktreeAddDetached: (root: string, path: string, branch: string) => ['git', '-C', root, 'worktree', 'add', '--detach', path, branch],
   worktreeList: (root: string) => ['git', '-C', root, 'worktree', 'list', '--porcelain'],
   checkoutDetached: (path: string, branch: string) => ['git', '-C', path, 'checkout', '--detach', branch],
-  newSession: (socket: string | undefined, name: string, window: string, cwd: string, model: string, effort: string) =>
-    tmux(socket, 'new-session', '-d', '-s', name, '-n', window, '-c', cwd, '-P', '-F', IDS, ...claudeArgv(model, effort)),
-  newWindow: (socket: string | undefined, session: string, window: string, cwd: string, model: string, effort: string) =>
-    tmux(socket, 'new-window', '-d', '-t', `${session}:`, '-n', window, '-c', cwd, '-P', '-F', IDS, ...claudeArgv(model, effort)),
+  newSession: (socket: string | undefined, name: string, window: string, cwd: string, model: string, effort: string, mode = '') =>
+    tmux(socket, 'new-session', '-d', '-s', name, '-n', window, '-c', cwd, '-P', '-F', IDS, ...claudeArgv(model, effort, mode)),
+  newWindow: (socket: string | undefined, session: string, window: string, cwd: string, model: string, effort: string, mode = '') =>
+    tmux(socket, 'new-window', '-d', '-t', `${session}:`, '-n', window, '-c', cwd, '-P', '-F', IDS, ...claudeArgv(model, effort, mode)),
   hasSession: (socket: string | undefined, name: string) => tmux(socket, 'has-session', '-t', `=${name}`),
   sessionName: (socket: string | undefined, id: string) => tmux(socket, 'display', '-p', '-t', id, '#{session_id} #{session_name}'),
   paneId: (socket: string | undefined, pane: string) => tmux(socket, 'display', '-p', '-t', pane, '#{pane_id}'),
@@ -161,6 +169,44 @@ const serialOf = (plan: PlanRead): PlanOrder[] => layersOf(plan.orders).layers.f
 const modelOf = (plan: PlanRead, order: PlanOrder, role: Role) => (role === 'reviewer' ? (plan.roles.find(one => one.name === 'reviewer')?.model ?? '') : order.model)
 /** A window runs its role's effort, as the plan reads it (a role that names none gets the default the pane shows). */
 const effortOf = (plan: PlanRead, role: Role) => plan.roles.find(one => one.name === role)?.effort ?? ''
+
+/** The last mode Claude Code recorded in a transcript (`{"type":"permission-mode", …}`), if it is one a window may run. */
+export function lastPermissionMode(transcript: string): string {
+  const lines = transcript.split('\n')
+  for (let index = lines.length - 1; index >= 0; index--) {
+    const line = lines[index] ?? ''
+    if (!line.includes('"permission-mode"')) continue
+    try {
+      const entry: unknown = JSON.parse(line)
+      const mode = typeof entry === 'object' && entry !== null && (entry as { type?: unknown }).type === 'permission-mode' ? (entry as { permissionMode?: unknown }).permissionMode : undefined
+      if (typeof mode === 'string') return PERMISSION_MODES.includes(mode) ? mode : ''
+    } catch {
+      // A line cut mid-write: look further back.
+    }
+  }
+
+  return ''
+}
+
+/**
+ * The orchestrator's own permission mode, so role windows run as the person
+ * set it rather than as a project's settings would. The engine does not hand
+ * a mod the session's mode; Claude Code records each mode the session takes
+ * in its transcript, so the last one recorded is the mode now. '' when the
+ * transcript cannot be read: then no mode is passed, and the answer says so.
+ */
+async function ownPermissionMode($: EngineInterface): Promise<string> {
+  const id = await $.session.id().catch(() => undefined)
+  if (id === undefined) return ''
+  const config = (await $.env.get('CLAUDE_CONFIG_DIR').catch(() => undefined)) || `${(await $.env.get('HOME').catch(() => undefined)) ?? ''}/.claude`
+  const places = [...new Set([await $.session.cwd().catch(() => undefined), await $.session.root().catch(() => undefined)].filter((one): one is string => Boolean(one)))]
+  for (const place of places) {
+    const text = await $.fs.read(`${config}/projects/${slugOf(place)}/${id}.jsonl`).catch(() => undefined)
+    if (text !== undefined) return lastPermissionMode(text)
+  }
+
+  return ''
+}
 
 // ---- the role session and its windows ----------------------------------------
 
@@ -318,6 +364,7 @@ async function dispatch($: EngineInterface, input: { mission?: unknown; order?: 
   const id = m.order.id
   const model = modelOf(m.plan, m.order, role)
   const effort = effortOf(m.plan, role)
+  const mode = await ownPermissionMode($)
   const own = await ownSocket($)
   if (own === undefined) return { deny: 'the session is not inside tmux: troupe_dispatch opens role windows in a tmux session of their own' }
   const socket = own.socket || undefined
@@ -346,7 +393,7 @@ async function dispatch($: EngineInterface, input: { mission?: unknown; order?: 
   const brief = `${gitDir ?? `${m.root}/.git`}/troupe/${m.name}/${window}.md`
   await $.fs.write(brief, await (role === 'reviewer' ? reviewerBrief($, m, worktree, branch) : builderBrief($, m, worktree, branch)))
 
-  const opened = await run($, live === undefined ? argv.newSession(socket, name, window, worktree, model, effort) : argv.newWindow(live.socket, live.id, window, worktree, model, effort))
+  const opened = await run($, live === undefined ? argv.newSession(socket, name, window, worktree, model, effort, mode) : argv.newWindow(live.socket, live.id, window, worktree, model, effort, mode))
   const [sessionId, windowId, pane] = opened.stdout.trim().split(' ')
   if (opened.exitCode !== 0 || !sessionId?.startsWith('$') || !windowId || !pane) {
     return { deny: `tmux could not open the window ${window}: ${opened.stderr.trim() || `exit ${opened.exitCode}`}. The worktree ${worktree} is there; a dispatch again reuses it.` }
@@ -355,7 +402,7 @@ async function dispatch($: EngineInterface, input: { mission?: unknown; order?: 
   const record: TroupeRoleWindow = { order: id, role, window: windowId, pane, worktree, branch, isBriefSent: false }
   await keepWindow($, m.name, session, window, record)
   const where = `${window} in ${name} (window ${windowId}, worktree ${worktree}, ${role === 'reviewer' ? `detached at ${branch}` : `branch ${branch}`})`
-  const pinned = `${model || 'the default model'}, effort ${effort || 'the default'}`
+  const pinned = `${model || 'the default model'}, effort ${effort || 'the default'}, ${mode ? `permission mode ${mode}` : "the project's permission mode (this session's could not be read)"}`
 
   if (!(await waitReady($, session.socket, pane))) {
     return { result: `Opened ${where} (${pinned}), but claude showed no input box in ${READY_MS / 1000} s, so the brief was not typed. It is at ${brief}; the person can type: ${typedPrompt(brief)}` }
@@ -459,7 +506,7 @@ export async function registerDispatch($: EngineInterface): Promise<void> {
   await $.tool.register({
     name: 'troupe_dispatch',
     description:
-      'Dispatch one order of an approved troupe mission, or its review: adds its worktree (order/<mission>/<order> from the mission branch; a review checks that branch out detached), opens a Claude window for it in the tmux session troupe-<mission>, pinned to the model and effort its role has in plan.md, and pastes its brief. Refused before the plan is approved (APPROVAL.json matching plan.md, committed on the mission branch), while an order it depends on is not merged onto the mission branch (in a light mission of one or two orders, while the order before it is not), and a review before the order is built (its DONE-<order>.md). A window that has gone is opened again in its worktree.',
+      'Dispatch one order of an approved troupe mission, or its review: adds its worktree (order/<mission>/<order> from the mission branch; a review checks that branch out detached), opens a Claude window for it in the tmux session troupe-<mission>, pinned to the model and effort its role has in plan.md and to the permission mode this session runs in, and pastes its brief. Refused before the plan is approved (APPROVAL.json matching plan.md, committed on the mission branch), while an order it depends on is not merged onto the mission branch (in a light mission of one or two orders, while the order before it is not), and a review before the order is built (its DONE-<order>.md). A window that has gone is opened again in its worktree.',
     inputSchema: {
       type: 'object',
       properties: {

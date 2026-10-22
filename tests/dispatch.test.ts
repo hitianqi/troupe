@@ -2,7 +2,7 @@ import { expect, mock, test } from 'claude-code/testing'
 import type { On } from 'claude-code'
 
 import { APPROVAL_FILE, planHash } from '../hooks/approval.ts'
-import { isReady, isUnsent, READY_MS, SENT_MS } from '../hooks/dispatch.ts'
+import { isReady, isUnsent, lastPermissionMode, READY_MS, SENT_MS } from '../hooks/dispatch.ts'
 import { VALID } from './fixtures.ts'
 
 // troupe_dispatch and troupe_status against a fake git and tmux: the two hard
@@ -17,6 +17,10 @@ const SOCKET = '/tmp/tmux-1000/default'
 const SEAT = `100\t\t\n90\t${SOCKET},3506,126\t%126\n1\t\t\n`
 const READY = '\n ▐▛███▛█   Claude Code\n────\n❯ Try "fix lint errors"\n────\n  ⏵⏵ auto mode on\n'
 const DIALOG = ' Do you want to proceed?\n ❯ 1. Yes\n   2. No\n'
+/** The orchestrator's transcript: Claude Code records each permission mode the session takes; the last one holds. */
+const OWN_TRANSCRIPT = '/home/t/.claude/projects/-work-repo/S1.jsonl'
+const modeLine = (mode: string) => JSON.stringify({ type: 'permission-mode', permissionMode: mode, sessionId: 'S1' })
+const TRANSCRIPT = [modeLine('default'), JSON.stringify({ type: 'user', message: { content: 'the brief' } }), modeLine('auto')].join('\n')
 /** A light mission: VALID's o1 and o2, apart: neither depends on the other, and they share no file. */
 const LIGHT = VALID.replace(/ {2}- id: o3[\s\S]*?(?=```)/, '').replace('depends_on: [o1]', 'depends_on: []').replace(', types/index.d.ts]', ']')
 
@@ -45,6 +49,8 @@ type World = {
   logs: string[]
   /** How many session looks fail before tmux answers again (a busy server). */
   flaky: number
+  /** The orchestrator's own transcript, where Claude Code records its permission mode; undefined when it cannot be read. */
+  transcript?: string
   calls: string[][]
   clock: ReturnType<typeof mock.clock>
 }
@@ -69,6 +75,7 @@ function world(on: On, given: Partial<World> = {}): World {
     tracked: new Set(),
     logs: [],
     flaky: 0,
+    transcript: TRANSCRIPT,
     calls: [],
     clock: mock.clock(on),
     ...given,
@@ -84,6 +91,8 @@ function world(on: On, given: Partial<World> = {}): World {
   })
   on('session.start', (_, e) => ({ cwd: e.cwd }))
   on('session.cwd', () => ({ value: ROOT }))
+  on('session.root', () => ({ value: ROOT }))
+  on('session.id', () => ({ value: 'S1' }))
   on('ui.close', () => ({ value: undefined }))
   on('fs.list', (_, e) => {
     const dir = `${local(e.path).replace(/\/+$/, '')}/`
@@ -104,6 +113,7 @@ function world(on: On, given: Partial<World> = {}): World {
   on('fs.read', (_, e) => {
     if (e.path.endsWith('/skills/troupe-mission/references/builder.md')) return { value: 'THE BUILDER ROLE' }
     if (e.path.endsWith('/skills/troupe-mission/references/reviewer.md')) return { value: 'THE REVIEWER ROLE' }
+    if (e.path === OWN_TRANSCRIPT) return w.transcript === undefined ? { deny: 'ENOENT' } : { value: w.transcript }
     const text = w.files.get(local(e.path))
 
     return text === undefined ? { deny: 'ENOENT' } : { value: text }
@@ -115,7 +125,7 @@ function world(on: On, given: Partial<World> = {}): World {
   })
   on('session.usage', () => ({ deny: 'no usage here' }))
   on('agent.list', () => ({ value: [] }))
-  on('env.get', () => ({ value: undefined }))
+  on('env.get', (_, e) => ({ value: e.name === 'HOME' ? '/home/t' : undefined }))
   on('process.run', (_, e) => {
     const argv = [...e.argv]
     if (argv[0] === 'sh') return ran(w.ancestry)
@@ -228,7 +238,7 @@ test('allowed once approved and o1 is merged: the exact git and tmux calls, the 
 
   const answer = await call($, w, 'troupe_dispatch', { mission: 'demo', order: 'o2' })
   const brief = `${ROOT}/.git/troupe/demo/o2.md`
-  expect(answer).toContain(`Dispatched o2 (sonnet, effort high) to o2 in troupe-demo (window @10, worktree /work/repo-demo-o2, branch order/demo/o2): brief ${brief}, sent.`)
+  expect(answer).toContain(`Dispatched o2 (sonnet, effort high, permission mode auto) to o2 in troupe-demo (window @10, worktree /work/repo-demo-o2, branch order/demo/o2): brief ${brief}, sent.`)
   const branches = ['git', '-C', ROOT, 'for-each-ref', '--format=%(refname:short)', 'refs/heads/']
   const alone = ['--not', '--exclude=feature/NO-JIRA-demo', '--exclude=order/*', '--branches', '--exclude=*/feature/NO-JIRA-demo', '--exclude=*/order/*', '--remotes']
   expect(w.calls).toEqual([
@@ -244,7 +254,7 @@ test('allowed once approved and o1 is merged: the exact git and tmux calls, the 
     ['git', '-C', ROOT, 'worktree', 'list', '--porcelain'],
     ['git', '-C', ROOT, 'worktree', 'add', '-b', 'order/demo/o2', '/work/repo-demo-o2', 'feature/NO-JIRA-demo'],
     ['git', '-C', ROOT, 'rev-parse', '--path-format=absolute', '--git-common-dir'],
-    ['tmux', '-S', SOCKET, 'new-session', '-d', '-s', 'troupe-demo', '-n', 'o2', '-c', '/work/repo-demo-o2', '-P', '-F', '#{session_id} #{window_id} #{pane_id}', 'claude', '--model', 'sonnet', '--effort', 'high'],
+    ['tmux', '-S', SOCKET, 'new-session', '-d', '-s', 'troupe-demo', '-n', 'o2', '-c', '/work/repo-demo-o2', '-P', '-F', '#{session_id} #{window_id} #{pane_id}', 'claude', '--model', 'sonnet', '--effort', 'high', '--permission-mode', 'auto'],
     ['tmux', '-S', SOCKET, 'capture-pane', '-p', '-t', '%9'],
     ['tmux', '-S', SOCKET, 'set-buffer', '-b', 'troupe-demo-o2', '--', `Read the brief in ${brief} and follow it.`],
     ['tmux', '-S', SOCKET, 'paste-buffer', '-p', '-d', '-b', 'troupe-demo-o2', '-t', '%9'],
@@ -267,11 +277,11 @@ test('a second order opens a window in the same role session; the same order aga
   await approve(w)
   await start($)
 
-  expect(await call($, w, 'troupe_dispatch', { mission: 'demo', order: 'o1' })).toContain('Dispatched o1 (opus, effort high)')
-  expect(await call($, w, 'troupe_dispatch', { mission: 'demo', order: 'o3' })).toContain('Dispatched o3 (opus, effort high) to o3 in troupe-demo (window @11')
+  expect(await call($, w, 'troupe_dispatch', { mission: 'demo', order: 'o1' })).toContain('Dispatched o1 (opus, effort high, permission mode auto)')
+  expect(await call($, w, 'troupe_dispatch', { mission: 'demo', order: 'o3' })).toContain('Dispatched o3 (opus, effort high, permission mode auto) to o3 in troupe-demo (window @11')
   const opened = w.calls.filter(argv => argv.includes('new-session') || argv.includes('new-window'))
   expect(opened.map(argv => argv[3])).toEqual(['new-session', 'new-window'])
-  expect(opened[1]).toEqual(['tmux', '-S', SOCKET, 'new-window', '-d', '-t', '$5:', '-n', 'o3', '-c', '/work/repo-demo-o3', '-P', '-F', '#{session_id} #{window_id} #{pane_id}', 'claude', '--model', 'opus', '--effort', 'high'])
+  expect(opened[1]).toEqual(['tmux', '-S', SOCKET, 'new-window', '-d', '-t', '$5:', '-n', 'o3', '-c', '/work/repo-demo-o3', '-P', '-F', '#{session_id} #{window_id} #{pane_id}', 'claude', '--model', 'opus', '--effort', 'high', '--permission-mode', 'auto'])
 
   const before = changes(w).length
   expect(await call($, w, 'troupe_dispatch', { mission: 'demo', order: 'o1' })).toContain('o1 already has a window')
@@ -360,7 +370,7 @@ test('a window that has gone is opened again in the same worktree, and so is a s
   expect(await call($, w, 'troupe_dispatch', { mission: 'demo', order: 'o1' })).toContain('Dispatched o1')
   w.panes.clear()
   expect(await call($, w, 'troupe_status', {})).toContain('o1: order o1, builder, gone')
-  expect(await call($, w, 'troupe_dispatch', { mission: 'demo', order: 'o1' })).toContain('Dispatched o1 (opus, effort high) to o1 in troupe-demo')
+  expect(await call($, w, 'troupe_dispatch', { mission: 'demo', order: 'o1' })).toContain('Dispatched o1 (opus, effort high, permission mode auto) to o1 in troupe-demo')
   // The worktree git has is reused: one add for two dispatches; the session was alive, so a window.
   expect(adds()).toHaveLength(1)
   expect(opens()).toEqual(['new-session', 'new-window'])
@@ -407,11 +417,11 @@ test('the reviewer: refused until the order is built, then a detached worktree, 
 
   w.files.set(`${DIR}/DONE-o1.md`, 'built')
   expect(await call($, w, 'troupe_dispatch', { mission: 'demo', order: 'o1', role: 'reviewer' })).toContain(
-    'Dispatched the review of o1 (sonnet, effort high) to review-o1 in troupe-demo (window @10, worktree /work/repo-demo-review-o1, detached at order/demo/o1)',
+    'Dispatched the review of o1 (sonnet, effort high, permission mode auto) to review-o1 in troupe-demo (window @10, worktree /work/repo-demo-review-o1, detached at order/demo/o1)',
   )
   expect(changes(w).slice(0, 2)).toEqual([
     ['git', '-C', ROOT, 'worktree', 'add', '--detach', '/work/repo-demo-review-o1', 'order/demo/o1'],
-    ['tmux', '-S', SOCKET, 'new-session', '-d', '-s', 'troupe-demo', '-n', 'review-o1', '-c', '/work/repo-demo-review-o1', '-P', '-F', '#{session_id} #{window_id} #{pane_id}', 'claude', '--model', 'sonnet', '--effort', 'high'],
+    ['tmux', '-S', SOCKET, 'new-session', '-d', '-s', 'troupe-demo', '-n', 'review-o1', '-c', '/work/repo-demo-review-o1', '-P', '-F', '#{session_id} #{window_id} #{pane_id}', 'claude', '--model', 'sonnet', '--effort', 'high', '--permission-mode', 'auto'],
   ])
   const brief = w.files.get(`${ROOT}/.git/troupe/demo/review-o1.md`) ?? ''
   expect(brief).toContain('You are the reviewer of order o1 of mission demo: an order review.')
@@ -633,14 +643,36 @@ test("a role window is pinned to its role's model and effort from the plan, the 
   w.files.set(`${DIR}/DONE-o1.md`, 'built')
   await start($)
 
-  expect(await call($, w, 'troupe_dispatch', { mission: 'demo', order: 'o1' })).toContain('Dispatched o1 (opus, effort xhigh) to o1')
-  expect(await call($, w, 'troupe_dispatch', { mission: 'demo', order: 'o1', role: 'reviewer' })).toContain('Dispatched the review of o1 (sonnet, effort low) to review-o1')
+  expect(await call($, w, 'troupe_dispatch', { mission: 'demo', order: 'o1' })).toContain('Dispatched o1 (opus, effort xhigh, permission mode auto) to o1')
+  expect(await call($, w, 'troupe_dispatch', { mission: 'demo', order: 'o1', role: 'reviewer' })).toContain('Dispatched the review of o1 (sonnet, effort low, permission mode auto) to review-o1')
   // The reviewer's brief names the reviewer role's skills, as the builder's names the builder's.
   expect(w.files.get(`${ROOT}/.git/troupe/demo/o1.md`)).toContain('Skills the plan names for the builder: plugin-authoring.')
   expect(w.files.get(`${ROOT}/.git/troupe/demo/review-o1.md`)).toContain('Skills the plan names for the reviewer: verify-demo, plugin-authoring.')
   const opened = w.calls.filter(argv => argv.includes('new-session') || argv.includes('new-window')).map(argv => argv.slice(argv.indexOf('claude')))
   expect(opened).toEqual([
-    ['claude', '--model', 'opus', '--effort', 'xhigh'],
-    ['claude', '--model', 'sonnet', '--effort', 'low'],
+    ['claude', '--model', 'opus', '--effort', 'xhigh', '--permission-mode', 'auto'],
+    ['claude', '--model', 'sonnet', '--effort', 'low', '--permission-mode', 'auto'],
   ])
+})
+
+test("a role window runs this session's permission mode, the last one its transcript records; none passed when it cannot be read", async ($, on) => {
+  const w = world(on)
+  await approve(w)
+  await start($)
+  w.transcript = [modeLine('auto'), modeLine('acceptEdits')].join('\n')
+  expect(await call($, w, 'troupe_dispatch', { mission: 'demo', order: 'o1' })).toContain('Dispatched o1 (opus, effort high, permission mode acceptEdits)')
+  w.transcript = undefined
+  expect(await call($, w, 'troupe_dispatch', { mission: 'demo', order: 'o3' })).toContain("Dispatched o3 (opus, effort high, the project's permission mode (this session's could not be read))")
+  const opened = w.calls.filter(argv => argv.includes('new-session') || argv.includes('new-window')).map(argv => argv.slice(argv.indexOf('claude')))
+  expect(opened).toEqual([
+    ['claude', '--model', 'opus', '--effort', 'high', '--permission-mode', 'acceptEdits'],
+    ['claude', '--model', 'opus', '--effort', 'high'],
+  ])
+})
+
+test('only a mode from the fixed list reaches tmux; a line cut mid-write is skipped', () => {
+  expect(lastPermissionMode([modeLine('plan'), '{"type":"permission-mode","permis'].join('\n'))).toBe('plan')
+  expect(lastPermissionMode(modeLine('auto --dangerously-skip-permissions'))).toBe('')
+  expect(lastPermissionMode(JSON.stringify({ type: 'mode', mode: 'normal' }))).toBe('')
+  expect(lastPermissionMode('')).toBe('')
 })
