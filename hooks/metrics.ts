@@ -1,7 +1,7 @@
 import type { EngineInterface, On } from 'claude-code'
 
 import { readApproval } from './approval.ts'
-import { isReviewOf, missionBranchOf } from './mission.ts'
+import { baseOf, isReviewOf, missionBranchOf } from './mission.ts'
 import { isLight, readPlan } from './plan.ts'
 
 // troupe_metrics: what a mission cost and how it ran, written at teardown to
@@ -361,7 +361,6 @@ export function sheetOf(f: Facts, writtenAt: string): Sheet {
     mr_ready_commit: f.tip?.sha ?? unknown('mr_ready_commit', f.missing.git ?? 'no mission branch'),
     orders,
     review_rounds: { orders: orderReviews, final: finalReviews, total: orderReviews + finalReviews },
-    fix_rounds: fixRounds,
     refused_dispatches:
       own === undefined
         ? unknown('refused_dispatches', f.missing.orchestrator ?? "the orchestrator's transcript was not found")
@@ -441,6 +440,33 @@ async function jsonl($: EngineInterface, folder: string): Promise<{ path: string
   return files
 }
 
+/** Where Claude Code keeps its transcripts: one folder per project directory. */
+async function projectsOf($: EngineInterface): Promise<string> {
+  const config = (await $.env.get('CLAUDE_CONFIG_DIR').catch(() => undefined)) || `${(await $.env.get('HOME').catch(() => undefined)) ?? ''}/.claude`
+
+  return `${config}/projects`
+}
+
+/**
+ * This session's transcript, `<projects>/<slug of its folder>/<session id>.jsonl`,
+ * looked for under the session's directory, its root, then `more`; `folder`
+ * is the session's own folder beside it (its subagents). Undefined when the
+ * engine gives no session id or no such file is there.
+ */
+export async function ownTranscript($: EngineInterface, more: string[] = []): Promise<{ path: string; text: string; folder: string } | undefined> {
+  const id = await $.session.id().catch(() => undefined)
+  if (id === undefined) return undefined
+  const projects = await projectsOf($)
+  const places = [...new Set([await $.session.cwd().catch(() => undefined), await $.session.root().catch(() => undefined), ...more].filter((one): one is string => Boolean(one)))]
+  for (const place of places) {
+    const path = `${projects}/${slugOf(place)}/${id}.jsonl`
+    const text = await $.fs.read(path).catch(() => undefined)
+    if (text !== undefined) return { path, text, folder: `${projects}/${slugOf(place)}/${id}` }
+  }
+
+  return undefined
+}
+
 /** Every fact the sheet needs, from the mission folder, git, the engine and the transcripts. */
 export async function gather($: EngineInterface, mission: string): Promise<Facts | { refused: string }> {
   const dir = `${MISSIONS}/${mission}`
@@ -465,15 +491,9 @@ export async function gather($: EngineInterface, mission: string): Promise<Facts
   let baseCommit: string | null = null
   let baseFrom: string | null = null
   if (missionBranch !== null) {
-    const originHead = (await git('rev-parse', '--abbrev-ref', 'origin/HEAD'))?.trim()
-    for (const base of [originHead, 'main', 'master']) {
-      if (!base || base === 'origin/HEAD' || base === missionBranch) continue
-      baseCommit = (await git('merge-base', base, missionBranch))?.trim() || null
-      if (baseCommit !== null) {
-        baseFrom = base
-        break
-      }
-    }
+    const found = await baseOf(args => git(...args), missionBranch)
+    baseCommit = found?.commit ?? null
+    baseFrom = found?.branch ?? null
     if (baseCommit === null) missing.base = 'no base branch (origin/HEAD, main or master) shares history with the mission branch'
   }
   let tip: Facts['tip'] = null
@@ -496,24 +516,16 @@ export async function gather($: EngineInterface, mission: string): Promise<Facts
     }
   }
 
-  // The transcripts: Claude Code keeps one folder per project directory.
-  const config = (await $.env.get('CLAUDE_CONFIG_DIR')) || `${(await $.env.get('HOME')) ?? ''}/.claude`
-  const projects = `${config}/projects`
+  // The transcripts: the orchestrator's (this session's), its subagents' and the role windows'.
+  const projects = await projectsOf($)
   const transcripts: Facts['transcripts'] = { orchestrator: [], builder: [], reviewer: [] }
   const subagents: Facts['subagents'] = []
-  let orchestratorPath: string | null = null
-  const sessionId = await $.session.id().catch(() => undefined)
-  const places = [...new Set([await $.session.cwd().catch(() => undefined), await $.session.root().catch(() => undefined), root].filter((one): one is string => Boolean(one)))]
-  for (const place of places) {
-    if (sessionId === undefined || orchestratorPath !== null) continue
-    const path = `${projects}/${slugOf(place)}/${sessionId}.jsonl`
-    const text = await $.fs.read(path).catch(() => undefined)
-    if (text === undefined) continue
-    orchestratorPath = path
-    transcripts.orchestrator.push({ path, text })
+  const own = await ownTranscript($, root === '' ? [] : [root])
+  const orchestratorPath = own?.path ?? null
+  if (own !== undefined) {
+    transcripts.orchestrator.push({ path: own.path, text: own.text })
     // Its subagents: a transcript and a meta file each, the meta naming the description.
-    const folder = `${projects}/${slugOf(place)}/${sessionId}/subagents`
-    for (const one of await jsonl($, folder)) {
+    for (const one of await jsonl($, `${own.folder}/subagents`)) {
       const meta = await $.fs.read(one.path.replace(/\.jsonl$/, '.meta.json')).catch(() => undefined)
       let description = ''
       try {
@@ -526,9 +538,11 @@ export async function gather($: EngineInterface, mission: string): Promise<Facts
       subagents.push({ description, role })
       transcripts[role].push(one)
     }
-  }
-  if (orchestratorPath === null) {
-    missing.orchestrator = sessionId === undefined ? 'the engine did not give the session id' : `no ${sessionId}.jsonl under ${projects} for ${places.join(' or ')}`
+  } else {
+    missing.orchestrator =
+      (await $.session.id().catch(() => undefined)) === undefined
+        ? 'the engine did not give the session id'
+        : `no transcript of this session under ${projects} for its directory, its root or ${root || 'the repository root'}`
   }
   // The role windows: one folder per worktree, found by its path (troupe_close forgets the windows) and by what $.state still holds.
   const kept = (await $.state.get({ plugin: 'troupe', key: 'roles' }).catch(() => undefined))?.value
@@ -582,7 +596,7 @@ export function summaryOf(sheet: Sheet): string {
   return [
     `${(sheet.orders as unknown[]).length} orders (${String(sheet.mode)})`,
     `${rounds.total} reviews`,
-    `${String(sheet.fix_rounds)} fix round(s)`,
+    `${(sheet.rework as { fix_rounds: number }).fix_rounds} fix round(s)`,
     `${refused === null ? '?' : refused.count} refused dispatch(es)`,
     clock,
     total.cost_usd === null ? 'cost unknown' : `$${total.cost_usd.toFixed(2)} at list prices`,

@@ -154,7 +154,8 @@ test('troupe_metrics writes metrics.json: orders, review rounds from the REVIEW 
   expect(sheet.orders[1]).toMatchObject({ id: 'o2', model: 'sonnet', merged: false, review_rounds: 1, fix_rounds: 0, wall_time_s: null })
   expect(sheet.nulls['orders.o2.wall_time_s']).toContain('not merged')
   expect(sheet.review_rounds).toEqual({ orders: 3, final: 1, total: 4 })
-  expect(sheet.fix_rounds).toBe(1)
+  expect(sheet.rework.fix_rounds).toBe(1)
+  expect('fix_rounds' in sheet).toBe(false)
 
   // The refused dispatch, with its reason; refusals by kind over every transcript.
   expect(sheet.refused_dispatches.count).toBe(1)

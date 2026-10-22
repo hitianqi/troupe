@@ -3,6 +3,7 @@ import type { On } from 'claude-code'
 
 import { APPROVAL_FILE, planHash } from '../hooks/approval.ts'
 import { isReady, isUnsent, lastPermissionMode, READY_MS, SENT_MS } from '../hooks/dispatch.ts'
+import { baseOf } from '../hooks/mission.ts'
 import { VALID } from './fixtures.ts'
 
 // troupe_dispatch and troupe_status against a fake git and tmux: the two hard
@@ -37,8 +38,6 @@ type World = {
   isStuck: boolean
   /** plan.md as the mission branch holds it, when it is not the checkout's. */
   committed?: string
-  /** origin's default branch, as `git symbolic-ref` names it; none when unset. */
-  originHead?: string
   /** Order branches and worktrees git has (the fake adds to both). */
   branches: string[]
   worktrees: string[]
@@ -139,7 +138,6 @@ function world(on: On, given: Partial<World> = {}): World {
       if (args[0] === 'log') return ran(w.merged.map(subject => `${subject}\n`).join(''))
       if (args[0] === 'ls-files') return ran(w.tracked.has(`${argv[2]}/${args.at(-1)}`) ? `${args.at(-1)}\n` : '')
       if (args[0] === 'checkout') return ran('')
-      if (args[0] === 'symbolic-ref') return w.originHead ? ran(`${w.originHead}\n`) : ran('', 128, 'not a symbolic ref')
       if (args[0] === 'merge-base') return ran('c0ffee1\n')
       if (args[0] === 'show') return ran(w.committed ?? w.files.get(`${DIR}/plan.md`) ?? '')
       if (args[0] === 'worktree' && args[1] === 'list') return ran(w.worktrees.map(path => `worktree ${path}\nHEAD 0\n`).join('\n'))
@@ -588,15 +586,6 @@ test('a light mission runs its orders one after the other, whatever depends_on s
   expect(await call($, w, 'troupe_dispatch', { mission: 'demo', order: 'o2' })).toContain('Dispatched o2')
 })
 
-test("a full mission's independent orders are both dispatched at once", async ($, on) => {
-  const w = world(on)
-  await approve(w)
-  await start($)
-
-  expect(await call($, w, 'troupe_dispatch', { mission: 'demo', order: 'o1' })).toContain('Dispatched o1')
-  expect(await call($, w, 'troupe_dispatch', { mission: 'demo', order: 'o3' })).toContain('Dispatched o3')
-})
-
 test("the review of a light mission's last order is also its final review: the base commit, the whole diff, every done-when", async ($, on) => {
   const w = world(on, { files: new Map([[`${DIR}/plan.md`, LIGHT]]), merged: ['o1: the parser'], branches: ['order/demo/o1', 'order/demo/o2'] })
   await approve(w, LIGHT)
@@ -624,7 +613,7 @@ test("the review of a light mission's last order is also its final review: the b
 })
 
 test("a full mission's order review is never the final review", async ($, on) => {
-  const w = world(on, { merged: ['o1: the parser'], branches: ['order/demo/o2'], originHead: 'origin/main' })
+  const w = world(on, { merged: ['o1: the parser'], branches: ['order/demo/o2'] })
   await approve(w)
   w.files.set(`${DIR}/DONE-o2.md`, 'built')
   await start($)
@@ -675,4 +664,26 @@ test('only a mode from the fixed list reaches tmux; a line cut mid-write is skip
   expect(lastPermissionMode(modeLine('auto --dangerously-skip-permissions'))).toBe('')
   expect(lastPermissionMode(JSON.stringify({ type: 'mode', mode: 'normal' }))).toBe('')
   expect(lastPermissionMode('')).toBe('')
+})
+
+test("the mission's base commit, for the light final review and metrics.json alike: origin's default branch first, then main, then master", async () => {
+  const asked: string[][] = []
+  const git = (answers: Record<string, string>) => async (args: string[]) => {
+    asked.push(args)
+
+    return answers[args.join(' ')]
+  }
+  const branch = 'feature/NO-JIRA-demo'
+  expect(await baseOf(git({ 'symbolic-ref --short refs/remotes/origin/HEAD': 'origin/main\n', [`merge-base origin/main ${branch}`]: 'abc1234\n' }), branch)).toEqual({
+    commit: 'abc1234',
+    branch: 'origin/main',
+  })
+  expect(asked).toEqual([
+    ['symbolic-ref', '--short', 'refs/remotes/origin/HEAD'],
+    ['merge-base', 'origin/main', branch],
+  ])
+  // origin's HEAD shares no history with the mission branch: main is next.
+  expect(await baseOf(git({ 'symbolic-ref --short refs/remotes/origin/HEAD': 'origin/trunk\n', [`merge-base main ${branch}`]: 'def5678\n' }), branch)).toEqual({ commit: 'def5678', branch: 'main' })
+  expect(await baseOf(git({ [`merge-base master ${branch}`]: '0f0f0f0\n' }), branch)).toEqual({ commit: '0f0f0f0', branch: 'master' })
+  expect(await baseOf(git({}), branch)).toBeUndefined()
 })

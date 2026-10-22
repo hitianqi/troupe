@@ -46,7 +46,7 @@ says.
 ## The tools troupe gives you
 
 The troupe mod, loaded in this session, adds the pane or panel, the
-`/troupe` command and three tools:
+`/troupe` command and four tools:
 
 - **`troupe_dispatch {mission, order, role}`** opens one Claude window for
   an order (`role: builder`, the default) or for its review
@@ -79,6 +79,8 @@ The troupe mod, loaded in this session, adds the pane or panel, the
   or gone, and whether the brief was sent.
 - **`troupe_close {mission, window}`** closes one window (`o1`, or
   `review-o1`), or with no `window` the whole role session. Worktrees stay.
+- **`troupe_metrics {mission}`** writes `docs/missions/<mission>/metrics.json`
+  at teardown, before anything is removed (step 11).
 
 A builder hands back by writing `DONE-<id>.md` in its worktree's mission
 folder; a reviewer by writing its report there. troupe copies both into

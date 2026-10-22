@@ -188,8 +188,6 @@ branches stay.
   git does not track in that worktree, and only when the folder has no such
   file or an older one. The panel then shows the order `done` (marker) or
   `reviewed` (review file).
-- Role windows exist only for an order's build and its review; the other
-  jobs are Agent subagents (see "The skill").
 
 ### Light mode
 
@@ -257,7 +255,7 @@ windows, found by worktree path. The fields:
   `base_commit_from`, `mr_ready_commit`, `claude_version`.
 - `orders`: per order `model`, `merged`, `review_rounds`, `fix_rounds`,
   `wall_time_s` (its dispatch to its merge) and `diff_size`.
-- `review_rounds` (`orders`, `final`, `total`), `fix_rounds`, and
+- `review_rounds` (`orders`, `final`, `total`) and
   `refused_dispatches` (a `count` and the `reasons`).
 - `time`: `approved_at`, `mr_ready_at`, `plan_approved_to_mr_ready_s` and
   `wall_time_s`.

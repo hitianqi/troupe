@@ -3,9 +3,9 @@ import type { EngineInterface, On } from 'claude-code'
 
 import type { TroupeRoleSession, TroupeRoleWindow } from '../types'
 import { approvalOf } from './approval.ts'
-import { doneMarker, gitFacts, isReviewOf, missionBranchOf } from './mission.ts'
+import { baseOf, doneMarker, gitFacts, isReviewOf, missionBranchOf } from './mission.ts'
 import { ANCESTRY, ownPaneOf, tmux } from './panel.ts'
-import { slugOf } from './metrics.ts'
+import { ownTranscript } from './metrics.ts'
 import { isLight, layersOf, readPlan } from './plan.ts'
 import type { PlanOrder, PlanRead } from './plan.ts'
 
@@ -196,16 +196,9 @@ export function lastPermissionMode(transcript: string): string {
  * transcript cannot be read: then no mode is passed, and the answer says so.
  */
 async function ownPermissionMode($: EngineInterface): Promise<string> {
-  const id = await $.session.id().catch(() => undefined)
-  if (id === undefined) return ''
-  const config = (await $.env.get('CLAUDE_CONFIG_DIR').catch(() => undefined)) || `${(await $.env.get('HOME').catch(() => undefined)) ?? ''}/.claude`
-  const places = [...new Set([await $.session.cwd().catch(() => undefined), await $.session.root().catch(() => undefined)].filter((one): one is string => Boolean(one)))]
-  for (const place of places) {
-    const text = await $.fs.read(`${config}/projects/${slugOf(place)}/${id}.jsonl`).catch(() => undefined)
-    if (text !== undefined) return lastPermissionMode(text)
-  }
+  const own = await ownTranscript($)
 
-  return ''
+  return own ? lastPermissionMode(own.text) : ''
 }
 
 // ---- the role session and its windows ----------------------------------------
@@ -305,22 +298,10 @@ async function builderBrief($: EngineInterface, m: Mission, worktree: string, br
   ].join('\n')
 }
 
-/** The commit the mission branched from: its merge-base with origin's default branch, else with a local main or master. */
-async function baseCommitOf($: EngineInterface, m: Mission): Promise<{ commit: string; branch: string } | undefined> {
-  const head = (await ok(run($, ['git', '-C', m.root, 'symbolic-ref', '--short', 'refs/remotes/origin/HEAD'])))?.trim()
-  for (const branch of [head, 'main', 'master']) {
-    if (!branch || branch === m.base) continue
-    const commit = (await ok(run($, ['git', '-C', m.root, 'merge-base', branch, m.base])))?.trim()
-    if (commit) return { commit, branch }
-  }
-
-  return undefined
-}
-
 /** A light mission's last order: its review is also the mission's final review, over the whole mission diff. */
 async function finalDuty($: EngineInterface, m: Mission, branch: string): Promise<string[]> {
   if (!isLight(m.plan.orders) || serialOf(m.plan).at(-1) !== m.order) return []
-  const base = await baseCommitOf($, m)
+  const base = await baseOf(args => ok(run($, ['git', '-C', m.root, ...args])), m.base)
   const from = base
     ? `the mission's base commit ${base.commit} (the merge-base of ${m.base} with ${base.branch})`
     : `the mission's base commit, the merge-base of ${m.base} with the repository's default branch (troupe could not find it: run git merge-base yourself)`
