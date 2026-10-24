@@ -13,6 +13,8 @@ export const TONES = {
   ok: '#98c379',
   error: '#e06c75',
   dim: '#9aa3ad',
+  coral: '#f08a7e',
+  cyan: '#65cbd4',
 } as const
 export type Tone = keyof typeof TONES
 export type Style = { tone?: Tone; bold?: true }
@@ -27,6 +29,7 @@ export const fit = (text: string, width: number) =>
 
 /** Greedy wrap on spaces; a word longer than the width is cut into pieces. */
 export const wrap = (text: string, width: number): string[] => {
+  width = Math.max(1, width)
   const lines: string[] = []
   let line = ''
   for (const word of text.split(/\s+/).filter(Boolean)) {

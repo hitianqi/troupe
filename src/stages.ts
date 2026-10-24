@@ -15,7 +15,7 @@ export const DEFAULT_STAGES: Stage[] = [
   { id: 'review', label: 'Review' },
   { id: 'mr-ok', label: 'MR OK?', gate: 'mr-ok' },
   { id: 'mr', label: 'Open MR' },
-  { id: 'done', label: 'Done' },
+  { id: 'teardown', label: 'Teardown' },
 ]
 
 const isMap = (value: Yaml | undefined): value is { [key: string]: Yaml } => typeof value === 'object' && value !== null && !Array.isArray(value)

@@ -18,5 +18,5 @@ stages:
     gate: mr-ok
   - id: mr
     label: Open MR
-  - id: done
-    label: Done
+  - id: teardown
+    label: Teardown
