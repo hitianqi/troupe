@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto'
 import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
+import type { Screen } from './agents.ts'
 import { overlaps } from './plan.ts'
 import type { Role } from './plan.ts'
 import { parseYaml } from './yaml.ts'
@@ -83,7 +84,6 @@ export const workOf = (worktree: string, base: string, touches: string[]): Work 
   return { commits, changed, outside: changed.filter(file => !touches.some(touch => overlaps(touch, file))) }
 }
 
-export type Screen = 'waits' | 'working' | 'ready' | 'unknown'
 export type Pane = { alive: boolean; dead: boolean; screen: string }
 
 /** The pane's state from tmux: gone, its agent exited (`remain-on-exit`), or alive with its screen. */
