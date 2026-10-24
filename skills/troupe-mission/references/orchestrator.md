@@ -47,7 +47,7 @@ every job goes to an Agent subagent in the background with
 keep the session on the mission branch with `plan.md` committed there.
 
 - A builder gets the order's `model` and a description starting with
-  `<id>:`, the pane's sign that the order runs. Its brief gives the order
+  `<id>:`. Its brief gives the order
   id, the plan's path inside its worktree (`docs/missions/<mission>/plan.md`),
   the mission branch, the branch to rename to (`order/<mission>/<id>`), the
   absolute path of `builder.md`, the builder role's skills, and what counts
@@ -59,8 +59,9 @@ keep the session on the mission branch with `plan.md` committed there.
   its review is also the final review.
 - Results come back as the agent's completion notice and as the report in
   its worktree (`SKILL.md`, step 5, for the path). Copy each report into
-  the mission folder. A builder subagent writes no `DONE-<id>.md`; the pane
-  sees the order done when its `<id>:` agent finishes.
+  the mission folder. A builder subagent writes no `DONE-<id>.md`; the panel
+  sees the order running once its branch is ahead, and done once you merge
+  it.
 - Run a light mission's two orders one after the other yourself: nothing
   refuses the second for you.
 

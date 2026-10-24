@@ -227,9 +227,7 @@ export function detail(m: TroupeMission, width: number): Line[] {
     lines.push(...field(role.name, `${role.model || '—'} · ${role.effort || '—'} · ${meterOf(role.effort)}`, width))
     for (const duty of role.duty) lines.push(...under(`▪ ${duty}`, width, text => [{ text }]))
     if (role.skills.length === 0) lines.push(...under('no skills', width, text => [{ text, tone: 'dim' }]))
-    for (const skill of role.skills) {
-      lines.push(...under(skill.isFound ? `✓ ${skill.name}` : `✗ ${skill.name}`, width, text => [{ text, tone: skill.isFound ? 'ok' : 'error' }]))
-    }
+    for (const skill of role.skills) lines.push(...under(`· ${skill}`, width, text => [{ text }]))
   }
 
   return lines

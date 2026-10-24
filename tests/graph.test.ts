@@ -1,7 +1,7 @@
 import { expect, test } from 'claude-code/testing'
 
-import { graph } from '../hooks/graph.ts'
-import { textOf } from '../hooks/view.ts'
+import { graph } from '../src/graph.ts'
+import { textOf } from '../src/view.ts'
 import { GRAPH_106, GRAPH_107, GRAPH_50 } from './graph-goldens.ts'
 import { P1 } from './p1.ts'
 

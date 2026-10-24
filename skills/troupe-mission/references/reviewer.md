@@ -15,7 +15,7 @@ branch for the slim pass and the final review.
 Write the report in your own worktree, at `docs/missions/<mission>/<report
 file>` (create the folder if it is missing), and leave it untracked: the
 orchestrator's checkout is not yours to write. troupe, or the orchestrator,
-copies it into the mission folder, where the pane reads it, and commits it.
+copies it into the mission folder, where the panel reads it, and commits it.
 Do not commit it, and do not delete it. Hand back with its absolute path.
 
 ## Slim pass

@@ -3,19 +3,19 @@ import type { On } from 'claude-code'
 
 import { APPROVAL_FILE, planHash } from '../hooks/approval.ts'
 import { isReady, isUnsent, lastPermissionMode, READY_MS, SENT_MS } from '../hooks/dispatch.ts'
-import { baseOf } from '../hooks/mission.ts'
+import { baseOf } from '../src/mission.ts'
 import { VALID } from './fixtures.ts'
 
 // troupe_dispatch and troupe_status against a fake git and tmux: the two hard
 // rules (approval, depends_on), the exact argv of every git and tmux call, the
 // approval record and its hash, and what the tools answer. VALID's o2 depends
-// on o1; o1 and o3 depend on nothing. The session sits in /work/repo, in an
-// OpenRig-like seat: no TMUX in the engine, a pane two ancestors up.
+// on o1; o1 and o3 depend on nothing. The session sits in /work/repo, inside
+// tmux: TMUX and TMUX_PANE in the engine's environment.
 
 const DIR = 'docs/missions/demo'
 const ROOT = '/work/repo'
 const SOCKET = '/tmp/tmux-1000/default'
-const SEAT = `100\t\t\n90\t${SOCKET},3506,126\t%126\n1\t\t\n`
+const TMUX = { TMUX: `${SOCKET},3506,126`, TMUX_PANE: '%126' }
 const READY = '\n ▐▛███▛█   Claude Code\n────\n❯ Try "fix lint errors"\n────\n  ⏵⏵ auto mode on\n'
 const DIALOG = ' Do you want to proceed?\n ❯ 1. Yes\n   2. No\n'
 /** The orchestrator's transcript: Claude Code records each permission mode the session takes; the last one holds. */
@@ -29,7 +29,8 @@ type World = {
   files: Map<string, string>
   /** Subjects on the mission branch alone: `o1: …` once o1 is merged. */
   merged: string[]
-  ancestry: string
+  /** The engine's TMUX and TMUX_PANE; absent outside tmux. */
+  tmux?: typeof TMUX
   /** tmux sessions by name → id, and panes alive. */
   sessions: Map<string, string>
   panes: Set<string>
@@ -62,7 +63,7 @@ function world(on: On, given: Partial<World> = {}): World {
   const w: World = {
     files: new Map([[`${DIR}/plan.md`, VALID]]),
     merged: [],
-    ancestry: SEAT,
+    tmux: TMUX,
     sessions: new Map(),
     panes: new Set(),
     screen: READY,
@@ -82,7 +83,6 @@ function world(on: On, given: Partial<World> = {}): World {
   let next = 9
   on('tool.register', (_, e) => ({ value: { tool: `mcp__troupe__${e.name}` } }))
   on('command.register', () => ({ value: { command: 'troupe' } }))
-  on('ui.open', () => ({ value: { isPlaced: true } }))
   on('ui.log', (_, e) => {
     w.logs.push(String((e as unknown as { text: unknown }).text))
 
@@ -92,7 +92,6 @@ function world(on: On, given: Partial<World> = {}): World {
   on('session.cwd', () => ({ value: ROOT }))
   on('session.root', () => ({ value: ROOT }))
   on('session.id', () => ({ value: 'S1' }))
-  on('ui.close', () => ({ value: undefined }))
   on('fs.list', (_, e) => {
     const dir = `${local(e.path).replace(/\/+$/, '')}/`
     const names = [...w.files.keys()].filter(path => path.startsWith(dir) && !path.slice(dir.length).includes('/')).map(path => path.slice(dir.length))
@@ -122,12 +121,10 @@ function world(on: On, given: Partial<World> = {}): World {
 
     return { value: undefined }
   })
-  on('session.usage', () => ({ deny: 'no usage here' }))
-  on('agent.list', () => ({ value: [] }))
-  on('env.get', (_, e) => ({ value: e.name === 'HOME' ? '/home/t' : undefined }))
+  on('env.get', (_, e) => ({ value: e.name === 'HOME' ? '/home/t' : w.tmux?.[e.name as keyof typeof TMUX] }))
   on('process.run', (_, e) => {
     const argv = [...e.argv]
-    if (argv[0] === 'sh') return ran(w.ancestry)
+    if (argv[0] === 'sh') return ran('100\n')
     if (argv[0] === 'node') return ran('/usr/bin/node\n')
     w.calls.push(argv)
     if (argv[0] === 'git') {
@@ -164,6 +161,9 @@ function world(on: On, given: Partial<World> = {}): World {
     if (verb === 'display') {
       const format = argv.at(-1)
       if (format === '#{pane_id}') return w.panes.has(target) ? ran(`${target}\n`) : ran('', 1, "can't find pane")
+      // The panel's split beside the session's pane (/troupe).
+      if (format === '#{window_width}') return ran('160\n')
+      if (format === '#{pane_width}') return ran('80\n')
       if (w.flaky > 0) {
         w.flaky--
 
@@ -173,6 +173,7 @@ function world(on: On, given: Partial<World> = {}): World {
 
       return name ? ran(`${target} ${name}\n`) : ran('', 1, "can't find session")
     }
+    if (verb === 'split-window') return ran('%90\n')
     if (verb === 'capture-pane') {
       const entered = w.calls.some(one => one.includes('send-keys') && one.at(-1) === 'Enter' && one.includes(target))
 
@@ -287,12 +288,12 @@ test('a second order opens a window in the same role session; the same order aga
 })
 
 test('refused with no tmux above the session, with a session of that name troupe did not open, and on ids that are not a name', async ($, on) => {
-  const w = world(on, { ancestry: '100\t\t\n1\t\t\n' })
+  const w = world(on, { tmux: undefined })
   await approve(w)
   await start($)
 
   expect(await call($, w, 'troupe_dispatch', { mission: 'demo', order: 'o1' })).toContain('the session is not inside tmux')
-  w.ancestry = SEAT
+  w.tmux = TMUX
   w.sessions.set('troupe-demo', '$1')
   expect(await call($, w, 'troupe_dispatch', { mission: 'demo', order: 'o1' })).toContain('a tmux session named troupe-demo exists that troupe did not open')
   expect(await call($, w, 'troupe_dispatch', { mission: 'demo', order: 'o1; touch x' })).toContain('order must be an order id from plan.md')

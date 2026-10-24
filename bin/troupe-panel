@@ -5,29 +5,28 @@
 // three rows (tmux: `set -g mouse on`); keys reach it while its pane has the
 // focus. Ctrl+C ends it.
 //
-// Draws the troupe pane's view of a mission in the terminal it runs in, from
-// the same code as the in-session pane (hooks/lines.ts, through
-// hooks/ansi.ts): the header, the GRAPH, compact ROLES and ORDERS, then
+// Draws the troupe view of a mission in the terminal it runs in (src/lines.ts,
+// through src/ansi.ts): the header, the GRAPH, compact ROLES and ORDERS, then
 // DETAIL, cut from the bottom to the terminal's rows. It redraws when what
-// it would draw changes (the folder, the facts the mod wrote, git: polled
-// every 2 s, git every 10 s) or the terminal is resized, never scrolls, and
-// exits on SIGTERM, SIGINT or SIGHUP, or once the process --owner names is
-// gone. --once prints one screen and exits. Node 22.18 or later: it imports
-// the hooks' .ts files with Node's own type stripping.
+// it would draw changes (the folder polled every 2 s, git every 10 s) or the
+// terminal is resized, never scrolls, and exits on SIGTERM, SIGINT or SIGHUP,
+// or once the process --owner names is gone. --once prints one screen and
+// exits. Node 22.18 or later: it imports src/'s .ts files with Node's own
+// type stripping.
 
 import { execFile } from 'node:child_process'
 import { readdirSync, readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 
-const hooks = new URL('../hooks/', import.meta.url)
+const src = new URL('../src/', import.meta.url)
 let shared
 try {
-  shared = await Promise.all(['plan.ts', 'mission.ts', 'ansi.ts'].map(file => import(new URL(file, hooks).href)))
+  shared = await Promise.all(['plan.ts', 'mission.ts', 'ansi.ts'].map(file => import(new URL(file, src).href)))
 } catch (error) {
-  console.error(`troupe-panel: cannot load the hooks (${error.message}); it needs Node 22.18 or later, this is ${process.version}`)
+  console.error(`troupe-panel: cannot load src/ (${error.message}); it needs Node 22.18 or later, this is ${process.version}`)
   process.exit(1)
 }
-const [{ readPlan }, { APPROVAL_FILE, GIT_MS, gitFacts, isApproved, missionOf, POLL_MS, STATE_FILE }, { actionsOf, frame, scrolled }] = shared
+const [{ readPlan }, { APPROVAL_FILE, GIT_MS, gitFacts, isApproved, missionOf, POLL_MS }, { actionsOf, frame, scrolled }] = shared
 
 const args = process.argv.slice(2)
 const valueOf = name => (args.includes(name) ? args[args.indexOf(name) + 1] : undefined)
@@ -45,7 +44,7 @@ const git = args =>
   new Promise(done => execFile('git', ['-C', dir, ...args], { timeout: 5000 }, (error, stdout) => done(error ? undefined : stdout)))
 let gitRead = { at: 0, key: '', facts: undefined }
 
-/** The mission from plan.md, the folder's files, the facts the mod wrote and git's (asked at most every GIT_MS); or why there is none. */
+/** The mission from plan.md, the folder's files and git's (asked at most every GIT_MS); or why there is none. */
 async function read() {
   let source
   try {
@@ -54,13 +53,6 @@ async function read() {
     return { missing: `no plan.md in ${dir}` }
   }
   const files = readdirSync(dir)
-  let facts = { agents: [] }
-  try {
-    facts = JSON.parse(readFileSync(`${dir}/${STATE_FILE}`, 'utf8'))
-  } catch {
-    // No mod beside it (or not yet): no agents, and no skill listing to check against.
-  }
-
   const plan = readPlan(source)
   const ids = plan.orders.map(order => order.id)
   const key = `${ids.join(',')}|${files.includes('SLIM.md')}`
@@ -76,7 +68,7 @@ async function read() {
     // No approval record: the plan waits at "Plan OK?".
   }
 
-  return missionOf(given.replace(/\/+$/, ''), plan, files, facts, gitRead.facts, await isApproved(source, record))
+  return missionOf(given.replace(/\/+$/, ''), plan, files, gitRead.facts, await isApproved(source, record))
 }
 
 const isColour = !args.includes('--plain')

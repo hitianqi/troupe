@@ -1,25 +1,195 @@
-# troupe — roadmap (draft, 2026-10-20)
+# troupe — roadmap (revised 2026-10-24)
 
-troupe is a Claude Code mod (a plugin with a hooks module) that runs the
-core of the tianqi-rig-kit mission workflow from one Claude Code session, as
-a lightweight alternative to OpenRig's configuration barrier. The user types
-`/troupe` and a mission in the chat; a plan panel splits right in the
-terminal; the conversation window is the orchestrator; once the plan is
-agreed, one tmux window per role (orchestrator excluded) opens a Claude
-instance in its own worktree, and the existing workflow runs. tmux is a hard
-requirement (split and cross-window typing); herdr comes second. It does
-not talk to OpenRig.
+troupe lets anyone call up an agent troupe with one command, without
+configuring a software-factory harness such as OpenRig. The orchestrator
+writes a plan with the person; once they approve it, every role opens in a
+real tmux window of its own, in its own git worktree, where the person can
+watch it and talk to it directly. A panel beside the orchestrator stays open
+and shows the work as it moves. The orchestrator and the roles can run any
+agent harness that lives in a terminal: Claude Code and Codex first.
 
-Status: Phase 0 done (2026-10-20, mission p0; see `docs/FEASIBILITY.md`).
-Phase 2 built (2026-10-21, missions p2 and p3; outcome below).
-Phase 3 built (2026-10-22, mission p4; outcome below); its real-mission
-acceptance run is deferred to GitLab issue AI/troupe#3.
-Repo: GitLab `AI/troupe`, developed on the Prover account like the other
-projects; open source is a later call. Decisions of 2026-10-20 are the base
-(record: `~/.claude/projects/-home-tizh/memory/mission-pane-mod-plan.md`).
-Maintenance is deliberately lightweight: README, `check.sh`, plugin tests and
-the docs a phase produces; no feature map, harness, CI or ADRs unless a
-phase needs them.
+Status: Phases 0–3 built the first form, a Claude Code mod (v0.5.0; outcomes
+below, kept as history). On 2026-10-24 a mid-term review set the direction
+below; it is the standard from now on, and the README's description of the
+mod holds only until Phase 5 replaces it.
+Repo: GitHub `tianqizhao0704/troupe` (private; migrated from GitLab
+`AI/troupe`). Open source is still a later call (Phase 7).
+Maintenance is deliberately lightweight: README, `check.sh`, tests and the
+docs a phase produces; no feature map, harness, CI or ADRs unless a phase
+needs them.
+
+## Direction (2026-10-24)
+
+**What the product is.** Plan first, then roles: the orchestrator and the
+person agree on `plan.md`, the person approves it, and only then do role
+windows open. The persistent, interactive panel is part of the product, not
+an extra. What troupe is not: a port of one person's workflow. The mission
+workflow Phases 0–3 built (light/full mode, slim, final review, MR gates,
+metrics) is one opinionated recipe that ships as the default skill, and a
+user who wants another workflow changes the skill, not the code.
+
+**The rule that draws the line.** Code enforces only what keeps the work
+correct; the method lives in the skill, as text, and can be swapped.
+
+Enforced in code (the core):
+- No role window before the plan is approved.
+- One role, one git worktree and one branch; the plan's `touches` keep two
+  roles off the same files.
+- Never type into a window that waits on a prompt; touch only the tmux
+  session and windows troupe opened.
+- The persistent panel.
+
+Moves out of code into the skill (or becomes optional):
+- The fixed roles `builder` / `reviewer`: roles are named freely in the plan,
+  each with the agent command it runs.
+- The model allow-list (`opus`, `sonnet`, `haiku`, `fable`): replaced by that
+  per-role command, which carries its own model and permission flags.
+- Light/full mode and its forced serial dispatch.
+- "Done means one `<id>: …` commit on the mission branch": a dependency is
+  done when its result file says so; how and when to merge is the recipe's.
+- Slim, final review, the MR and merged gates.
+- `troupe_metrics` (reads Claude transcripts only): an optional reader, one
+  per harness, later.
+- Required `why` and `kind` in the plan: optional; only `touches` is required.
+
+Deleted (the first three in the 2026-10-24 cleanup, v0.6.0):
+- The in-session pane (`$.ui.open`): roles need tmux anyway, so the tmux
+  panel is the only view.
+- OpenRig seat support: the `/proc` lookup of an ancestor's tmux pane, the
+  seat warnings.
+- `.troupe-state.json` (the session's skills and subagents) and with it the
+  panel's skill ✓ / ✗ and subagent-based order states: roles are windows,
+  not subagents.
+- The Claude Code mod itself (see Architecture), in Phase 5.
+- Reading the orchestrator's permission mode from its Claude transcript, with
+  the mod: until then it keeps role windows off a project's own mode.
+
+**Architecture.** No mod, because the orchestrator must be able to run in
+Codex, where a Claude Code mod never loads.
+
+```
+troupe            CLI: check / dispatch / status / send / wait / close
+                  the hard rules live here; a refusal exits non-zero with
+                  the reason on stderr, which any harness's model reads
+troupe-panel      the persistent TUI in a tmux split: progress, a light per
+                  role (working / waits on you / done), approval (A / C),
+                  click a role for its detail, open it in a popup
+skills/           the orchestrator's instructions (the default workflow),
+                  shared by Claude Code and Codex
+agents            one adapter per harness: start command with a first
+                  prompt, how to paste, the "waits on you" pattern
+```
+
+| The mod did | Without the mod |
+|---|---|
+| `/troupe` command | a skill (`/troupe` in Claude Code; Codex reads the same instructions) |
+| `troupe_dispatch` etc. as tools that refuse | `troupe dispatch …`; refusal is a non-zero exit with a reason |
+| Approve / Change dialog (`$.ui.ask`) | keys in the panel; the plan hash record stays |
+| Copy result files on a 2 s poll | the panel's own poll |
+| Close the panel at session end | the panel's existing `--owner PID` |
+
+A CLI refusal is as strong as a mod tool's, and as weak: a model can go
+round either with plain git and tmux. Moving loses nothing. Dropping the mod
+also drops the "Turn on the mods" question at first use.
+
+Reuse: `src/` (`plan.ts`, `mission.ts`, `yaml.ts`, `graph.ts`, `view.ts`,
+`lines.ts`, `ansi.ts`) and `bin/troupe-panel` import nothing from the engine;
+the cleanup moved them out of `hooks/`. In `hooks/`, `dispatch.ts` uses
+`$.fs`, `$.process`, `$.clock` and `$.env` (mechanical swaps to Node) and
+`$.tool.register` (replaced by the CLI); `approval.ts` keeps its hash logic
+and loses `$.ui.ask`; `register.tsx`, `panel.ts` and `read-state.ts` go.
+
+**The panel.** It stays open beside the orchestrator and is the person's
+main view. Planned: a light per role read from `tmux capture-pane` with the
+agent's "waits on you" pattern (the signal that matters most: which window
+needs the person); click a role (SGR mouse is already on for the wheel) for
+its detail: the last lines of its window live, its state, branch,
+`git diff --stat`, its result files; open the role in a `tmux display-popup`
+attached to its window, so the person talks to it and closes the popup with
+the orchestrator and the panel still in place (`switch-client` and back is
+the simpler fallback).
+
+**Systems.** tmux is required: macOS, Linux, WSL2. macOS is a first-class
+target and is checked in Phase 5. Native Windows is not planned (issue #1,
+closed).
+
+**Risk.** Everything dispatch learned (paste a long prompt, wait for ready,
+a permission prompt eats keys, the trust dialog) was learned on Claude
+Code's TUI. Codex has to be checked the same way before the refactor.
+
+## Phases from here
+
+### Phase 4 — Codex probe (about half a day)
+
+In a scratch tmux server: start `codex "<prompt>"` and `claude "<prompt>"` in
+a fresh, untrusted worktree; does the launch prompt survive the trust
+prompt? Record Codex's screens when ready, working and waiting on an
+approval, and whether bracketed paste reaches it. Evidence in
+`docs/FEASIBILITY.md`.
+
+Done when: each question has a yes/no with the screen seen, and the adapter
+fields (start command, paste, "waits on you" pattern) are known for both
+harnesses, or Codex is found unfit and Tianqi picks what to do.
+
+### Phase 5 — CLI and panel without the mod
+
+Delivers: the `troupe` CLI with the hard rules; roles named in the plan with
+a per-role agent command; agent adapters for Claude Code and Codex; the
+brief as a launch argument, paste kept for `troupe send`, and `troupe wait`
+for results (issue #2); approval in the panel; the default workflow moved
+into the skill as text; the deletions above; README rewritten for the new
+form; checked on macOS and Linux.
+
+Done when: a two-order dry run in a scratch tmux server, once with a Claude
+Code orchestrator and once with a Codex one, with at least one Codex role:
+the plan is approved in the panel, dispatch before approval is refused, each
+role starts on its brief in its own worktree, and the orchestrator learns of
+each result through `troupe wait`.
+
+### Phase 6 — The interactive panel
+
+Delivers: the per-role light, click for detail, the popup into a role
+window.
+
+Done when: in a live mission the person sees which role waits on them,
+opens it from the panel, answers, and returns without leaving the
+orchestrator's window.
+
+### Phase 7 — Open-source release (only if Tianqi decides to open-source)
+
+Delivers: install for Claude Code (a plugin with the skill and `bin/`, no
+hooks module) and for Codex; license; secret scan; README with a short gif.
+Before the repo goes public, clean what names Prover's internals: the
+migrated issues, `docs/missions/`, `docs/feasibility/` and the history in
+this file (GitLab URLs, internal repositories, OpenRig seats, local memory
+paths).
+
+Done when: someone new installs and runs the sample mission without help, in
+under five minutes to the first panel.
+
+### After the refactor: evidence
+
+The acceptance run and the three-arm comparison (`docs/missions/p4/compare.md`)
+were deferred in Phase 3 and closed with issue #3: they would have measured
+the mod. If troupe needs evidence for its README, they come back as a new
+issue, run on the new form and on a task that can be named in public.
+
+## Stays out
+
+Tianqi's personal skills (tianqi-taste, tianqi-ui-ux, tianqi-project-
+maintenance, tianqi-skill-design), the chief-of-staff seat, Slack, OpenRig
+(neither configured nor supported), terminal backends other than tmux.
+Reference only, not a dependency: iha2/superlite.
+
+---
+
+# History: the mod (Phases 0–3, 2026-10-20 to 2026-10-22)
+
+What follows is the record of the first form, kept as it was written, except
+where marked. Its product sentence was: troupe is a Claude Code mod that
+runs the core of the tianqi-rig-kit mission workflow from one Claude Code
+session. Decisions of 2026-10-20 were its base (record:
+`~/.claude/projects/-home-tizh/memory/mission-pane-mod-plan.md`).
 
 ## Phase 0 outcome (2026-10-20, Claude Code 2.1.304)
 
@@ -119,8 +289,10 @@ it, `docs/missions/p4/compare.md`.
   protocol `docs/missions/p4/compare.md` was added at 12:32Z (one task, three
   arms; troupe's `metrics.json` carries its fields).
 - Not done: the done-when item "One real mission through troupe" was not run.
-  Tianqi deferred it at 14:11Z, after the run's set-up. GitLab issue
-  AI/troupe#3 holds the task, the recipe to attach and `compare.md`. Light
+  Tianqi deferred it at 14:11Z, after the run's set-up. (Closed on
+  2026-10-24 with the new direction; see "After the refactor: evidence".)
+  GitHub issue #3 (from GitLab AI/troupe#3) holds the task, the recipe to
+  attach and `compare.md`. Light
   mode and the serial rule have been run only against a fake git and tmux in
   tests; `troupe_metrics` was also read against real transcripts in the
   reviews. None has run in a mission of its own.
@@ -277,17 +449,9 @@ same size (nav 1h23m, formalize-ui 1h25m, both light); the number of hook
 refusals during the run (expected 0 in a well-behaved run); the cost,
 estimated before the run and asked for above 5 USD.
 
-### Phase 4 — Open-source release (about half a day; only if Tianqi decides to open-source)
+### Phase 4 — Open-source release
 
-Delivers: `.claude-plugin/marketplace.json`, README with the install line and
-a 60-second screenshot or gif, license, secret scan, a "how to tell it is
-working" section (the test suite and metrics.json).
-
-Done when: a colleague installs from GitHub and runs the sample mission
-without help.
-
-Measured by: install to first pane under five minutes for someone new; the
-issues they file.
+Superseded on 2026-10-24 by Phase 7 above.
 
 ## Estimate
 
@@ -299,6 +463,4 @@ Tianqi merges.
 
 ## Stays out (decided 2026-10-20)
 
-Tianqi's personal skills (tianqi-taste, tianqi-ui-ux, tianqi-project-
-maintenance, tianqi-skill-design), the chief-of-staff seat, Slack, OpenRig
-seat configuration. Reference only, not a dependency: iha2/superlite.
+Superseded on 2026-10-24 by "Stays out" above.

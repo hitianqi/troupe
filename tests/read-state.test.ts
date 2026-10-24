@@ -1,11 +1,11 @@
 import { expect, test } from 'claude-code/testing'
 
 import type { TroupeOrderState } from '../types'
-import { goalOf, isLight, layersOf, readPlan, stepOf, STEPS, stepsOf } from '../hooks/plan.ts'
-import { gitFacts, hasSkill, isApproved, missionBranchOf, planHash, stateOf } from '../hooks/mission.ts'
-import { detail, textOf } from '../hooks/view.ts'
-import { parseYaml } from '../hooks/yaml.ts'
-import { BAD_YAML, MISSING_SKILL, OVERLAP, SESSION_SKILLS, VALID } from './fixtures.ts'
+import { goalOf, isLight, layersOf, readPlan, stepOf, STEPS, stepsOf } from '../src/plan.ts'
+import { gitFacts, isApproved, missionBranchOf, planHash, stateOf } from '../src/mission.ts'
+import { detail, textOf } from '../src/view.ts'
+import { parseYaml } from '../src/yaml.ts'
+import { BAD_YAML, NAMED_SKILLS, OVERLAP, VALID } from './fixtures.ts'
 import { P1 } from './p1.ts'
 
 test('a valid plan reads with its roles, orders and no problems', async () => {
@@ -33,7 +33,7 @@ test('a valid plan reads with its roles, orders and no problems', async () => {
   ])
   // No goal: key, so the first sentence of Intent.
   expect(plan.goal).toBe('Draw the demo pane.')
-  expect(readPlan(MISSING_SKILL).goal).toBe('Show the demo mission in a pane')
+  expect(readPlan(NAMED_SKILLS).goal).toBe('Show the demo mission in a pane')
   expect(plan.orders.map(order => [order.id, order.kind, order.model, order.dependsOn])).toEqual([
     ['o1', 'code', 'opus', []],
     ['o2', 'code', 'sonnet', ['o1']],
@@ -94,15 +94,8 @@ orders:
   ])
 })
 
-test('a skill is found in either spelling; one the session lacks is not', async () => {
-  const skills = readPlan(MISSING_SKILL).roles[0]?.skills ?? []
-  expect(skills.map(name => hasSkill(SESSION_SKILLS, name))).toEqual([true, false])
-  expect(hasSkill(SESSION_SKILLS, 'shared:systematic-debugging')).toBe(true)
-  expect(hasSkill(SESSION_SKILLS, 'codex:rescue')).toBe(true)
-  // Only `shared:` is dropped: another plugin's skill of the same name does not count.
-  expect(hasSkill(SESSION_SKILLS, 'rescue')).toBe(false)
-  expect(hasSkill(['codex:setup'], 'shared:setup')).toBe(false)
-  expect(hasSkill(['shared:setup'], 'setup')).toBe(true)
+test("a role's skills are read as the plan names them", async () => {
+  expect(readPlan(NAMED_SKILLS).roles.find(role => role.name === 'builder')?.skills).toEqual(['plugin-authoring', 'troupe-no-such-skill'])
 })
 
 test('layering: each order sits one layer below its deepest dependency; a cycle is left out', async () => {
@@ -120,16 +113,9 @@ test('layering: each order sits one layer below its deepest dependency; a cycle 
   expect(stuck.map(one => one.id)).toEqual(['c1', 'c2'])
 })
 
-test('order state: a review file, then a live or finished subagent named "<id>:", else planned', async () => {
-  const agents = [
-    { description: 'o2: draw', status: 'running' as const },
-    { description: 'o3: check', status: 'completed' as const },
-    { description: 'o10: other', status: 'running' as const },
-  ]
-  expect(stateOf('o1', ['plan.md', 'REVIEW-o1-2.md'], agents)).toBe('reviewed')
-  expect(stateOf('o2', ['plan.md'], agents)).toBe('running')
-  expect(stateOf('o3', ['plan.md'], agents)).toBe('done')
-  expect(stateOf('o1', ['plan.md', 'REVIEW-o10.md'], agents)).toBe('planned')
+test('order state: a review file, else planned; another order\'s review does not count', async () => {
+  expect(stateOf('o1', ['plan.md', 'REVIEW-o1-2.md'])).toBe('reviewed')
+  expect(stateOf('o1', ['plan.md', 'REVIEW-o10.md'])).toBe('planned')
 })
 
 test('the goal falls back to the first sentence of Intent', async () => {
@@ -169,11 +155,11 @@ test('the Phase 1 leftovers: an unknown effort is a problem, no orders is not li
 
 test('order state from git: a branch ahead is running, a merged order is done, merged beats ahead, a review beats both', async () => {
   const git = { running: ['o2', 'o3'], merged: ['o1', 'o3'] }
-  expect(stateOf('o1', [], [], git)).toBe('done')
-  expect(stateOf('o2', [], [], git)).toBe('running')
-  expect(stateOf('o3', [], [], git)).toBe('done')
-  expect(stateOf('o4', [], [], git)).toBe('planned')
-  expect(stateOf('o2', ['REVIEW-o2.md'], [], git)).toBe('reviewed')
+  expect(stateOf('o1', [], git)).toBe('done')
+  expect(stateOf('o2', [], git)).toBe('running')
+  expect(stateOf('o3', [], git)).toBe('done')
+  expect(stateOf('o4', [], git)).toBe('planned')
+  expect(stateOf('o2', ['REVIEW-o2.md'], git)).toBe('reviewed')
   expect(missionBranchOf('p2', ['main', 'order/p2/o1', 'feature/NO-JIRA-p20', 'feature/NO-JIRA-p2'])).toBe('feature/NO-JIRA-p2')
   expect(missionBranchOf('p2', ['main', 'order/p2/o1'])).toBeUndefined()
 })
@@ -197,14 +183,13 @@ test('gitFacts asks git for the branches, the mission-only subjects and each ord
   expect(await gitFacts(async () => undefined, 'p2', ['o1'])).toBeUndefined()
 })
 
-test('a done marker makes an order done; a fix round stays reviewed, whatever runs for it', async () => {
-  const fixing = [{ description: 'o1: fix the review', status: 'running' as const }]
-  expect(stateOf('o1', ['plan.md', 'DONE-o1.md'], [])).toBe('done')
-  expect(stateOf('o1', ['plan.md', 'DONE-o10.md'], [])).toBe('planned')
-  // The order branch ahead (the fix commits) and a fixer at work: still reviewed.
-  expect(stateOf('o1', ['DONE-o1.md', 'REVIEW-o1.md'], fixing, { running: ['o1'], merged: [] })).toBe('reviewed')
+test('a done marker makes an order done; a fix round stays reviewed', async () => {
+  expect(stateOf('o1', ['plan.md', 'DONE-o1.md'])).toBe('done')
+  expect(stateOf('o1', ['plan.md', 'DONE-o10.md'])).toBe('planned')
+  // The order branch ahead (the fix commits): still reviewed.
+  expect(stateOf('o1', ['DONE-o1.md', 'REVIEW-o1.md'], { running: ['o1'], merged: [] })).toBe('reviewed')
   // A built order's branch is ahead too: the marker says done.
-  expect(stateOf('o1', ['DONE-o1.md'], [], { running: ['o1'], merged: [] })).toBe('done')
+  expect(stateOf('o1', ['DONE-o1.md'], { running: ['o1'], merged: [] })).toBe('done')
 })
 
 test('the step reaches "Final review" once the mission branch holds SLIM.md, and gitFacts asks only then', async () => {

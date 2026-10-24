@@ -23,7 +23,7 @@ sharing was removed first (e.g. the file was split) or serialized.>
 
 ## Orders
 
-The orders block below is checked before dispatch (the troupe pane lists its
+The orders block below is checked before dispatch (the troupe panel lists its
 problems). Keep each value on one line. Every `code` order declares
 the files or directories it will change in `touches`, and in `why` why it is
 needed and what in the codebase it reuses, or why nothing there fits. Two
@@ -34,8 +34,8 @@ a file it did not declare, update this plan in the same commit; a changed plan
 is approved again before the next dispatch.
 
 ```yaml
-goal: "<the mission in one sentence: what it delivers>"   # the pane's first line; else Intent's first sentence
-roles:                    # optional; the pane flags a skill the session lacks
+goal: "<the mission in one sentence: what it delivers>"   # the panel's first line; else Intent's first sentence
+roles:                    # optional; a role window's brief lists its skills
   orchestrator:
     model: opus           # opus | sonnet | haiku | fable; an order's own model overrides it
     effort: high          # low | medium | high | xhigh | max

@@ -1,8 +1,8 @@
 import type { EngineInterface } from 'claude-code'
 
 import type { TroupeApproval } from '../types'
-import { APPROVAL_FILE, planHash, recordOf } from './mission.ts'
-import { readPlan } from './plan.ts'
+import { APPROVAL_FILE, planHash, recordOf } from '../src/mission.ts'
+import { readPlan } from '../src/plan.ts'
 
 // The file, the hash and the record's reading live in mission.ts, which
 // troupe-panel imports too: one rule for "approved" in both views.

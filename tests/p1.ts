@@ -1,5 +1,5 @@
 import type { TroupeMission } from '../types'
-import { STEPS } from '../hooks/plan.ts'
+import { STEPS } from '../src/plan.ts'
 
 // p1 as the approved mock shows it: its plan's goal, roles and o1, o1
 // planned, the mission at "Plan OK?". A literal, so a later plan edit does
@@ -22,8 +22,8 @@ export const P1: TroupeMission = {
         "Opens the MR after the human's go, then tears down",
       ],
       skills: [
-        { name: 'messaging-the-human', isFound: true },
-        { name: 'queue-handoff', isFound: true },
+        'messaging-the-human',
+        'queue-handoff',
       ],
     },
     {
@@ -31,7 +31,7 @@ export const P1: TroupeMission = {
       model: 'opus',
       effort: 'high',
       duty: ['Builds its order in its own worktree', 'Keeps ./check.sh green and the dev-mods copy in step', 'Fixes review findings, once per review'],
-      skills: [{ name: 'plugin-authoring', isFound: true }],
+      skills: ['plugin-authoring'],
     },
     {
       name: 'reviewer',

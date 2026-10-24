@@ -1,11 +1,11 @@
 import { expect, test } from 'claude-code/testing'
 
-import { actionsOf, scrolled } from '../hooks/ansi.ts'
-import { viewLines, viewport } from '../hooks/lines.ts'
-import { missionOf } from '../hooks/mission.ts'
-import { readPlan } from '../hooks/plan.ts'
-import { textOf } from '../hooks/view.ts'
-import { SESSION_SKILLS, VALID } from './fixtures.ts'
+import { actionsOf, scrolled } from '../src/ansi.ts'
+import { viewLines, viewport } from '../src/lines.ts'
+import { missionOf } from '../src/mission.ts'
+import { readPlan } from '../src/plan.ts'
+import { textOf } from '../src/view.ts'
+import { VALID } from './fixtures.ts'
 import { DOCKED, VIEW_30 } from './mock-p1.ts'
 import { P1 } from './p1.ts'
 
@@ -30,7 +30,7 @@ test('the view puts the GRAPH first: header, GRAPH, ROLES, ORDERS, then DETAIL',
 
 test('the viewport: the header pinned, hints top and bottom, never more rows, the end reaching the last line', async () => {
   expect(text(viewport(viewLines(P1, 110), 30, 0).lines)).toEqual(VIEW_30)
-  const three = missionOf('docs/missions/demo', readPlan(VALID), ['plan.md'], { agents: [], skills: SESSION_SKILLS })
+  const three = missionOf('docs/missions/demo', readPlan(VALID), ['plan.md'])
   for (const m of [P1, three]) {
     for (const [width, rows] of [[30, 27], [63, 57], [79, 57]] as const) {
       const all = viewLines(m, width)
@@ -80,7 +80,7 @@ test("the graph shows the roles and the human checkpoints only, not the system's
 })
 
 test('at 57 rows the GRAPH, ROLES and ORDERS all fit, at 63 and at 79 columns, for three orders', async () => {
-  const m = missionOf('docs/missions/demo', readPlan(VALID), ['plan.md'], { agents: [], skills: SESSION_SKILLS })
+  const m = missionOf('docs/missions/demo', readPlan(VALID), ['plan.md'])
   for (const width of [63, 79]) {
     const lines = text(viewport(viewLines(m, width), 57, 0).lines)
     const orders = lines.findIndex(line => line.startsWith('  ── ORDERS ·'))

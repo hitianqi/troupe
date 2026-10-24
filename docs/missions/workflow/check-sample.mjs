@@ -1,31 +1,30 @@
 // The walkthrough check: the sample mission's plan and review files, read by
-// the pane's own reader (hooks/plan.ts and hooks/read-state.ts, unchanged).
+// the panel's own reader (src/plan.ts and src/mission.ts, unchanged).
 //
-// Run it from the repo root (Node 22; hooks/yaml.ts has a parameter property,
+// Run it from the repo root (Node 22; src/yaml.ts has a parameter property,
 // so strip-types is not enough):
 //
 //   node --import ./docs/missions/workflow/register.mjs --experimental-transform-types --no-warnings docs/missions/workflow/check-sample.mjs [folder]
 //
 // `folder` is a mission folder holding plan.md and REVIEW files; the default
 // is sample/ next to this file. Paths are resolved from this file, not from
-// the cwd. 'claude-code' (imported by read-state.ts) is answered by a stub in
-// resolve.mjs; it stands in only for engine calls that stateOf does not make.
+// the cwd.
 // Exit 0 when every check holds, 1 otherwise.
 import { readFileSync, readdirSync } from 'node:fs'
 import { dirname, join, resolve as resolvePath } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 
 const here = dirname(fileURLToPath(import.meta.url))
-const hooks = join(here, '..', '..', '..', 'hooks')
+const src = join(here, '..', '..', '..', 'src')
 const folder = resolvePath(process.argv[2] ?? join(here, 'sample'))
 
 let plan
 let state
 try {
-  plan = await import(pathToFileURL(join(hooks, 'plan.ts')).href)
-  state = await import(pathToFileURL(join(hooks, 'read-state.ts')).href)
+  plan = await import(pathToFileURL(join(src, 'plan.ts')).href)
+  state = await import(pathToFileURL(join(src, 'mission.ts')).href)
 } catch (error) {
-  console.error(`cannot load the hooks: ${error.message}`)
+  console.error(`cannot load src/: ${error.message}`)
   console.error('run it with the command at the top of this file (--import register.mjs, --experimental-transform-types)')
   process.exit(2)
 }
@@ -49,7 +48,7 @@ check('layersOf: o1 first, o2 after it, nothing stuck', shape === 'o1 > o2' && s
 
 check('isLight', plan.isLight(read.orders) === true, `${read.orders.length} orders`)
 
-const orders = read.orders.map(order => ({ id: order.id, state: state.stateOf(order.id, files, []) }))
+const orders = read.orders.map(order => ({ id: order.id, state: state.stateOf(order.id, files) }))
 for (const order of orders) check(`stateOf ${order.id} is reviewed`, order.state === 'reviewed', `${order.state}; REVIEW files: ${files.filter(file => file.startsWith(`REVIEW-${order.id}`)).join(', ') || 'none'}`)
 
 const step = plan.STEPS[plan.stepOf({ problems: read.problems, orders }, files)]?.label

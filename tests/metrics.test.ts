@@ -73,16 +73,12 @@ async function world(on: On, transcripts: Record<string, string>): Promise<World
   mock.clock(on)
   on('tool.register', (_, e) => ({ value: { tool: `mcp__troupe__${e.name}` } }))
   on('command.register', () => ({ value: { command: 'troupe' } }))
-  on('ui.open', () => ({ value: { isPlaced: true } }))
-  on('ui.close', () => ({ value: undefined }))
   on('ui.log', () => ({ value: undefined }))
   on('session.start', (_, e) => ({ cwd: e.cwd }))
   on('session.cwd', () => ({ value: ROOT }))
   on('session.root', () => ({ value: ROOT }))
   on('session.id', () => ({ value: 'S1' }))
   on('session.version', () => ({ value: { version: '2.1.308 (Claude Code)', base: '2.1.308', builtAt: '2026-10-20T00:00:00Z' } }))
-  on('session.usage', () => ({ deny: 'no usage here' }))
-  on('agent.list', () => ({ value: [] }))
   on('env.get', (_, e) => ({ value: e.name === 'HOME' ? '/home/t' : undefined }))
   on('fs.list', (_, e) => {
     const dir = `${local(e.path).replace(/\/+$/, '')}/`
