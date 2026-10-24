@@ -1,9 +1,0 @@
-{
-  "name": "troupe",
-  "version": "0.6.0",
-  "description": "Shows the mission in plan.md in a tmux panel split right of the session, asks to approve the plan in an Approve / Change dialog, and dispatches its orders as Claude role windows in a tmux session of their own, each in its own worktree and pinned to its role's model, effort and permission mode (a mission of one or two orders runs in light mode), and records a mission's cost and timing at teardown: troupe_dispatch, troupe_status, troupe_close, troupe_metrics. Needs tmux.",
-  "author": {
-    "name": "Tianqi Zhao"
-  },
-  "types": "./types/index.d.ts"
-}

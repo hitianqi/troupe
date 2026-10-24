@@ -12,8 +12,7 @@
   },
   "files": [
     "dist",
-    "skills",
-    "templates"
+    "skills"
   ],
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
