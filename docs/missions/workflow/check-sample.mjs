@@ -21,7 +21,7 @@ const folder = resolvePath(process.argv[2] ?? join(here, 'sample'))
 let plan
 let state
 try {
-  plan = await import(pathToFileURL(join(src, 'plan.ts')).href)
+  plan = await import(pathToFileURL(join(src, 'old-plan.ts')).href)
   state = await import(pathToFileURL(join(src, 'mission.ts')).href)
 } catch (error) {
   console.error(`cannot load src/: ${error.message}`)

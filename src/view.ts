@@ -1,5 +1,5 @@
 import type { TroupeMission, TroupeOrder, TroupeOrderState, TroupeRole } from '../types'
-import { EFFORTS, isLight, layersOf, STEPS, stepsOf } from './plan.ts'
+import { EFFORTS, isLight, layersOf, STEPS, stepsOf } from './old-plan.ts'
 
 // The view as lines of styled runs, in the OpenRig TUI's conventions: the
 // header, compact ROLES and ORDERS, and the detail-view DETAIL sections.

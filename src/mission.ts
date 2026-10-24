@@ -1,6 +1,6 @@
 import type { TroupeApproval, TroupeMission, TroupeOrderState } from '../types'
-import { stepOf } from './plan.ts'
-import type { PlanRead } from './plan.ts'
+import { stepOf } from './old-plan.ts'
+import type { PlanRead } from './old-plan.ts'
 
 // The mission as drawn, from plan.md, the mission folder's files and what git
 // knows (the order branches and the orders merged onto the mission branch).

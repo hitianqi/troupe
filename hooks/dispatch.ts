@@ -6,8 +6,8 @@ import { approvalOf } from './approval.ts'
 import { baseOf, doneMarker, gitFacts, isReviewOf, missionBranchOf } from '../src/mission.ts'
 import { ownPaneOf, tmux } from './panel.ts'
 import { ownTranscript } from './metrics.ts'
-import { isLight, layersOf, readPlan } from '../src/plan.ts'
-import type { PlanOrder, PlanRead } from '../src/plan.ts'
+import { isLight, layersOf, readPlan } from '../src/old-plan.ts'
+import type { PlanOrder, PlanRead } from '../src/old-plan.ts'
 
 // troupe_dispatch, troupe_status and troupe_close: one Claude window per
 // order or review, in a tmux session of its own (`troupe-<mission>`) on the

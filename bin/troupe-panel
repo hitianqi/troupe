@@ -21,7 +21,7 @@ import { resolve } from 'node:path'
 const src = new URL('../src/', import.meta.url)
 let shared
 try {
-  shared = await Promise.all(['plan.ts', 'mission.ts', 'ansi.ts'].map(file => import(new URL(file, src).href)))
+  shared = await Promise.all(['old-plan.ts', 'mission.ts', 'ansi.ts'].map(file => import(new URL(file, src).href)))
 } catch (error) {
   console.error(`troupe-panel: cannot load src/ (${error.message}); it needs Node 22.18 or later, this is ${process.version}`)
   process.exit(1)
