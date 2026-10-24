@@ -171,9 +171,10 @@ holds the built-ins in the same shape.
   English; a screen troupe does not recognise is `unknown` and is never
   typed into. Context use is on neither harness's default screen, so the
   panel shows `—`.
-- A command killed with SIGKILL can leave
-  `<git-common-dir>/troupe/<mission>/command.lock`; remove it once no troupe
-  command runs.
+- A command killed with SIGKILL leaves
+  `<git-common-dir>/troupe/<mission>/command.lock`; the next command sees
+  that its recorded pid has exited, clears it and says so. A lock with no
+  readable pid still needs a hand removal, once no troupe command runs.
 
 ## Development
 
