@@ -6,6 +6,7 @@ import { sectionsOf } from './plan.ts'
 import type { Plan, Role } from './plan.ts'
 import type { Stage } from './stages.ts'
 import type { Result, RoleState, Work } from './state.ts'
+import type { Tokens } from './usage.ts'
 
 // What the panel draws, built from the files: the plan, the folded log, the
 // workflow's stages and what was read live for each role. Pure: the panel
@@ -18,6 +19,7 @@ export type Live = {
   waitsOn?: string
   /** Context use where the adapter can read it, else absent. */
   context?: string
+  tokens?: Tokens
   work?: Work
   result?: Result
   /** The last lines of its pane. */

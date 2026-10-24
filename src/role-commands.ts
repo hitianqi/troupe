@@ -12,6 +12,7 @@ import { createPane, ownedPane, rolesWindow } from './panes.ts'
 import type { Role } from './plan.ts'
 import { readResult, RESULT_FILE, roleState, waitingOn, workOf } from './state.ts'
 import { tmux } from './run.ts'
+import { tokensOf } from './usage.ts'
 
 export const briefOf = (m: Mission, role: Role, worktree: string, branch: string): string => [
   `# ${m.name}: ${role.name}`, '',
@@ -53,23 +54,24 @@ export const liveOf = (r: Runtime, m: Mission, role: Role): Live & { problem?: s
   const lines = (pane?.screen ?? '').split(/\r?\n/)
   while (lines.at(-1)?.trim() === '') lines.pop()
   const waitsOn = pane === undefined || agent === undefined ? undefined : waitsOnOf(agent, pane.screen)
+  const tokens = opened?.worktree && agent?.usage ? tokensOf(agent.usage, opened.worktree, opened.at, r.home) : undefined
 
   return {
     state: roleState({ opened: opened !== undefined, closed: opened?.closed, result, pane, screen }),
-    work, result, screen: lines.slice(-20), waitsOn, ...(problem ? { problem } : {}),
+    work, result, screen: lines.slice(-20), waitsOn, ...(problem ? { problem } : {}), ...(tokens === undefined ? {} : { tokens }),
   }
 }
 
 export const statusOf = (r: Runtime, m: Mission) => {
   const roles = m.plan.roles.map(role => {
     const opened = m.folded.roles.get(role.name)
-    const { state, work, result, problem } = liveOf(r, m, role)
+    const { state, work, result, problem, tokens } = liveOf(r, m, role)
 
     return {
       name: role.name, agent: opened?.agent ?? role.agent, state,
       branch: opened?.branch ?? '', pane: opened?.pane ?? '', worktree: opened?.worktree ?? '',
       commits: work?.commits ?? [], changed: work?.changed ?? [], outside: work?.outside ?? [],
-      summary: result?.summary ?? '', ...(result?.problem ? { resultProblem: result.problem } : {}), ...(problem ? { problem } : {}),
+      summary: result?.summary ?? '', ...(result?.problem ? { resultProblem: result.problem } : {}), ...(problem ? { problem } : {}), ...(tokens === undefined ? {} : { tokens }),
     }
   })
 
