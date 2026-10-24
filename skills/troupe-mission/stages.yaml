@@ -1,0 +1,22 @@
+# The stages the panel draws for this workflow, in order. The orchestrator
+# moves the stage (`troupe stage <id>`) and opens gates (`troupe gate <id>
+# "<question>"`). `gate: plan` is the plan gate: every workflow has it, first,
+# because dispatch waits for it. A stage whose id is a role group (build,
+# review) shows how many of that group's roles are done.
+stages:
+  - id: plan
+    label: Plan
+  - id: plan-ok
+    label: "Plan OK?"
+    gate: plan
+  - id: build
+    label: Build
+  - id: review
+    label: Review
+  - id: mr-ok
+    label: "MR OK?"
+    gate: mr-ok
+  - id: mr
+    label: Open MR
+  - id: done
+    label: Done
