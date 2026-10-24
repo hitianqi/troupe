@@ -24,8 +24,6 @@ export type Live = {
   result?: Result
   /** The last lines of its pane. */
   screen?: string[]
-  /** Token use from the agent's transcript: context `used` of `window`, session `input` and `output`. */
-  tokens?: { used: number; window?: number; input: number; output: number }
 }
 export type RoleView = Role & Live & { branch: string; screen: string[]; badge?: Badge; dispatchedAt?: string; elapsed?: string }
 export type StageMark = 'done' | 'now' | 'open' | 'gate' | 'todo'
