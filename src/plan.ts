@@ -1,7 +1,10 @@
 import { AGENTS, unsetPermission } from './agents.ts'
 import type { Agent } from './agents.ts'
+import { overlaps } from './touches.ts'
 import { parseYaml } from './yaml.ts'
 import type { Yaml } from './yaml.ts'
+
+export { overlaps } from './touches.ts'
 
 // plan.md, read and checked: Markdown around one ```yaml block that holds the
 // mission's one-line facts and its roles; each role's text is a
@@ -159,24 +162,6 @@ export const readPlan = (source: string, agents: Record<string, Agent> = AGENTS)
     roles,
     problems: [...problems, ...checkRoles(roles, agents, Object.keys(data.roles))],
   }
-}
-
-/** A touches entry as the literal path it covers, and whether it covers a whole directory. */
-const scope = (path: string): [string, boolean] => {
-  const clean = path.trim().replace(/^[./]+/, '')
-  const glob = /[*?[]/.exec(clean)
-  if (glob === null) return [clean, clean.endsWith('/')]
-  const literal = clean.slice(0, glob.index)
-
-  return [literal.includes('/') ? `${literal.slice(0, literal.lastIndexOf('/'))}/` : '', true]
-}
-
-/** Whether two touches entries can name the same file. */
-export const overlaps = (a: string, b: string): boolean => {
-  const [pa, da] = scope(a)
-  const [pb, db] = scope(b)
-
-  return pa === pb || (da && pb.startsWith(pa)) || (db && pa.startsWith(pb))
 }
 
 /** The rules that keep work correct: names, agents and their pinned permission, role text, dependencies, no overlap without an order. */

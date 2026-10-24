@@ -1,5 +1,5 @@
 import type { TroupeOrderState } from '../types'
-import { overlaps } from './plan.ts'
+import { overlaps } from './touches.ts'
 import { parseYaml } from './yaml.ts'
 import type { Yaml } from './yaml.ts'
 
