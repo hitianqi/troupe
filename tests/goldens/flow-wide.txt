@@ -1,0 +1,50 @@
+ troupe  auth-refresh  ·  Build                                                                                                                 12:07
+  1 MISSION   2 ROLES   3 PLAN   4 LOG   5 DIFF
+                                                                                      Refresh tokens rotate on every use, and a reused one is refused
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+─ ROLES ────────────────── │ ─ FLOW ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ build                     │ ┌────────────────────────┐
+    ✓ lock   ⬢ codex    —  │ │ ● orchestrator         │
+▸ └ ○ build  ⬢ codex    —  │ └────────────────────────┘
+    ○ review ✻ claude   —  │              │
+                           │              │
+─ STAGES ───────────────── │              ▼
+  ✓ Plan                   │ ┌────────────────────────┐                                                                     ┌────────────────────────┐
+  ✓ Plan OK?        10:42  │ │ ✓ lock            done │────────────────────────────────────────────────────────────────────▶│ ○ review       planned │
+  ● Build             0/3  │ │ ⬢ codex gpt-6.1-sol    │                                                                     │ ✻ claude opus          │
+  ○ Review            0/1  │ │ ▰▰▰▱▱                  │                                                                     │ ▰▰▰▱▱                  │
+  ◇ MR OK?                 │ └────────────────────────┘                                                                     │                        │
+  ○ Open MR                │              │                                                                                 │                        │
+  ○ Teardown               │              │                                                                                 │                        │
+                           │              ▼                                                                                 │                        │
+─ ACTIVITY ─────────────── │ ╔════════════════════════╗                                                                     │                        │
+ 12:07 dispatched store    │ ║ ○ build        planned ║────────────────────────────────────────────────────────────────────▶│                        │
+ 12:07 dispatched api      │ ║ ⬢ codex gpt-6.1-sol    ║                                                                     │                        │
+ 10:42 stage: build        │ ║ ▰▰▰▱▱                  ║                                                                     │                        │
+ 10:42 plan approved       │ ╚════════════════════════╝                                                                     └────────────────────────┘
+ 10:41 plan gate opened    │
+                           │ ─ ○ build · planned ─────────────────────────────────────────────────────────────────────────────────────────────────────
+                           │  goal     Rotate the token on refresh; refuse a reused one with 401 reuse
+                           │  agent    ⬢ codex gpt-6.1-sol ▰▰▰▱▱
+                           │           -a on-request -s workspace-write
+                           │  branch   role/demo/build
+                           │  touches  src/build.ts
+                           │
+                           │  not opened yet · after lock
+                           │  o Open window    s Send…    d Diff
+                           │
+                           │
+                           │
+                           │
+                           │
+                           │
+                           │
+                           │
+                           │
+                           │
+                           │
+                           │
+                           │
+
+ ↑↓  role   ⏎  detail   o  open   s  send   d  diff   1-5  tabs   ?  help

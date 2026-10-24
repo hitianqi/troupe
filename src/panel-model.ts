@@ -17,7 +17,7 @@ export const readPanel = (r: Runtime, want: string): Reading => {
     const plan = { ...m.plan, problems: [...m.problems, ...stages.problems] }
     const model = modelOf({
       mission: m.name, planPath: relative(m.root, m.path), planText: m.source, plan,
-      hash: m.hash, folded: m.folded, log: m.events, stages: stages.stages,
+      agents: m.agents, hash: m.hash, folded: m.folded, log: m.events, stages: stages.stages,
       live: new Map(m.plan.roles.map(role => [role.name, liveOf(r, m, role)])), now: new Date(r.now()),
     })
 

@@ -1,12 +1,28 @@
 import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
+import { TONES } from './canvas.ts'
+import type { Tone } from './canvas.ts'
 import type { Role } from './plan.ts'
 import { parseYaml } from './yaml.ts'
 import type { Yaml } from './yaml.ts'
 
 export type Screen = 'waits' | 'working' | 'ready' | 'unknown'
+export type Badge = { glyph: string; tone: Tone }
+
+/** Badges occupy exactly one cell: exclude controls, combining, wide and emoji glyphs. */
+export const validBadgeGlyph = (glyph: string): boolean => {
+  const point = glyph.codePointAt(0) ?? 0
+
+  return [...glyph].length === 1 && !/[\s\p{M}\p{C}\p{Emoji_Presentation}]/u.test(glyph) &&
+    !(point >= 0x1100 && (point <= 0x115f || point === 0x2329 || point === 0x232a ||
+      point >= 0x2e80 && point <= 0xa4cf || point >= 0xac00 && point <= 0xd7a3 ||
+      point >= 0xf900 && point <= 0xfaff || point >= 0xfe10 && point <= 0xfe6f ||
+      point >= 0xff01 && point <= 0xff60 || point >= 0xffe0 && point <= 0xffe6 || point >= 0x16fe0 && point <= 0x1b2ff || point >= 0x20000))
+}
+
 export type Agent = {
+  badge?: Badge
   command: string
   model: string[]
   effort: string[]
@@ -19,6 +35,7 @@ export type Agent = {
 
 export const AGENTS: Record<string, Agent> = Object.assign(Object.create(null) as Record<string, Agent>, {
   claude: {
+    badge: { glyph: '✻', tone: 'coral' },
     command: 'claude',
     model: ['--model', '{model}'],
     effort: ['--effort', '{effort}'],
@@ -32,6 +49,7 @@ export const AGENTS: Record<string, Agent> = Object.assign(Object.create(null) a
     paste: 'bracketed',
   },
   codex: {
+    badge: { glyph: '⬢', tone: 'cyan' },
     command: 'codex',
     model: ['-m', '{model}'],
     effort: ['-c', 'model_reasoning_effort="{effort}"'],
@@ -48,6 +66,9 @@ export const AGENTS: Record<string, Agent> = Object.assign(Object.create(null) a
     paste: 'bracketed',
   },
 } satisfies Record<string, Agent>)
+
+export const badgeOf = (name: string, agent: Agent | undefined = AGENTS[name]): Badge =>
+  agent?.badge ?? { glyph: validBadgeGlyph([...name][0] ?? '') ? [...name][0] ?? '?' : '?', tone: 'dim' }
 
 /** Whether `flags` hold `flag`, alone or as `flag=value`. */
 const sets = (flags: string[], flag: string): boolean => flags.some(one => one === flag || one.startsWith(`${flag}=`))
@@ -80,7 +101,7 @@ export const screenOf = (agent: Agent, captured: string): Screen => {
 
 type Map = { [key: string]: Yaml }
 const isMap = (value: Yaml | undefined): value is Map => typeof value === 'object' && value !== null && !Array.isArray(value)
-const KEYS = ['command', 'model', 'effort', 'permission', 'prompt', 'screen', 'paste']
+const KEYS = ['command', 'model', 'effort', 'permission', 'prompt', 'screen', 'paste', 'badge']
 const STATES = ['waits', 'working', 'ready'] as const
 
 const lineOf = (source: string, field: string): number => {
@@ -136,7 +157,16 @@ const readAgent = (source: string): Agent => {
     }
   }
 
-  return { command: data.command, model, effort, permission, prompt: data.prompt, screen, paste: data.paste }
+  let badge: Badge | undefined
+  if (data.badge !== undefined) {
+    if (!isMap(data.badge)) return fail('badge', 'must be a mapping')
+    for (const key of Object.keys(data.badge)) if (!['glyph', 'tone'].includes(key)) fail(`badge.${key}`, 'is not a badge field')
+    if (typeof data.badge.glyph !== 'string' || !validBadgeGlyph(data.badge.glyph)) return fail('badge.glyph', 'must be one visible terminal cell')
+    if (typeof data.badge.tone !== 'string' || !Object.hasOwn(TONES, data.badge.tone)) return fail('badge.tone', `must be one of ${Object.keys(TONES).join(', ')}`)
+    badge = { glyph: data.badge.glyph, tone: data.badge.tone as Tone }
+  }
+
+  return { command: data.command, model, effort, permission, prompt: data.prompt, screen, paste: data.paste, ...(badge && { badge }) }
 }
 
 /** Files replace an adapter in full: built-ins, then home, then repository. Problems must be resolved before use. */

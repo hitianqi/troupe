@@ -9,17 +9,17 @@
 │            · A reused token revokes every token of its family                                │
 │            · The web app signs out on 401 reuse, and nowhere else                            │
 │                                                                                              │
-│ ROLE    AGENT   MODEL        EFFORT  FLAGS                                                   │
-│ api     codex   gpt-6.1-sol  high    -a on-request -s workspace-write                        │
+│ ROLE    AGENT    MODEL        EFFORT  FLAGS                                                  │
+│ api     ⬢ codex  gpt-6.1-sol  ▰▰▰▱▱   -a on-request -s workspace-write                       │
 │         ↳ Rotate the token on refresh; refuse a reused one with 401 reuse   · starts at once │
 │           touches src/api/refresh.ts src/api/errors.ts                                       │
-│ store   claude  opus         high    --permission-mode acceptEdits                           │
+│ store   ✻ claude opus         ▰▰▰▱▱   --permission-mode acceptEdits                          │
 │         ↳ Keep a token family and a used flag per token                     · starts at once │
 │           touches src/store/ migrations/                                                     │
-│ web     claude  sonnet       medium  --permission-mode acceptEdits                           │
+│ web     ✻ claude sonnet       ▰▰▱▱▱   --permission-mode acceptEdits                          │
 │         ↳ Sign the user out when a refresh is refused                            · after api │
 │           touches web/src/session/                                                           │
-│ review  claude  sonnet       high    --permission-mode acceptEdits                           │
+│ review  ✻ claude sonnet       ▰▰▰▱▱   --permission-mode acceptEdits                          │
 │         ↳ Review each branch as it lands                                     · as each lands │
 │           touches — changes nothing                                                          │
 │                                                                                              │
@@ -32,27 +32,27 @@
 
 ─ ROLES ────────────────── │ ─ FLOW ────────────────────────────────────────────────────────────
  build                     │ ┌────────────────────────┐
-▸   ○ api     codex     —  │ │ ● orchestrator         │
-    ○ store   claude    —  │ └────────────────────────┘
-  └ ○ web     claude    —  │              │
- review                    │              ├───────────────────────────────┐
-    ○ review  claude    —  │              ▼                               ▼
-                           │ ╔════════════════════════╗      ┌────────────────────────┐
-─ STAGES ───────────────── │ ║ ○ api          planned ║      │ ○ store        planned │
-  ✓ Plan                   │ ║ codex gpt-6.1-sol    — ║      │ claude opus          — │
-  ◆ Plan OK?               │ ╚════════════════════════╝      └────────────────────────┘
-  ○ Build             0/3  │              │
-  ○ Review            0/1  │              │
-  ◇ MR OK?                 │              ▼
-  ○ Open MR                │ ┌────────────────────────┐
-  ○ Done                   │ │ ○ web          planned │
-                           │ │ claude sonnet        — │
-─ ACTIVITY ─────────────── │ └────────────────────────┘
- 10:41 plan gate opened    │              │
-                           │              │
-                           │              ▼
-                           │ ┌────────────────────────┐
-                           │ │ ○ review       planned │
-                           │ │ claude sonnet        — │
+▸   ○ api    ⬢ codex    —  │ │ ● orchestrator         │
+    ○ store  ✻ claude   —  │ └────────────────────────┘
+  └ ○ web    ✻ claude   —  │              ├─────────────────┐
+ review                    │              │                 │
+    ○ review ✻ claude   —  │              ▼                 │
+                           │ ╔════════════════════════╗     │         ┌────────────────────────┐
+─ STAGES ───────────────── │ ║ ○ api          planned ║──────────────▶│ ○ review       planned │
+  ✓ Plan                   │ ║ ⬢ codex gpt-6.1-sol    ║     │         │ ✻ claude sonnet        │
+  ◆ Plan OK?               │ ║ ▰▰▰▱▱                  ║     │         │ ▰▰▰▱▱                  │
+  ○ Build             0/3  │ ╚════════════════════════╝     │         │                        │
+  ○ Review            0/1  │              └─────────────────┼┐        │                        │
+  ◇ MR OK?                 │              ┌─────────────────┘│        │                        │
+  ○ Open MR                │              ▼                  │        │                        │
+  ○ Teardown               │ ┌────────────────────────┐      │        │                        │
+                           │ │ ○ store        planned │──────────────▶│                        │
+─ ACTIVITY ─────────────── │ │ ✻ claude opus          │      │        │                        │
+ 10:41 plan gate opened    │ │ ▰▰▰▱▱                  │      │        │                        │
+                           │ └────────────────────────┘      │        │                        │
+                           │                                 │        │                        │
+                           │              ┌──────────────────┘        │                        │
+                           │              ▼                           │                        │
+                           │ ┌────────────────────────┐               │                        │
 
  a  approve   c  change   v  plan   ↑↓  role   1-5  tabs   ?  help
