@@ -292,12 +292,12 @@ test('setup updates marked copies and removes only its own skill directories', a
   assert.equal((await w.call('setup')).code, 1)
 })
 
-test('up uses a new mission window, plain orchestrator and half-width status pane, then attaches outside tmux', async t => {
+test('up uses a new mission window, plain orchestrator and half-width panel, then attaches outside tmux', async t => {
   const w = world(t)
   const result = await w.call('up', '--orch', 'codex')
   assert.equal(result.code, 0, result.out)
   assert.ok(w.calls.some(c => c.args.includes('new-session') && c.args.at(-1) === "'codex'"))
-  assert.ok(w.calls.some(c => c.args.includes('split-window') && c.args.includes('-h') && c.args.includes('50') && c.args.at(-1).includes("'status' '--watch'")))
+  assert.ok(w.calls.some(c => c.args.includes('split-window') && c.args.includes('-h') && c.args.includes('50') && c.args.at(-1).includes("'panel'")))
   assert.ok(w.calls.some(c => c.args.includes('attach-session') && c.inherit))
   assert.equal(w.events().at(-1).ev, 'up')
   assert.equal((await execute('up', [], { ...w.r, env: { ...w.r.env, TMUX: 'unit', TMUX_PANE: '%1' } })).code, 0)

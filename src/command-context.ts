@@ -7,12 +7,13 @@ import { loadAgents } from './agents.ts'
 import type { Agent } from './agents.ts'
 import { findPlan, rootOf, textProblems } from './check.ts'
 import { fold, logPath, readLog } from './log.ts'
-import type { Folded } from './log.ts'
+import type { Folded, Logged } from './log.ts'
 import { readPlan } from './plan.ts'
 import type { Plan } from './plan.ts'
 import { run, tmux } from './run.ts'
 import type { Ran, Run, RunOptions } from './run.ts'
 import { planHash } from './state.ts'
+import { DEFAULT_STAGES, readStages } from './stages.ts'
 
 export type Reply = { out: string; code: number }
 export class Refusal extends Error {}
@@ -94,6 +95,12 @@ export const workflowDirs = (r: Runtime, name: string): string[] => {
   return [join(r.home, '.claude/skills', name), join(r.home, '.agents/skills', name), join(r.packageRoot, 'skills', name)]
 }
 
+export const workflowStages = (r: Runtime, name: string) => {
+  const path = workflowDirs(r, name).map(dir => join(dir, 'stages.yaml')).find(path => existsSync(path))
+
+  return path === undefined ? { stages: DEFAULT_STAGES, problems: [] } : readStages(readFileSync(path, 'utf8'))
+}
+
 export const roleText = (r: Runtime, root: string, workflow: string, ref: string): { ref: string; bytes: string | undefined } => {
   if (ref === '') return { ref, bytes: undefined }
   let path: string
@@ -107,7 +114,7 @@ export const roleText = (r: Runtime, root: string, workflow: string, ref: string
   return { ref, bytes: existsSync(path) ? readFileSync(path, 'utf8') : undefined }
 }
 
-export type Mission = Repository & { name: string; path: string; plan: Plan; agents: Record<string, Agent>; problems: string[]; hash: string; log: string; folded: Folded; texts: Map<string, string> }
+export type Mission = Repository & { name: string; path: string; source: string; plan: Plan; agents: Record<string, Agent>; problems: string[]; hash: string; log: string; events: Logged[]; folded: Folded; texts: Map<string, string> }
 export const mission = (r: Runtime, want = ''): Mission => {
   if (want !== '' && !NAME.test(want)) throw new Usage('mission must be a folder name under docs/missions')
   const repo = repository(r)
@@ -137,7 +144,7 @@ export const mission = (r: Runtime, want = ''): Mission => {
   const read = readLog(log)
   if (read.unread > 0) problems.push(`${log}: ${read.unread} unread log line(s)`)
 
-  return { ...repo, name, path: found.path, plan, agents: loaded.agents, problems, hash: planHash(source, refs), log, folded: fold(read.events), texts }
+  return { ...repo, name, path: found.path, source: source.toString('utf8'), plan, agents: loaded.agents, problems, hash: planHash(source, refs), log, events: read.events, folded: fold(read.events), texts }
 }
 
 export const clean = (m: Mission): void => {

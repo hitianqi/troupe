@@ -11,10 +11,10 @@ import type { RoleState } from './state.ts'
 // last. Every clickable part is also a target, so a click finds what it hit.
 
 export const TABS = ['MISSION', 'ROLES', 'PLAN', 'LOG', 'DIFF'] as const
-export type Ui = { tab: number; selected: string; input?: { label: string; text: string }; scroll?: number }
-export type Target = { kind: 'role'; name: string } | { kind: 'tab'; tab: number } | { kind: 'key'; key: string }
+export type Ui = { tab: number; selected: string; input?: { label: string; text: string }; scroll?: number; message?: string; help?: boolean }
+export type Target = { kind: 'role'; name: string } | { kind: 'tab'; tab: number } | { kind: 'key'; key: string; role?: string }
 export type Hit = { row: number; col: number; width: number; height: number; target: Target }
-export type Drawn = { lines: Line[]; hits: Hit[] }
+export type Drawn = { lines: Line[]; hits: Hit[]; maxScroll: number }
 
 const LEFT = 27
 const BOX = 26
@@ -257,6 +257,7 @@ export const draw = (m: PanelModel, ui: Ui, width: number, height: number): Draw
   for (const role of waiting) {
     c.put(row, 0, spread(`▌ ◆ ${fit(role.name, 7)}waits on you${role.waitsOn ? ` · ${role.waitsOn}` : ''}`, 'o Open window', width - 1), { tone: 'warn' })
     hit(row, 0, width, 1, { kind: 'role', name: role.name })
+    hit(row, width - 14, 13, 1, { kind: 'key', key: 'o', role: role.name })
     row += 1
   }
   row += 1
@@ -264,13 +265,27 @@ export const draw = (m: PanelModel, ui: Ui, width: number, height: number): Draw
   // The key bar and the input line keep the bottom.
   const bottom = height - (ui.input === undefined ? 2 : 3)
   if (ui.input !== undefined) c.runs(height - 2, 0, [{ text: ` ${ui.input.label} › `, tone: 'accent' }, { text: ui.input.text }, { text: '▏', tone: 'accent' }])
+  else if (ui.message) c.put(height - 2, 0, fit(` ${ui.message}`, width), { tone: 'accent' })
+  if (ui.input !== undefined && ui.message) c.put(height - 3, 0, fit(` ${ui.message}`, width), { tone: 'accent' })
   const keys = m.gate !== undefined ? ' a  approve   c  change   v  plan   ↑↓  role   1-5  tabs   ?  help' : ' ↑↓  role   ⏎  detail   o  open   s  send   d  diff   1-5  tabs   ?  help'
   c.put(height - 1, 0, fit(keys, width), { tone: 'dim' })
 
+  let maxScroll = 0
   if (ui.tab === 1) mission(c, m, ui, row, bottom, hit)
-  else other(c, m, ui, row, bottom)
+  else maxScroll = other(c, m, ui, row, bottom, hit)
+  if (ui.help) {
+    const lines = ['↑↓ / j k  select role     Enter  detail', '1-5 / Tab  tabs           o  open role pane', 's  send to role           d  diff    v  plan', 'PgUp/PgDn / wheel  scroll tabs 2-5', 'a  approve gate           c  type a change', 'Enter  submit input       Esc  cancel input', '? / Esc  close help       q / Ctrl-C  quit']
+    const w = Math.min(60, width - 4)
+    const h = Math.min(lines.length + 2, height - 2)
+    const top = Math.max(0, Math.floor((height - h) / 2))
+    const left = Math.max(0, Math.floor((width - w) / 2))
+    for (let r = top; r < top + h; r++) c.put(r, left, ' '.repeat(w))
+    c.box(top, left, w, h, 'accent')
+    lines.slice(0, h - 2).forEach((line, index) => c.put(top + 1 + index, left + 2, fit(line, w - 4)))
+    hits.length = 0
+  }
 
-  return { lines: c.lines(), hits }
+  return { lines: c.lines(), hits, maxScroll }
 }
 
 /** The MISSION tab: the left column, then FLOW and the detail on the right. */
@@ -327,7 +342,7 @@ const mission = (c: Canvas, m: PanelModel, ui: Ui, top: number, bottom: number, 
 }
 
 /** ROLES, PLAN, LOG and DIFF use the whole width. */
-const other = (c: Canvas, m: PanelModel, ui: Ui, top: number, bottom: number) => {
+const other = (c: Canvas, m: PanelModel, ui: Ui, top: number, bottom: number, hit: (row: number, col: number, w: number, h: number, target: Target) => void): number => {
   const lines: Line[] = []
   const width = c.width - 2
   if (ui.tab === 2) {
@@ -365,6 +380,16 @@ const other = (c: Canvas, m: PanelModel, ui: Ui, top: number, bottom: number) =>
       if (work.changed.length === 0) lines.push([{ text: 'no files changed', tone: 'dim' }])
     }
   }
-  const from = Math.max(0, Math.min(ui.scroll ?? 0, lines.length - 1))
-  lines.slice(from, from + bottom - top).forEach((line, index) => c.runs(top + index, 1, line))
+  const room = Math.max(0, bottom - top)
+  const maxScroll = Math.max(0, lines.length - room)
+  const from = Math.max(0, Math.min(ui.scroll ?? 0, maxScroll))
+  lines.slice(from, from + room).forEach((line, index) => {
+    c.runs(top + index, 1, line)
+    if (ui.tab === 2 && from + index > 0 && (from + index) % 2 === 1) {
+      const role = m.roles[Math.floor((from + index - 1) / 2)]
+      if (role !== undefined) hit(top + index, 1, width, 1, { kind: 'role', name: role.name })
+    }
+  })
+
+  return maxScroll
 }

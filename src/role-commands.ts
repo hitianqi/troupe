@@ -6,6 +6,7 @@ import { argvOf, screenOf } from './agents.ts'
 import { clean, git, locked, mission, mux, Refusal, within } from './command-context.ts'
 import type { Mission, Reply, Runtime } from './command-context.ts'
 import { append, isApproved } from './log.ts'
+import type { Live } from './model.ts'
 import { createPane, ownedPane, rolesWindow } from './panes.ts'
 import type { Role } from './plan.ts'
 import { readResult, RESULT_FILE, roleState, waitingOn, workOf } from './state.ts'
@@ -27,28 +28,41 @@ export const briefOf = (m: Mission, role: Role, worktree: string, branch: string
   'Use status: done, blocked or failed. Then stop. The result file is ignored by git; do not commit it.', '',
 ].join('\n')
 
+export const liveOf = (r: Runtime, m: Mission, role: Role): Live & { problem?: string } => {
+  const opened = m.folded.roles.get(role.name)
+  const pane = opened === undefined ? undefined : ownedPane(r, opened)
+  const agent = m.agents[opened?.agent ?? role.agent]
+  const screen = pane !== undefined && agent !== undefined ? screenOf(agent, pane.screen) : 'unknown'
+  let result: ReturnType<typeof readResult>
+  let work: ReturnType<typeof workOf> | undefined
+  let problem = ''
+  if (opened !== undefined) {
+    try {
+      result = readResult(opened.worktree)
+      work = workOf(opened.worktree, opened.base, role.touches, r.run)
+    } catch (error) {
+      problem = (error as Error).message
+    }
+  }
+  if (pane?.foreign) problem = 'recorded pane ownership cannot be verified'
+  const lines = (pane?.screen ?? '').split(/\r?\n/)
+  while (lines.at(-1)?.trim() === '') lines.pop()
+  const waitsOn = pane === undefined || agent === undefined ? undefined : pane.screen.split(/\r?\n/)
+    .filter(line => line.trim() !== '').slice(-15).find(line => agent.screen.waits.some(pattern => new RegExp(pattern, 'm').test(line)))?.trim()
+
+  return {
+    state: roleState({ opened: opened !== undefined, closed: opened?.closed, result, pane, screen }),
+    work, result, screen: lines.slice(-20), waitsOn, ...(problem ? { problem } : {}),
+  }
+}
+
 export const statusOf = (r: Runtime, m: Mission) => {
   const roles = m.plan.roles.map(role => {
     const opened = m.folded.roles.get(role.name)
-    const pane = opened === undefined ? undefined : ownedPane(r, opened)
-    const agent = m.agents[opened?.agent ?? role.agent]
-    const screen = pane !== undefined && agent !== undefined ? screenOf(agent, pane.screen) : 'unknown'
-    let result: ReturnType<typeof readResult>
-    let work: ReturnType<typeof workOf> | undefined
-    let problem = ''
-    if (opened !== undefined) {
-      try {
-        result = readResult(opened.worktree)
-        work = workOf(opened.worktree, opened.base, role.touches, r.run)
-      } catch (error) {
-        problem = (error as Error).message
-      }
-    }
-    if (pane?.foreign) problem = 'recorded pane ownership cannot be verified'
+    const { state, work, result, problem } = liveOf(r, m, role)
 
     return {
-      name: role.name, agent: opened?.agent ?? role.agent,
-      state: roleState({ opened: opened !== undefined, closed: opened?.closed, result, pane, screen }),
+      name: role.name, agent: opened?.agent ?? role.agent, state,
       branch: opened?.branch ?? '', pane: opened?.pane ?? '', worktree: opened?.worktree ?? '',
       commits: work?.commits ?? [], changed: work?.changed ?? [], outside: work?.outside ?? [],
       summary: result?.summary ?? '', ...(result?.problem ? { resultProblem: result.problem } : {}), ...(problem ? { problem } : {}),
