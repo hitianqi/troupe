@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { execFileSync } from 'node:child_process'
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { test } from 'node:test'
@@ -206,12 +206,17 @@ test('send refuses waits, working, unknown, drafts and foreign panes and recheck
   assert.match((await w.call('send', 'api', 'hello')).out, /not opened by troupe/)
   p.owner = owner
   p.screen = 'READY'
+  const result = join(w.events().find(e => e.ev === 'dispatch').worktree, '.troupe/result.md')
+  w.write(result, '---\nstatus: done\n---\n')
   w.afterLoad(() => { p.screen = 'WAIT' })
   assert.equal((await w.call('send', 'api', 'hello')).code, 1)
   assert.ok(!w.calls.some(c => c.args.includes('paste-buffer') || c.args.includes('send-keys')))
+  assert.ok(existsSync(result), 'a refused send keeps the result')
   w.afterLoad(undefined)
   p.screen = 'READY'
   assert.equal((await execute('send', ['api'], { ...w.r, inputTTY: false })).code, 0)
+  assert.ok(!existsSync(result), 'new work puts the old result aside')
+  assert.ok(readdirSync(join(w.root, '.git/troupe/m1')).some(file => /^result-api-.+\.md$/.test(file)))
   assert.ok(w.calls.some(c => c.args.includes('load-buffer') && c.input === 'stdin line\nsecond line'))
   assert.equal(w.events().at(-1).ev, 'send')
   assert.equal(w.events().at(-1).text, 'stdin line\nsecond line')
@@ -306,12 +311,12 @@ test('shellOf preserves every argv element without command substitution', () => 
   assert.deepEqual(JSON.parse(execFileSync('/bin/sh', ['-c', script], { encoding: 'utf8' })), words)
 })
 
-test('workflow text resolves installed skills, falls back to legacy references, and changes the approval hash', async t => {
+test('workflow text resolves the package and installed skills, and changes the approval hash', async t => {
   const w = world(t)
   w.write(join(w.root, 'docs/missions/m1/plan.md'), plan().replace('text: instructions.md', 'text: workflow:builder'))
-  w.write(join(w.pkg, 'skills/troupe-mission/references/builder.md'), 'Legacy builder rules')
+  w.write(join(w.pkg, 'skills/troupe-mission/roles/builder.md'), 'Package builder rules')
   assert.equal((await w.approve()).code, 0)
-  w.write(join(w.pkg, 'skills/troupe-mission/references/builder.md'), 'Changed legacy rules')
+  w.write(join(w.pkg, 'skills/troupe-mission/roles/builder.md'), 'Changed package rules')
   assert.match((await w.call('dispatch', 'api')).out, /not approved/)
   w.write(join(w.home, '.agents/skills/troupe-mission/SKILL.md'), 'Installed workflow')
   w.write(join(w.home, '.agents/skills/troupe-mission/roles/builder.md'), 'Installed builder rules')

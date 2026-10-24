@@ -24,7 +24,7 @@ test('the template is a clean plan', () => {
   assert.deepEqual(read.problems, [])
   assert.deepEqual(read.roles.map(role => role.name), ['api', 'web', 'review'])
   assert.equal(read.workflow, 'troupe-mission')
-  assert.equal(read.base, 'main')
+  assert.equal(read.base, 'mission/<mission>')
   assert.deepEqual(read.doneWhen.length, 2)
 })
 

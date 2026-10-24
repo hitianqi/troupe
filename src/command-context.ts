@@ -102,8 +102,6 @@ export const roleText = (r: Runtime, root: string, workflow: string, ref: string
     const dir = workflowDirs(r, workflow).find(dir => existsSync(join(dir, 'SKILL.md'))) ?? join(r.packageRoot, 'skills', workflow)
     const file = name.endsWith('.md') ? name : `${name}.md`
     path = within(dir, `roles/${file}`)
-    // The mod's skill uses references/ until the CLI skill rewrite in step 8.
-    if (!existsSync(path)) path = within(dir, `references/${file}`)
   } else path = within(root, ref)
 
   return { ref, bytes: existsSync(path) ? readFileSync(path, 'utf8') : undefined }
