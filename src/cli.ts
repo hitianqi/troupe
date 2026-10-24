@@ -11,6 +11,7 @@ const COMMANDS: [string, string][] = [
   ['approve', 'approve the plan (from a terminal only)'],
   ['dispatch', 'open a role in its own window, worktree and branch'],
   ['status', 'show each role\'s state'],
+  ['panel', 'open the live interactive mission panel'],
   ['send', 'type a message into a role\'s window when it is ready'],
   ['wait', 'wait for a role\'s result or a gate\'s answer'],
   ['stage', 'set the mission\'s current stage'],
@@ -31,6 +32,7 @@ const usage = () =>
     '  gate <id> ["question"] [--no-wait] · stage <id>',
     '  dispatch <role> · send <role> <text…> (or stdin)',
     '  status [--json] [--watch] · close <role> | --all',
+    '  panel [--once] [--plain] [--width N --height N]',
     '  wait (--role <r> | --gate <id>) [--timeout <seconds>]',
     '  -v, --version  print the version',
     '  -h, --help     print this help',
@@ -52,6 +54,7 @@ if (arg === '--version' || arg === '-v') {
   const cancel = () => stop.abort()
   process.once('SIGINT', cancel)
   process.once('SIGTERM', cancel)
+  process.once('SIGHUP', cancel)
   const { out, code } = await execute(arg, rest, {
     signal: stop.signal,
     ask: async question => {
@@ -65,6 +68,7 @@ if (arg === '--version' || arg === '-v') {
   })
   process.off('SIGINT', cancel)
   process.off('SIGTERM', cancel)
+  process.off('SIGHUP', cancel)
   if (code === 2) process.stderr.write(`troupe: ${out}\n${usage()}`)
   else process.stdout.write(out)
   process.exitCode = code

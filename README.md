@@ -59,9 +59,14 @@ documented below.
 - `up [--orch claude|codex]` opens an orchestrator and status pane, split
   half and half. Inside tmux it creates a mission window in the current
   session; outside it creates/reuses troupe's repo session and attaches.
-  It installs the selected harness's workflow if missing. The interactive
-  CLI panel and workflow skill rewrite are later steps; the right pane
-  currently runs `status --watch`.
+  It installs the selected harness's workflow if missing. The right pane
+  runs the interactive `panel`; the workflow skill rewrite is a later step.
+- `panel [--once] [--plain] [--width N --height N]` shows the live mission.
+  Use arrows or j/k to select a role, 1–5 or Tab for tabs, `o` to open its
+  pane, `s` to send, `a`/`c` to answer a gate, and `?` for help. Scroll tabs
+  with PgUp/PgDn or the wheel; `q` or Ctrl-C exits. `--once --plain` prints
+  one frame without terminal controls. Missing plans keep polling in the
+  interactive panel.
 - `check` validates the plan and user adapters. `approve` shows the plan's
   role settings and hash, then asks for approval; both stdin and stdout
   must be terminals.

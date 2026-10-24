@@ -3,19 +3,19 @@ import { basename, dirname, join } from 'node:path'
 import { parseArgs } from 'node:util'
 
 import { check, findPlan, rootOf } from './check.ts'
-import { clean, mission, mux, NAME, Refusal, repository, runtime, Usage, workflowDirs } from './command-context.ts'
+import { clean, mission, mux, NAME, Refusal, repository, runtime, Usage, workflowStages } from './command-context.ts'
 import type { Mission, Reply, Runtime } from './command-context.ts'
 import { append, fold, logPath, PLAN_GATE, readLog } from './log.ts'
 import { createPane, ownedPane } from './panes.ts'
 import { close, dispatch, send, statusOf } from './role-commands.ts'
 import { available, installSkill, setup, skillTarget } from './setup.ts'
-import { DEFAULT_STAGES, readStages } from './stages.ts'
 import { readResult } from './state.ts'
 import { tmux } from './run.ts'
+import { panel } from './panel.ts'
 
 const OPTIONS: Record<string, string[]> = {
   setup: ['remove'], up: ['orch'], check: [], approve: [], gate: ['no-wait'], stage: [],
-  dispatch: [], status: ['json', 'watch'], send: [], wait: ['role', 'gate', 'timeout'], close: ['all'],
+  dispatch: [], status: ['json', 'watch'], send: [], wait: ['role', 'gate', 'timeout'], close: ['all'], panel: ['once', 'plain', 'width', 'height'],
 }
 
 const parsed = (command: string, args: string[]) => {
@@ -26,6 +26,7 @@ const parsed = (command: string, args: string[]) => {
       mission: { type: 'string', short: 'm' }, remove: { type: 'boolean' }, orch: { type: 'string' },
       'no-wait': { type: 'boolean' }, json: { type: 'boolean' }, watch: { type: 'boolean' },
       role: { type: 'string' }, gate: { type: 'string' }, timeout: { type: 'string' }, all: { type: 'boolean' },
+      once: { type: 'boolean' }, plain: { type: 'boolean' }, width: { type: 'string' }, height: { type: 'string' },
     } })
   } catch (error) {
     throw new Usage((error as Error).message)
@@ -82,8 +83,7 @@ const wait = async (r: Runtime, m: Mission, target: { role?: string; gate?: stri
 }
 
 const stage = (r: Runtime, m: Mission, name: string): Reply => {
-  const path = workflowDirs(r, m.plan.workflow).map(dir => join(dir, 'stages.yaml')).find(path => existsSync(path))
-  const read = path === undefined ? { stages: DEFAULT_STAGES, problems: [] } : readStages(readFileSync(path, 'utf8'))
+  const read = workflowStages(r, m.plan.workflow)
   if (read.problems.length > 0) throw new Refusal(read.problems.join('\n'))
   if (!read.stages.some(stage => stage.id === name)) throw new Refusal(`unknown stage ${name}; choose ${read.stages.map(stage => stage.id).join(', ')}`)
   append(m.log, 'cli', { ev: 'stage', stage: name })
@@ -127,7 +127,7 @@ const up = (r: Runtime, want: string, orch: string): Reply => {
   const opened = createPane(r, repo, 'mission', repo.root, [orch])
   let panel
   try {
-    panel = createPane(r, repo, 'troupe status', repo.root, [process.execPath, join(r.packageRoot, 'dist/cli.js'), 'status', '--watch', ...(want ? ['-m', want] : [])], opened, true)
+    panel = createPane(r, repo, 'troupe panel', repo.root, [process.execPath, join(r.packageRoot, 'dist/cli.js'), 'panel', ...(want ? ['-m', want] : [])], opened, true)
     append(logPath(repo.common, name), 'cli', { ev: 'up', session: opened.session, window: opened.window, pane: opened.pane, panel: panel.pane })
   } catch (error) {
     if (panel !== undefined && ownedPane(r, panel).alive) tmux(['kill-pane', '-t', panel.pane], r.run, r.env)
@@ -146,6 +146,18 @@ export const execute = async (command: string, args: string[], overrides: Partia
   try {
     const { values, positionals: pos } = parsed(command, args)
     const want = values.mission ?? ''
+    if (command === 'panel') {
+      count(pos, 0, 0, 'panel [-m mission] [--once] [--plain] [--width N --height N]')
+      const size = (value: string | undefined, name: string): number | undefined => {
+        if (value === undefined) return undefined
+        const n = Number(value)
+        if (!Number.isSafeInteger(n) || n < 1) throw new Usage(`--${name} must be a positive integer`)
+
+        return n
+      }
+
+      return await panel(r, { mission: want, once: values.once, plain: values.plain, width: size(values.width, 'width'), height: size(values.height, 'height') })
+    }
     if (command === 'setup') {
       count(pos, 0, 0, 'setup [--remove]')
       return setup(r, values.remove)
