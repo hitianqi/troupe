@@ -56,12 +56,18 @@ test('the build, api selected: a waiting role in the strip, the flow, its detail
   assert.match(lines[0], /auth-refresh {2}· {2}Build .*◆ 1 needs you {2}· {2}12:07$/)
 })
 
-test('the plan gate: goal, why, done when, each role with its flags, start and touches; the decision', () => {
+test('the plan gate: goal, why, one line per done-when, each role with its start and touches; the decision', () => {
   const log = APPROVED.slice(0, 1)
   const lines = plain(draw(model(log, new Map()), { tab: 1, selected: 'api' }, 96, 58))
   golden('plan-gate', lines)
-  assert.ok(lines.some(line => line.includes('-a on-request -s workspace-write')))
-  assert.ok(lines.some(line => line.includes('Decision 1  Grace period for a token used twice?') && line.includes('recommended: 10 s')))
+  for (const heading of ['DONE WHEN', 'ROLES', 'DECISIONS', 'OUT OF SCOPE']) assert.ok(lines.some(line => line.includes(`─ ${heading} ─`)), heading)
+  assert.ok(lines.some(line => /Goal {3}Refresh tokens rotate/.test(line)))
+  assert.ok(lines.some(line => /Why {4}Stolen refresh tokens/.test(line)))
+  assert.equal(lines.filter(line => /^│ {3}\d {2}A /.test(line) || /^│ {3}\d {2}The /.test(line)).length, 3, 'one line per done-when item')
+  assert.ok(lines.some(line => line.includes('web') && line.includes('after api')))
+  assert.ok(lines.some(line => line.includes('src/api/refresh.ts  src/api/errors.ts')))
+  assert.ok(lines.some(line => line.includes('Grace period for a token used twice?') && line.includes('→ 10 s')))
+  assert.ok(lines.every(line => line.length <= 96))
 })
 
 test('a changed plan opens the plan gate again; another gate shows its question', () => {
@@ -97,11 +103,13 @@ test('clicks: tabs, role rows and boxes, and the gate buttons are targets', () =
   assert.ok(gate.some(one => one.target.kind === 'key' && one.target.key === 'a'))
 })
 
-test('the other tabs: role cards, plan, log, diff; and the input line', () => {
+test('the other tabs: roles table, plan summary, log, diff; and the input line', () => {
   const m = model(APPROVED, BUILDING)
   const tab = (n, selected = 'store') => plain(draw(m, { tab: n, selected }, 96, 30))
-  assert.ok(tab(2).some(line => /⬢ api · ◆ waits on you/.test(line)))
+  assert.ok(tab(2).some(line => /⬢ api +◆ waits on you/.test(line)))
+  assert.ok(tab(2).some(line => line.includes('◆ waits on you · Trust this folder?')))
   assert.ok(tab(3).some(line => line.includes('auth-refresh: rotate refresh tokens')))
+  assert.ok(tab(3).some(line => line.includes('─ DONE WHEN ─')))
   assert.ok(tab(4).some(line => line.includes('gate-answer')))
   assert.ok(tab(5).some(line => line.includes('✓ src/store/tokens.ts')))
   const typing = plain(draw(m, { tab: 1, selected: 'store', input: { label: 'send to store', text: 'also add a test' } }, 96, 30))
@@ -116,6 +124,25 @@ const flowRoles = () => [
   role('build', { dependsOn: ['lock'] }),
   role('review', { agent: 'claude', badge: AGENTS.claude.badge, model: 'opus', touches: [], reviews: ['lock', 'build'] }),
 ]
+const cellsOf = line => line.flatMap(run => [...run.text].map(text => ({ ...run, text })))
+const boxesOf = drawn => drawn.hits.filter(hit => hit.target.kind === 'role' && hit.height > 1)
+/** Every box has its corners and sides, inside the width. */
+const closed = (drawn, width) => {
+  for (const box of boxesOf(drawn)) {
+    assert.ok(box.col + box.width <= width, `${box.target.name} inside the width`)
+    const top = cellsOf(drawn.lines[box.row])
+    const bottom = cellsOf(drawn.lines[box.row + box.height - 1])
+    assert.match(top[box.col].text, /[┌╔]/)
+    assert.match(top[box.col + box.width - 1].text, /[┐╗]/)
+    assert.match(bottom[box.col].text, /[└╚]/)
+    assert.match(bottom[box.col + box.width - 1].text, /[┘╝]/)
+    for (let row = box.row + 1; row < box.row + box.height - 1; row++) {
+      const cells = cellsOf(drawn.lines[row])
+      assert.match(cells[box.col].text, /[│║]/, `${box.target.name} left side`)
+      assert.match(cells[box.col + box.width - 1].text, /[│║]/, `${box.target.name} right side`)
+    }
+  }
+}
 const markdown = `# A readable mission title
 
 ## Intent
@@ -142,12 +169,13 @@ roles:
 test('PLAN reflows paragraphs and hanging lists, renders headings, inline styles and tinted YAML', () => {
   const m = { ...model(APPROVED, new Map()), planText: markdown }
   for (const [width, name] of [[56, 'plan-narrow'], [110, 'plan-wide']]) {
-    const drawn = draw(m, { tab: 3, selected: 'api' }, width, 45)
+    const drawn = draw(m, { tab: 3, selected: 'api', full: true }, width, 45)
     const lines = plain(drawn)
     golden(name, lines)
     assert.ok(lines.slice(5, -2).every(line => !line.includes('…')))
     const text = lines.join('\n')
-    assert.match(text, /checks clean/)
+    // The path line is one row: narrow screens cut it, wide ones keep the checks and the toggle.
+    if (width === 110) assert.match(text, /checks clean {2}· {2}f summary/)
     assert.match(text, /sentinelword/)
     assert.match(text, /─ ⬢ Role: api/)
     assert.ok(!text.includes('**') && !text.includes('`'))
@@ -170,44 +198,77 @@ test('PLAN preserves a long token through scrolling; YAML stays on its source ro
   const token = 'abcdefghijklmnopqrstuvwxyz'.repeat(4)
   const source = `# Test\n\n${token}\n\n\`\`\`yaml\nkey: ${'x'.repeat(100)}\nnext: value\n\`\`\`\n`
   const m = { ...model(APPROVED, new Map()), planText: source, problems: ['one', 'two'] }
-  const drawn = draw(m, { tab: 3, selected: 'api' }, 40, 50)
+  const drawn = draw(m, { tab: 3, selected: 'api', full: true }, 40, 50)
   const lines = plain(drawn)
   assert.ok(lines.slice(5, -2).every(line => !line.includes('…')))
-  assert.match(lines.join('\n'), /2 problems/)
+  assert.match(plain(draw(m, { tab: 3, selected: 'api', full: true }, 100, 50)).join('\n'), /2 problems/)
   assert.ok(lines.filter(line => /^ [a-z]+$/.test(line)).join('').replaceAll(' ', '').includes(token))
   assert.equal(lines.filter(line => /x{10}/.test(line)).length, 1, 'YAML is not reflowed')
   assert.match(lines.join('\n'), /next: value/)
   const long = { ...m, planText: Array.from({ length: 30 }, (_, n) => `- item ${n} with continuation words and details`).join('\n') }
-  const first = draw(long, { tab: 3, selected: 'api' }, 40, 15)
+  const first = draw(long, { tab: 3, selected: 'api', full: true }, 40, 15)
   assert.ok(first.maxScroll > 0)
-  const last = draw(long, { tab: 3, selected: 'api', scroll: first.maxScroll }, 40, 15)
+  const last = draw(long, { tab: 3, selected: 'api', full: true, scroll: first.maxScroll }, 40, 15)
   assert.match(plain(last).join('\n'), /item 29/)
 })
 
-test('FLOW: lock/build dependency keeps review beside both branches, with per-branch edge tones', () => {
+test('FLOW: a trunk into the root, a stem to its dependent, the reviewer in a side lane with per-branch edge tones', () => {
   const m = scenario(flowRoles())
   const drawn = draw(m, { tab: 1, selected: 'build' }, 150, 50)
   golden('flow-wide', plain(drawn))
-  const boxes = drawn.hits.filter(hit => hit.target.kind === 'role' && hit.height > 1)
+  const boxes = boxesOf(drawn)
   const find = name => boxes.find(box => box.target.name === name)
-  assert.ok(find('lock').row < find('build').row)
-  assert.equal(find('review').row, find('lock').row)
-  assert.ok(find('review').col > find('build').col + find('build').width)
-  const arrows = drawn.lines.flat().filter(run => run.text.includes('▶'))
-  assert.equal(arrows.length, 2)
-  assert.deepEqual(arrows.map(run => run.tone), ['ok', 'dim'])
-  assert.ok(!plain(drawn).some(line => /as each lands/.test(line)))
+  const lines = plain(drawn)
+  const [lock, build, review] = ['lock', 'build', 'review'].map(find)
+  // Stacked in dependency order, the dependent right under its parent, joined by a stem and an arrow.
+  assert.equal(lock.col, build.col)
+  assert.ok(lock.row + lock.height < build.row)
+  const centre = cellsOf(drawn.lines[build.row - 1]).findIndex((cell, col) => col >= lock.col && cell.text === '▼')
+  assert.ok(centre > lock.col && centre < lock.col + lock.width)
+  assert.equal(cellsOf(drawn.lines[build.row - 2])[centre].text, '│')
+  // One root: the trunk comes down from the orchestrator and ends in └─▶ at lock.
+  assert.ok(lines.some(line => /└─▶│/.test(line)))
+  assert.ok(!lines.some(line => line.includes('├─▶')))
+  // The reviewer sits in a lane to the right, between its two sources.
+  assert.ok(review.col > build.col + build.width)
+  assert.ok(review.row >= lock.row && review.row < build.row + build.height)
+  assert.ok(!lines.some(line => /as each lands/.test(line)))
+  // Each edge leaves its role's middle row; it is ok once that role is done, chrome otherwise.
+  const edge = box => cellsOf(drawn.lines[box.row + 2])[box.col + box.width]
+  assert.deepEqual([edge(lock).text, edge(lock).tone], ['─', 'ok'])
+  assert.deepEqual([edge(build).text, edge(build).tone], ['─', 'chrome'])
+  const arrow = cellsOf(drawn.lines[review.row + 2])[review.col - 1]
+  assert.equal(arrow.text, '▶')
+  assert.equal(arrow.tone, 'ok', 'the landed branch reads all the way to the reviewer')
+  closed(drawn, 150 - 29)
 })
 
-test('FLOW narrow fallback has no dependency arrow into review and still has a selectable reviewer', () => {
+test('FLOW narrow: the reviewer goes below, says what it reviews, and stays selectable', () => {
   const drawn = draw(scenario(flowRoles()), { tab: 1, selected: 'review' }, 78, 52)
   golden('flow-narrow', plain(drawn))
   const text = plain(drawn).join('\n')
-  assert.match(text, /reviews lock, build as each lands/)
-  assert.ok(!text.includes('▶'))
-  const box = drawn.hits.find(hit => hit.target.kind === 'role' && hit.target.name === 'review' && hit.height > 1)
-  assert.ok(box)
-  assert.ok(!textOf(drawn.lines[box.row - 1]).slice(box.col, box.col + box.width).includes('▼'))
+  const boxes = boxesOf(drawn)
+  const review = boxes.find(box => box.target.name === 'review')
+  const build = boxes.find(box => box.target.name === 'build')
+  assert.ok(review && build)
+  assert.ok(review.row >= build.row + build.height && review.col === build.col, 'below the builders, not in a lane')
+  assert.match(text, /reviews lock, build/)
+  assert.equal(text.split('▶').length - 1, 1, 'only the trunk arrow; no edge into the reviewer')
+  assert.deepEqual(hitAt(drawn.hits, review.row + 1, review.col + 2), { kind: 'role', name: 'review' })
+  closed(drawn, 78)
+})
+
+test('FLOW with several reviewers puts them below with the reviews line', () => {
+  const roles = [role('panel'), role('commands'), role('review-a', { touches: [], reviews: ['panel'] }), role('review-b', { touches: [], reviews: ['commands'] })]
+  const drawn = draw(scenario(roles), { tab: 1, selected: 'panel' }, 150, 70)
+  const boxes = boxesOf(drawn)
+  assert.equal(boxes.length, 4)
+  const lines = plain(drawn)
+  assert.ok(lines.some(line => line.includes('reviews panel')))
+  assert.ok(lines.some(line => line.includes('reviews commands')))
+  const first = Math.min(...boxes.filter(box => /^review/.test(box.target.name)).map(box => box.row))
+  assert.ok(boxes.filter(box => !/^review/.test(box.target.name)).every(box => box.row + box.height <= first))
+  closed(drawn, 150 - 29)
 })
 
 test('FLOW does not draw a dependency through an independent builder wrapped between parent and child', () => {
@@ -225,40 +286,71 @@ const cardRoles = () => [
   role('review', { agent: 'claude', badge: AGENTS.claude.badge, touches: [], reviews: ['panel', 'commands'], dependsOn: [] }),
 ]
 
-test('ROLES wide cards include live facts, known context meter, waiting dialog and missing-data placeholders', () => {
+test('ROLES wide: a table with every column, a branch and flags line, and a waits-on or result line per role', () => {
   const drawn = draw(scenario(cardRoles()), { tab: 2, selected: 'panel' }, 150, 44)
   golden('roles-wide', plain(drawn))
-  const text = plain(drawn).join('\n')
-  for (const value of ['⬢ panel', '✻ review', '▰▰▰▱▱', 'unusual', '1 commits · 1 files inside / 1 outside touches', '5m 12s since dispatch', '▰▰▰▰▱▱▱▱▱▱ 42%', 'last meaningful line', 'Safe cleanup', 'as each lands', '— commits']) assert.ok(text.includes(value), value)
-  const hits = drawn.hits.filter(hit => hit.target.kind === 'role' && hit.height > 1)
-  assert.equal(hits.length, 3)
-  assert.equal(hits[0].row, hits[1].row)
-  assert.ok(hits[1].col > hits[0].col)
-  assert.ok(text.includes('╔') && text.includes('┌'))
-  assert.ok(drawn.lines.flat().some(run => run.text.includes('1 outside touches') && run.tone === 'error'))
+  const lines = plain(drawn)
+  const header = lines.find(line => /^ +ROLE +STATE/.test(line))
+  assert.deepEqual(header.trim().split(/\s+/), ['ROLE', 'STATE', 'AGENT', 'EFFORT', 'CTX', 'TOKENS', 'WORK', 'TIME'])
+  const row = name => lines.findIndex(line => new RegExp(`^ +[⬢✻] ${name} `).test(line))
+  const [panel, commands, review] = ['panel', 'commands', 'review'].map(row)
+  assert.ok(panel > 0 && panel < commands && commands < review)
+  assert.match(lines[panel], /⬢ panel +◆ waits on you +codex .* ■■■□□ high .* 1 commit · 2 ✗1 +5m$/)
+  assert.match(lines[review], /✻ review +○ planned +claude /)
+  assert.match(lines[commands], /unusual/)
+  assert.match(lines[commands], /codex default/)
+  // Under each name row: branch and flags, then what it waits on or its result.
+  assert.match(lines[panel + 1], /^ +role\/demo\/panel +-a on-request -s workspace-write$/)
+  assert.match(lines[panel + 2], /^ +◆ waits on you · Trust this folder\?$/)
+  assert.match(lines[commands + 1], /^ +role\/demo\/commands +-a on-request/)
+  assert.match(lines[commands + 2], /^ +done · Safe cleanup$/)
+  assert.match(lines[review + 1], /^ +role\/demo\/review +-a on-request/)
+  assert.ok(lines[review + 2] === '' || lines[review + 2] === undefined, 'nothing to wait on or report')
+  assert.ok(!lines.join('\n').includes('╔') && !lines.join('\n').includes('▰'), 'no cards, no pips')
+  const runs = drawn.lines.flat()
+  assert.ok(runs.some(run => run.text.includes('✗1') && run.tone === 'error'))
+  assert.ok(runs.some(run => run.text === '■■■' && run.tone === 'accent'))
+  // Missing data is a dash, not a number.
+  assert.match(lines[review], /—.*—.*—.*—$/)
+  const hits = drawn.hits.filter(hit => hit.target.kind === 'role' && hit.col === 1)
+  assert.deepEqual(hits.map(hit => [hit.target.name, hit.row]), [['panel', panel], ['commands', commands], ['review', review]])
 })
 
-test('ROLES narrow cards scroll and clipped cards retain accurate hit targets and selection', () => {
+test('ROLES narrow: columns drop from the right, the table scrolls, and a click on a name row selects that role', () => {
   const m = scenario(cardRoles())
-  const first = draw(m, { tab: 2, selected: 'panel' }, 56, 24)
+  const wide = plain(draw(m, { tab: 2, selected: 'panel' }, 150, 24)).find(line => /^ +ROLE +STATE/.test(line))
+  const narrow = plain(draw(m, { tab: 2, selected: 'panel' }, 56, 14))
+  const header = narrow.find(line => /^ +ROLE +STATE/.test(line))
+  assert.ok(wide.includes('TIME') && wide.includes('WORK'))
+  assert.deepEqual(header.trim().split(/\s+/), ['ROLE', 'STATE', 'AGENT'])
+  for (const width of [70, 90, 110]) {
+    const titles = plain(draw(m, { tab: 2, selected: 'panel' }, width, 24)).find(line => /^ +ROLE +STATE/.test(line)).trim().split(/\s+/)
+    const all = ['ROLE', 'STATE', 'AGENT', 'EFFORT', 'CTX', 'TOKENS', 'WORK', 'TIME']
+    assert.ok(titles.length < all.length && titles.every((title, i) => all.indexOf(title) >= i && (i === 0 || all.indexOf(title) > all.indexOf(titles[i - 1]))), `${titles} is in order`)
+    assert.deepEqual(titles.slice(0, 3), all.slice(0, 3), 'the left columns stay')
+    assert.ok(plain(draw(m, { tab: 2, selected: 'panel' }, width, 24)).every(line => line.length <= width))
+  }
+  const first = draw(m, { tab: 2, selected: 'panel' }, 56, 14)
   assert.ok(first.maxScroll > 0)
-  const drawn = draw(m, { tab: 2, selected: 'review', scroll: first.maxScroll }, 56, 24)
+  const drawn = draw(m, { tab: 2, selected: 'panel', scroll: first.maxScroll }, 56, 14)
   golden('roles-narrow', plain(drawn))
-  const boxes = drawn.hits.filter(hit => hit.target.kind === 'role' && hit.height > 1)
-  assert.ok(boxes.every(box => box.col === 1 && box.row >= 6 && box.row + box.height <= 22))
-  const review = boxes.find(box => box.target.name === 'review')
-  assert.ok(review)
-  assert.deepEqual(hitAt(drawn.hits, review.row, review.col + 2), { kind: 'role', name: 'review' })
-  const next = transition({ tab: 2, selected: 'panel' }, { kind: 'click', row: review.row, col: review.col + 2 }, m, drawn.hits, 24, drawn.maxScroll)
-  assert.equal(next.ui.selected, 'review')
-  assert.equal(next.ui.tab, 1)
-  assert.match(plain(drawn).join('\n'), /✻ review/)
+  const hits = drawn.hits.filter(hit => hit.target.kind === 'role' && hit.col === 1)
+  assert.ok(hits.length >= 1 && hits.every(hit => hit.row >= 4 && hit.row < 12))
+  const target = hits.at(-1)
+  const lines = plain(drawn)
+  assert.ok(lines[target.row].includes(target.target.name), 'the hit sits on the name row')
+  const next = transition({ tab: 2, selected: 'panel' }, { kind: 'click', row: target.row, col: target.col + 4 }, m, drawn.hits, 14, drawn.maxScroll)
+  assert.equal(next.ui.selected, target.target.name)
 })
 
-test('effort mappings, defaults, unknown words and agent ANSI colors are preserved across panel surfaces', () => {
-  for (const [word, n] of [['minimal', 1], ['low', 1], ['medium', 2], ['high', 3], ['xhigh', 4], ['max', 5]]) assert.equal(effortOf(word).text, '▰'.repeat(n) + '▱'.repeat(5 - n))
-  assert.deepEqual(effortOf(''), { text: 'default', tone: 'dim' })
-  for (const word of ['turbo', 'constructor', 'toString', '__proto__']) assert.equal(effortOf(word).text, word)
+test('effort: five square cells and the word, default when unset, an unknown word as written; agent colors on every surface', () => {
+  const cells = line => line.map(run => run.text).join('')
+  for (const [word, n] of [['minimal', 1], ['low', 1], ['medium', 2], ['high', 3], ['xhigh', 4], ['max', 5]]) {
+    assert.equal(cells(effortOf(word)), `${'■'.repeat(n)}${'□'.repeat(5 - n)} ${word}`)
+    assert.deepEqual(effortOf(word).map(run => run.tone), ['accent', 'chrome', 'dim'])
+  }
+  assert.deepEqual(effortOf(''), [{ text: 'default', tone: 'dim' }])
+  for (const word of ['turbo', 'constructor', 'toString', '__proto__']) assert.deepEqual(effortOf(word), [{ text: word, tone: 'dim' }])
   const m = scenario([role('api', { effort: '', context: 'unknown' })])
   const flow = draw(m, { tab: 1, selected: 'api' }, 110, 45)
   assert.match(plain(flow).join('\n'), /default/)
@@ -286,27 +378,34 @@ test('models carry optional adapter badges into role views', () => {
 })
 
 
-test('FLOW parallel reviewed builders retain separate root edges and unobstructed boxes', () => {
+test('FLOW parallel roots: each gets its own trunk arrow, boxes stay clear, the reviewer joins both', () => {
   const roles = [role('panel'), role('commands'), role('review', { touches: [], reviews: ['panel', 'commands'] })]
   const drawn = draw(scenario(roles), { tab: 1, selected: 'panel' }, 150, 50)
-  const boxes = drawn.hits.filter(hit => hit.target.kind === 'role' && hit.height > 1)
-  const first = boxes.find(hit => hit.target.name === 'panel')
-  const second = boxes.find(hit => hit.target.name === 'commands')
-  assert.notEqual(first.row, second.row, 'each horizontal review edge has its own clear row')
+  const boxes = boxesOf(drawn)
+  const [first, second, reviewer] = ['panel', 'commands', 'review'].map(name => boxes.find(hit => hit.target.name === name))
+  assert.ok(first.row + first.height <= second.row, 'stacked, not overlapping')
+  const lines = plain(drawn)
+  const arrows = lines.filter(line => /[├└]─▶[│║]/.test(line))
+  assert.equal(arrows.length, 2)
+  assert.ok(/├─▶[│║]/.test(lines[first.row + 2]) && /└─▶[│║]/.test(lines[second.row + 2]), 'a ├─▶ then the last └─▶')
+  assert.ok(!lines.some(line => /after (panel|commands)/.test(line.slice(0, 80)) && line.includes('▼')))
   for (const box of [first, second]) {
     const inside = drawn.lines.slice(box.row + 1, box.row + box.height - 1).map(line => textOf(line).slice(box.col + 1, box.col + box.width - 1))
     assert.ok(inside.every(line => !/[│▼▶]/.test(line)))
+    assert.equal(cellsOf(drawn.lines[box.row + 2])[box.col + box.width].text, '─')
+    assert.equal(cellsOf(drawn.lines[box.row + 2])[box.col + box.width].tone, 'chrome', 'not done yet, so not lit')
   }
-  assert.equal(drawn.lines.flat().filter(run => run.text.includes('▶')).length, 2)
+  assert.ok(reviewer.col > first.col + first.width)
+  assert.equal(cellsOf(drawn.lines[reviewer.row + 2])[reviewer.col - 1].text, '▶')
+  closed(drawn, 150 - 29)
 })
-
 
 test('PLAN issue references continue paragraphs and hanging lists; only real headings split them', () => {
   const tail = '#17 regressions and follow-up details through several wrapped continuation rows.'
   for (const marker of ['', '- ', '1. ', '1) ']) {
     const source = `# Title\n\n${marker}Keep checking both\n${' '.repeat(marker.length)}${tail}\n\n## Actual heading\n\nSecond paragraph.\n`
     for (const width of [52, 150]) {
-      const drawn = draw({ ...model(APPROVED, new Map()), planText: source }, { tab: 3, selected: 'api' }, width, 32)
+      const drawn = draw({ ...model(APPROVED, new Map()), planText: source }, { tab: 3, selected: 'api', full: true }, width, 32)
       const lines = plain(drawn)
       const start = lines.findIndex(line => line.includes('Keep checking both'))
       const paragraph = lines.slice(start, lines.findIndex((line, index) => index > start && line === ''))
@@ -318,59 +417,46 @@ test('PLAN issue references continue paragraphs and hanging lists; only real hea
   }
   const invalid = '#hashtag # ####### seven hashes stay in this paragraph.'
   const m = { ...model(APPROVED, new Map()), planText: `# Title\n\nKeep\n#hashtag\n#\n####### seven hashes stay in this paragraph.\n` }
-  assert.ok(plain(draw(m, { tab: 3, selected: 'api' }, 150, 24)).includes(` Keep ${invalid}`))
+  assert.ok(plain(draw(m, { tab: 3, selected: 'api', full: true }, 150, 24)).includes(` Keep ${invalid}`))
   for (let count = 1; count <= 6; count++) {
     const planText = `# Title\n\nBefore heading.\n${'#'.repeat(count)} Real heading\nAfter heading.\n`
-    const lines = plain(draw({ ...m, planText }, { tab: 3, selected: 'api' }, 150, 24))
+    const lines = plain(draw({ ...m, planText }, { tab: 3, selected: 'api', full: true }, 150, 24))
     assert.ok(lines.includes(' Before heading.'))
     assert.ok(lines.includes(' After heading.'))
     assert.ok(lines.some(line => line.includes('Real heading') && !line.includes('Before heading.')))
   }
 })
 
-const cellsOf = line => line.flatMap(run => [...run.text].map(text => ({ ...run, text })))
-
-test('FLOW review arrows keep dependency gutter junctions and their per-branch tones', () => {
+test('FLOW edge tones follow each reviewed role: ok when done, chrome otherwise', () => {
   const roles = [role('panel', { state: 'done' }), role('commands'), role('build', { state: 'done', dependsOn: ['panel'] }), role('review', { touches: [], reviews: ['panel', 'commands', 'build'] })]
-  const drawn = draw(scenario(roles), { tab: 1, selected: 'panel' }, 150, 50)
-  const boxes = drawn.hits.filter(hit => hit.target.kind === 'role' && hit.height > 1)
+  const drawn = draw(scenario(roles), { tab: 1, selected: 'panel' }, 150, 60)
+  const boxes = boxesOf(drawn)
   const reviewer = boxes.find(hit => hit.target.name === 'review')
-  for (const [name, tone] of [['panel', 'ok'], ['commands', 'dim']]) {
+  for (const [name, tone] of [['panel', 'ok'], ['commands', 'chrome'], ['build', 'ok']]) {
     const box = boxes.find(hit => hit.target.name === name)
-    const row = box.row + 1
-    const cells = cellsOf(drawn.lines[row])
-    const above = cellsOf(drawn.lines[row - 1])
-    const below = cellsOf(drawn.lines[row + 1])
-    const crossings = []
-    for (let col = box.col + box.width; col < reviewer.col - 1; col++) {
-      if (above[col]?.text === '│' && below[col]?.text === '│') crossings.push(col)
-    }
-    assert.ok(crossings.length > 0, `${name} arrow crosses a dependency gutter`)
-    for (const col of crossings) {
-      assert.equal(cells[col].text, '┼')
-      assert.equal(cells[col].tone, tone)
-    }
-    assert.equal(cells[reviewer.col - 1].text, '▶')
-    assert.equal(cells[reviewer.col - 1].tone, tone)
+    const cells = cellsOf(drawn.lines[box.row + 2])
+    assert.deepEqual([cells[box.col + box.width].text, cells[box.col + box.width].tone], ['─', tone], name)
   }
+  // The arrow into the reviewer is lit because some branch has landed.
+  assert.deepEqual([cellsOf(drawn.lines[reviewer.row + 2])[reviewer.col - 1].text, cellsOf(drawn.lines[reviewer.row + 2])[reviewer.col - 1].tone], ['▶', 'ok'])
+  closed(drawn, 150 - 29)
 })
 
 test('FLOW fits long unknown effort inside builder and reviewer borders', () => {
   const effort = 'ultra-extended-thinking-max'
-  assert.equal(effortOf(effort).text, effort, 'unknown effort remains literal before fitting')
+  assert.deepEqual(effortOf(effort), [{ text: effort, tone: 'dim' }], 'unknown effort remains literal before fitting')
   for (const width of [78, 150]) {
     const roles = [role('panel', { effort }), role('review', { effort, touches: [], reviews: ['panel'] })]
     const drawn = draw(scenario(roles), { tab: 1, selected: 'panel' }, width, 50)
-    const boxes = drawn.hits.filter(hit => hit.target.kind === 'role' && hit.height > 1)
+    const boxes = boxesOf(drawn)
     assert.equal(boxes.length, 2)
+    closed(drawn, width)
     for (const box of boxes) {
       const cells = cellsOf(drawn.lines[box.row + 3])
-      assert.equal(cells[box.col].text, box.target.name === 'panel' ? '║' : '│')
-      assert.equal(cells[box.col + box.width - 1].text, box.target.name === 'panel' ? '║' : '│')
       const available = box.width - 4
       const text = cells.slice(box.col + 2, box.col + 2 + available).map(cell => cell.text).join('')
       assert.equal(text.trimEnd(), effort.length > available ? `${effort.slice(0, available - 1)}…` : effort)
-      assert.equal(cells[box.col + 2].tone, 'accent')
+      assert.equal(cells[box.col + 2].tone, 'dim')
       assert.ok(cells.slice(box.col + box.width, box.col + box.width + 4).every(cell => cell.text === ' '), 'effort does not leak beyond the border')
     }
   }

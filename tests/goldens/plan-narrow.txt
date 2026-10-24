@@ -3,8 +3,7 @@
  Refresh tokens rotate on every use, and a reused one …
 ────────────────────────────────────────────────────────
 
- docs/missions/auth-refresh/plan.md · sha256:3f9a0c1e ·
- checks clean
+ docs/missions/auth-refresh/plan.md  ·  sha256:3f9a0c1e
 
  A readable mission title
 
@@ -28,6 +27,7 @@
    api:
      agent: codex # adapter
      goal: "keep # inside quotes"
+
 
 
 

@@ -4,32 +4,32 @@
 ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
 ▌ ◆ panel  waits on you · Trust this folder?                                                                                            o Open window
 
- ╔═══════════════════════════════════════════════════════════════════════╗  ┌───────────────────────────────────────────────────────────────────────┐
- ║ ⬢ panel · ◆ waits on you                                              ║  │ ⬢ commands · ○ planned                                                │
- ║ gpt-6.1-sol ▰▰▰▱▱                                                     ║  │ default unusual                                                       │
- ║ flags -a on-request -s workspace-write                                ║  │ flags -a on-request -s workspace-write                                │
- ║ branch role/demo/panel                                                ║  │ branch role/demo/commands                                             │
- ║ work 1 commits · 1 files inside / 1 outside touches                   ║  │ work — commits · — files inside / — outside touches                   │
- ║ starts at once                                                        ║  │ starts at once                                                        │
- ║ elapsed 5m 12s since dispatch                                         ║  │ elapsed —                                                             │
- ║ context ▰▰▰▰▱▱▱▱▱▱ 42%                                                ║  │ context —                                                             │
- ║ waits on Trust this folder?                                           ║  │ result done · Safe cleanup                                            │
- ║ result —                                                              ║  │ last —                                                                │
- ║ last last meaningful line                                             ║  │                                                                       │
- ╚═══════════════════════════════════════════════════════════════════════╝  └───────────────────────────────────────────────────────────────────────┘
+    ROLE       STATE          AGENT                EFFORT        CTX               TOKENS            WORK               TIME
+  ⬢ panel      ◆ waits on you codex gpt-6.1-sol    ■■■□□ high    —                 —                 1 commit · 2 ✗1    5m
+               role/demo/panel   -a on-request -s workspace-write
+               ◆ waits on you · Trust this folder?
 
- ┌───────────────────────────────────────────────────────────────────────┐
- │ ✻ review · ○ planned                                                  │
- │ gpt-6.1-sol ▰▰▰▱▱                                                     │
- │ flags -a on-request -s workspace-write                                │
- │ branch role/demo/review                                               │
- │ work — commits · — files inside / — outside touches                   │
- │ starts as each lands                                                  │
- │ elapsed —                                                             │
- │ context —                                                             │
- │ result —                                                              │
- │ last —                                                                │
- └───────────────────────────────────────────────────────────────────────┘
+  ⬢ commands   ○ planned      codex default        unusual       —                 —                 —                  —
+               role/demo/commands   -a on-request -s workspace-write
+               done · Safe cleanup
+
+  ✻ review     ○ planned      claude gpt-6.1-sol   ■■■□□ high    —                 —                 —                  —
+               role/demo/review   -a on-request -s workspace-write
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

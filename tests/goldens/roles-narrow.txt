@@ -4,21 +4,11 @@
 ────────────────────────────────────────────────────────
 ▌ ◆ panel  waits on you · Trust this fol… o Open window
 
- │ last —                                             │
- └────────────────────────────────────────────────────┘
+               role/demo/commands   -a on-request -s w…
+               done · Safe cleanup
 
- ╔════════════════════════════════════════════════════╗
- ║ ✻ review · ○ planned                               ║
- ║ gpt-6.1-sol ▰▰▰▱▱                                  ║
- ║ flags -a on-request -s workspace-write             ║
- ║ branch role/demo/review                            ║
- ║ work — commits · — files inside / — outside        ║
- ║ touches                                            ║
- ║ starts as each lands                               ║
- ║ elapsed —                                          ║
- ║ context —                                          ║
- ║ result —                                           ║
- ║ last —                                             ║
- ╚════════════════════════════════════════════════════╝
+  ✻ review     ○ planned      claude gpt-6.1-sol
+               role/demo/review   -a on-request -s wor…
+
 
  ↑↓  role   ⏎  detail   o  open   s  send   d  diff   1…
