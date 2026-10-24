@@ -1,10 +1,12 @@
 #!/usr/bin/env node
 import { readFileSync } from 'node:fs'
 
+import { check } from './check.ts'
+
 const COMMANDS: [string, string][] = [
   ['setup', 'install the workflow skill for each harness found'],
   ['up', 'open the orchestrator and the panel in tmux'],
-  ['check', 'check the plan'],
+  ['check', 'check the plan: [mission, folder or plan file]'],
   ['approve', 'approve the plan (from a terminal only)'],
   ['dispatch', 'open a role in its own window, worktree and branch'],
   ['status', 'show each role\'s state'],
@@ -19,7 +21,7 @@ const usage = () =>
   [
     'Usage: troupe <command>',
     '',
-    'Commands (not yet built):',
+    'Commands (only check is built so far):',
     ...COMMANDS.map(([name, text]) => `  ${name.padEnd(9)}${text}`),
     '',
     'Options:',
@@ -33,8 +35,12 @@ const version = () => {
   return pkg.version as string
 }
 
-const [arg] = process.argv.slice(2)
-if (arg === '--version' || arg === '-v') {
+const [arg, ...rest] = process.argv.slice(2)
+if (arg === 'check') {
+  const { out, code } = check(process.cwd(), rest[0] ?? '')
+  process.stdout.write(out)
+  process.exitCode = code
+} else if (arg === '--version' || arg === '-v') {
   console.log(version())
 } else if (arg === undefined || arg === '--help' || arg === '-h') {
   process.stdout.write(usage())

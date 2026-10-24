@@ -1,5 +1,5 @@
 import type { TroupeMission } from '../types'
-import { STEPS } from '../src/plan.ts'
+import { STEPS } from '../src/old-plan.ts'
 
 // p1 as the approved mock shows it: its plan's goal, roles and o1, o1
 // planned, the mission at "Plan OK?". A literal, so a later plan edit does

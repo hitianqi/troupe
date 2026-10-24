@@ -2,7 +2,7 @@ import type { EngineInterface, On } from 'claude-code'
 
 import { readApproval } from './approval.ts'
 import { baseOf, isReviewOf, missionBranchOf } from '../src/mission.ts'
-import { isLight, readPlan } from '../src/plan.ts'
+import { isLight, readPlan } from '../src/old-plan.ts'
 
 // troupe_metrics: what a mission cost and how it ran, written at teardown to
 // docs/missions/<mission>/metrics.json, so a troupe mission can be set against

@@ -1,138 +1,167 @@
-import type { TroupeOrderState } from '../types'
+import { AGENTS, unsetPermission } from './agents.ts'
+import type { Agent } from './agents.ts'
 import { parseYaml } from './yaml.ts'
 import type { Yaml } from './yaml.ts'
 
-// plan.md, read and checked: the goal, the roles, the orders block,
-// plan_lint's rules, the dependency layers and the workflow step.
+// plan.md, read and checked: Markdown around one ```yaml block that holds the
+// mission's one-line facts and its roles; each role's text is a
+// `## Role: <name>` section in the Markdown. A role is a window: one role,
+// one worktree, one branch. The checks are the ones that keep work correct;
+// the method lives in the workflow skill.
 
-export type PlanOrder = {
-  id: string
-  kind: string
-  goal: string
-  why: string
+export type Role = {
+  name: string
+  agent: string
+  model: string
+  effort: string
+  /** The agent's own flags, as written; they must pin its permission. */
+  flags: string[]
   touches: string[]
   dependsOn: string[]
-  model: string
-}
-export type PlanRole = { name: string; model: string; effort: string; duty: string[]; skills: string[] }
-export type PlanRead = {
-  title: string
-  /** The block's `goal:`, else the first sentence of the plan's Intent. */
   goal: string
-  hasRoles: boolean
-  roles: PlanRole[]
-  orders: PlanOrder[]
+  /** `workflow:<name>` or a repo path, '' for none. */
+  text: string
+  /** The `## Role: <name>` section's body, '' for none. */
+  section: string
+  skills: string[]
+  reviews: string[]
+  group: string
+}
+export type Plan = {
+  title: string
+  goal: string
+  why: string
+  workflow: string
+  base: string
+  /** The `## Done when` section's bullets. */
+  doneWhen: string[]
+  roles: Role[]
   problems: string[]
 }
 
-/** The three roles of a mission rig, as a plan that names no model, effort or duty gets them. */
-const DEFAULT_ROLES: Record<string, Omit<PlanRole, 'name' | 'skills'> | undefined> = {
-  orchestrator: {
-    model: 'opus',
-    effort: 'high',
-    duty: ['Writes the plan and gets it approved', 'Dispatches each order and merges it onto the mission branch', "Opens the MR after the human's go, then tears down"],
-  },
-  builder: {
-    model: 'opus',
-    effort: 'high',
-    duty: ['Builds its order in its own worktree', 'Fixes the review findings, one round per review'],
-  },
-  reviewer: {
-    model: 'sonnet',
-    effort: 'high',
-    duty: ['Reviews each order for behaviour as it lands', 'Runs the final review across the orders'],
-  },
-}
-/** A light mission's reviewer runs no final review of its own. */
-const LIGHT_REVIEWER_DUTY = ['Reviews each order for behaviour as it lands', "Its review of the last order is also the mission's final review"]
-const KINDS = ['code', 'research']
-/** The efforts a role may name, lowest first; the pane's meter has one cell each. */
-export const EFFORTS = ['low', 'medium', 'high', 'xhigh', 'max']
+const NAME = /^[a-z][a-z0-9-]*$/
+const ROLE_KEYS = ['use', 'agent', 'model', 'effort', 'flags', 'touches', 'depends_on', 'goal', 'text', 'skills', 'reviews', 'group']
+const PLAN_KEYS = ['troupe', 'goal', 'why', 'workflow', 'base', 'profiles', 'roles']
+export const DEFAULT_WORKFLOW = 'troupe-mission'
 
-const isMap = (value: Yaml | undefined): value is { [key: string]: Yaml } =>
-  typeof value === 'object' && value !== null && !Array.isArray(value)
+type Map = { [key: string]: Yaml }
+const isMap = (value: Yaml | undefined): value is Map => typeof value === 'object' && value !== null && !Array.isArray(value)
 const text = (value: Yaml | undefined): string => (typeof value === 'string' ? value : '')
 const texts = (value: Yaml | undefined): string[] =>
   Array.isArray(value) ? value.filter((one): one is string => typeof one === 'string') : typeof value === 'string' ? [value] : []
 
-/** The paragraph that opens with `Intent:`, cut at its first sentence. */
-export const goalOf = (source: string): string => {
-  const paragraph = /^Intent:[ \t]*([\s\S]*?)(?:\n[ \t]*\n|$(?![\s\S]))/m.exec(source)?.[1] ?? ''
-  const joined = paragraph.replace(/\s*\n\s*/g, ' ').replace(/`/g, '').trim()
+/** The Markdown's `## ` sections by heading, skipping fenced code; the body runs to the next `#`/`##` heading. */
+export const sectionsOf = (source: string): { heading: string; body: string }[] => {
+  const out: { heading: string; body: string[] }[] = []
+  let fence = ''
+  for (const line of source.split('\n')) {
+    const mark = /^\s*(```|~~~)/.exec(line)?.[1]
+    if (mark !== undefined) fence = fence === '' ? mark : fence === mark ? '' : fence
+    const heading = fence === '' && mark === undefined ? /^(#{1,2}) +(.+?)\s*$/.exec(line) : null
+    if (heading !== null) {
+      if (heading[1] === '##') out.push({ heading: heading[2] ?? '', body: [] })
+      else out.push({ heading: '', body: [] })
+    } else out.at(-1)?.body.push(line)
+  }
 
-  return /^.*?[.!?](?=\s|$)/.exec(joined)?.[0] ?? joined
+  return out.filter(section => section.heading !== '').map(section => ({ heading: section.heading, body: section.body.join('\n').trim() }))
 }
 
-/** A role is `name: [skills]`, or `name: { model, effort, duty: [lines], skills }`; what it leaves out is the default. */
-const roleOf = (name: string, value: Yaml, light = false): PlanRole => {
-  const own = isMap(value) ? value : { skills: value }
-  const fallback = light && name === 'reviewer' ? { ...DEFAULT_ROLES.reviewer, duty: LIGHT_REVIEWER_DUTY } : DEFAULT_ROLES[name]
-  const duty = texts(own.duty)
+const bullets = (body: string): string[] =>
+  body
+    .split('\n')
+    .map(line => /^\s*[-*] +(.*)$/.exec(line)?.[1]?.trim())
+    .filter((one): one is string => one !== undefined && one !== '')
+
+export const readPlan = (source: string, agents: Record<string, Agent> = AGENTS): Plan => {
+  const title = /^# +(.+)$/m.exec(source)?.[1]?.trim() ?? ''
+  const sections = sectionsOf(source)
+  const doneWhen = bullets(sections.find(section => /^done when$/i.test(section.heading))?.body ?? '')
+  const empty: Plan = { title, goal: '', why: '', workflow: DEFAULT_WORKFLOW, base: '', doneWhen, roles: [], problems: [] }
+
+  const fence = /```ya?ml\n([\s\S]*?)```/g
+  let found: RegExpExecArray | null = null
+  let isOld = false
+  for (let one = fence.exec(source); one !== null; one = fence.exec(source)) {
+    if (/^orders:/m.test(one[1] ?? '')) isOld = true
+    else if (/^roles:/m.test(one[1] ?? '')) {
+      found = one
+      break
+    }
+  }
+  if (found === null) {
+    const why = isOld
+      ? 'an orders block: a plan of the troupe mod (before troupe 1); start a new plan from the template'
+      : 'no ```yaml block with a `roles:` key'
+
+    return { ...empty, problems: [why] }
+  }
+  let data: Yaml
+  try {
+    data = parseYaml(found[1] ?? '', source.slice(0, found.index).split('\n').length + 1)
+  } catch (error) {
+    return { ...empty, problems: [`the yaml block cannot be read: ${(error as Error).message}`] }
+  }
+  if (!isMap(data) || !isMap(data.roles)) return { ...empty, problems: ['`roles` is not a mapping of name to role'] }
+
+  const problems: string[] = []
+  for (const key of Object.keys(data)) if (!PLAN_KEYS.includes(key)) problems.push(`unknown key "${key}" (${PLAN_KEYS.join(', ')})`)
+  if (data.troupe !== undefined && text(data.troupe) !== '1') problems.push(`troupe: ${text(data.troupe) || '?'} is not a format this troupe reads (1)`)
+  const profiles = isMap(data.profiles) ? data.profiles : {}
+  if (data.profiles !== undefined && !isMap(data.profiles)) problems.push('`profiles` is not a mapping of name to settings')
+  for (const [name, value] of Object.entries(profiles)) {
+    if (!isMap(value)) problems.push(`profile ${name} is not a mapping`)
+    else if ('use' in value) problems.push(`profile ${name}: a profile cannot use another`)
+  }
+
+  const roleSections = new Map(
+    sections.flatMap(section => {
+      const name = /^Role: *(.+)$/.exec(section.heading)?.[1]?.trim()
+
+      return name === undefined ? [] : [[name, section.body] as const]
+    }),
+  )
+  const roles = Object.entries(data.roles).map(([name, raw]): Role => {
+    const own = isMap(raw) ? raw : {}
+    if (!isMap(raw)) problems.push(`role ${name} is not a mapping`)
+    for (const key of Object.keys(own)) if (!ROLE_KEYS.includes(key)) problems.push(`role ${name}: unknown key "${key}"`)
+    const use = text(own.use)
+    const base = use === '' ? {} : profiles[use]
+    if (use !== '' && base === undefined) problems.push(`role ${name}: use names no profile "${use}"`)
+    const one: Map = { ...(isMap(base) ? base : {}), ...own }
+    if (!('touches' in one)) problems.push(`role ${name}: no touches (write touches: [] for a role that changes no files)`)
+
+    return {
+      name,
+      agent: text(one.agent),
+      model: text(one.model),
+      effort: text(one.effort),
+      flags: texts(one.flags),
+      touches: texts(one.touches),
+      dependsOn: texts(one.depends_on),
+      goal: text(one.goal),
+      text: text(one.text),
+      section: roleSections.get(name) ?? '',
+      skills: texts(one.skills),
+      reviews: texts(one.reviews),
+      group: text(one.group) || (texts(one.touches).length === 0 && texts(one.reviews).length > 0 ? 'review' : 'build'),
+    }
+  })
+  const seen = new Set(roles.map(role => role.name))
+  for (const name of roleSections.keys()) if (!seen.has(name)) problems.push(`## Role: ${name} names no role in the yaml block`)
 
   return {
-    name,
-    model: text(own.model) || (fallback?.model ?? ''),
-    effort: text(own.effort) || (fallback?.effort ?? ''),
-    duty: duty.length > 0 ? duty : (fallback?.duty ?? []),
-    skills: texts(own.skills),
+    ...empty,
+    goal: text(data.goal),
+    why: text(data.why),
+    workflow: text(data.workflow) || DEFAULT_WORKFLOW,
+    base: text(data.base),
+    roles,
+    problems: [...problems, ...checkRoles(roles, agents, Object.keys(data.roles))],
   }
 }
 
-export const readPlan = (source: string): PlanRead => {
-  const title = /^# +(.+)$/m.exec(source)?.[1]?.trim() ?? ''
-  const empty = {
-    title,
-    goal: goalOf(source),
-    hasRoles: false,
-    roles: Object.keys(DEFAULT_ROLES).map(name => roleOf(name, [])),
-    orders: [],
-  }
-  const fence = /```ya?ml\n([\s\S]*?)```/g
-  for (let found = fence.exec(source); found !== null; found = fence.exec(source)) {
-    const body = found[1] ?? ''
-    if (!/^orders:/m.test(body)) continue
-    const firstLine = source.slice(0, found.index).split('\n').length + 1
-    let data: Yaml
-    try {
-      data = parseYaml(body, firstLine)
-    } catch (error) {
-      return { ...empty, problems: [`the orders block cannot be read: ${(error as Error).message}`] }
-    }
-    if (!isMap(data) || !Array.isArray(data.orders)) {
-      return { ...empty, problems: ['the orders block has no list under `orders:`'] }
-    }
-    const problems: string[] = []
-    const orders = data.orders.map((raw, index): PlanOrder => {
-      const one = isMap(raw) ? raw : {}
-      if (!isMap(raw)) problems.push(`order ${index + 1} is not a mapping`)
-
-      return {
-        id: text(one.id),
-        kind: text(one.kind) || 'code',
-        goal: text(one.goal),
-        why: text(one.why),
-        touches: texts(one.touches),
-        dependsOn: texts(one.depends_on),
-        model: text(one.model),
-      }
-    })
-    const light = isLight(orders)
-    const roles = isMap(data.roles)
-      ? Object.entries(data.roles).map(([name, value]) => roleOf(name, value, light))
-      : Object.keys(DEFAULT_ROLES).map(name => roleOf(name, [], light))
-    if (data.roles !== undefined && !isMap(data.roles)) problems.push('`roles` is not a mapping of role to skills')
-    for (const role of roles) {
-      if (role.effort !== '' && !EFFORTS.includes(role.effort)) problems.push(`role ${role.name}: unknown effort "${role.effort}" (${EFFORTS.join(', ')})`)
-    }
-
-    const goal = text(data.goal) || empty.goal
-
-    return { ...empty, goal, hasRoles: isMap(data.roles), roles, orders, problems: [...problems, ...checkPlan(orders)] }
-  }
-
-  return { ...empty, problems: ['no ```yaml block with an `orders:` key'] }
-}
-
+/** A touches entry as the literal path it covers, and whether it covers a whole directory. */
 const scope = (path: string): [string, boolean] => {
   const clean = path.trim().replace(/^[./]+/, '')
   const glob = /[*?[]/.exec(clean)
@@ -142,6 +171,7 @@ const scope = (path: string): [string, boolean] => {
   return [literal.includes('/') ? `${literal.slice(0, literal.lastIndexOf('/'))}/` : '', true]
 }
 
+/** Whether two touches entries can name the same file. */
 export const overlaps = (a: string, b: string): boolean => {
   const [pa, da] = scope(a)
   const [pb, db] = scope(b)
@@ -149,39 +179,42 @@ export const overlaps = (a: string, b: string): boolean => {
   return pa === pb || (da && pb.startsWith(pa)) || (db && pa.startsWith(pb))
 }
 
-/** plan_lint's plan mode: the same rules, as problems to show. */
-export const checkPlan = (orders: PlanOrder[]): string[] => {
+/** The rules that keep work correct: names, agents and their pinned permission, role text, dependencies, no overlap without an order. */
+export const checkRoles = (roles: Role[], agents: Record<string, Agent>, keys = roles.map(role => role.name)): string[] => {
   const problems: string[] = []
-  const byId = new Map(orders.map(order => [order.id, order]))
-  const ids = orders.map(order => order.id)
-  ids.forEach((id, index) => {
-    if (id === '') problems.push('an order has no id')
-    else if (ids.indexOf(id) !== index && ids.indexOf(id, index + 1) === -1) problems.push(`duplicate order id: ${id}`)
-  })
-  for (const order of orders) {
-    const id = order.id || '?'
-    if (!KINDS.includes(order.kind)) problems.push(`${id}: kind must be code or research, got "${order.kind}"`)
-    if (order.kind === 'code' && order.touches.length === 0) problems.push(`${id}: code order declares no files in touches`)
-    if (order.kind === 'code' && order.why.trim() === '') problems.push(`${id}: code order has no why`)
-    for (const dep of order.dependsOn) if (!byId.has(dep)) problems.push(`${id}: depends_on unknown order "${dep}"`)
+  if (roles.length === 0) problems.push('no roles')
+  const byName = new Map(roles.map(role => [role.name, role]))
+  for (const name of keys) if (!NAME.test(name)) problems.push(`role ${name}: a name is lower case letters, digits and -, starting with a letter`)
+  for (const role of roles) {
+    const { name } = role
+    const agent = agents[role.agent]
+    if (role.agent === '') problems.push(`role ${name}: no agent`)
+    else if (agent === undefined) problems.push(`role ${name}: unknown agent "${role.agent}" (${Object.keys(agents).join(', ')})`)
+    else {
+      const unset = unsetPermission(agent, role.flags)
+      if (unset.length > 0) problems.push(`role ${name}: flags must pin ${role.agent}'s permission (${unset.join('; ')})`)
+    }
+    if (role.text === '' && role.section === '') problems.push(`role ${name}: no text (a ## Role: ${name} section, or text:)`)
+    for (const dep of role.dependsOn) if (!byName.has(dep)) problems.push(`role ${name}: depends_on unknown role "${dep}"`)
+    for (const one of role.reviews) if (!byName.has(one)) problems.push(`role ${name}: reviews unknown role "${one}"`)
   }
-  const deps = (id: string): Set<string> => {
+  const deps = (name: string): Set<string> => {
     const seen = new Set<string>()
-    const stack = [...(byId.get(id)?.dependsOn ?? [])]
+    const stack = [...(byName.get(name)?.dependsOn ?? [])]
     for (let dep = stack.pop(); dep !== undefined; dep = stack.pop()) {
-      if (seen.has(dep) || !byId.has(dep)) continue
+      if (seen.has(dep) || !byName.has(dep)) continue
       seen.add(dep)
-      stack.push(...(byId.get(dep)?.dependsOn ?? []))
+      stack.push(...(byName.get(dep)?.dependsOn ?? []))
     }
 
     return seen
   }
-  for (const id of byId.keys()) if (deps(id).has(id)) problems.push(`${id}: dependency cycle`)
-  orders.forEach((a, index) => {
-    for (const b of orders.slice(index + 1)) {
+  for (const name of byName.keys()) if (deps(name).has(name)) problems.push(`role ${name}: dependency cycle`)
+  roles.forEach((a, index) => {
+    for (const b of roles.slice(index + 1)) {
       const shared = a.touches.flatMap(x => b.touches.filter(y => overlaps(x, y)).map(y => `${x} ~ ${y}`))
-      if (shared.length > 0 && !deps(a.id).has(b.id) && !deps(b.id).has(a.id)) {
-        problems.push(`${a.id} and ${b.id} overlap (${shared.join('; ')}) but neither depends on the other`)
+      if (shared.length > 0 && !deps(a.name).has(b.name) && !deps(b.name).has(a.name)) {
+        problems.push(`${a.name} and ${b.name} overlap (${shared.join('; ')}) but neither depends on the other`)
       }
     }
   })
@@ -189,70 +222,19 @@ export const checkPlan = (orders: PlanOrder[]): string[] => {
   return problems
 }
 
-/** Kahn's layering: each layer holds the orders whose known dependencies all sit in earlier layers. */
-export const layersOf = <O extends { id: string; dependsOn: string[] }>(orders: O[]): { layers: O[][]; stuck: O[] } => {
-  const known = new Set(orders.map(order => order.id))
+/** Kahn's layering: each layer holds the roles whose known dependencies all sit in earlier layers. */
+export const layersOf = <R extends { name: string; dependsOn: string[] }>(roles: R[]): { layers: R[][]; stuck: R[] } => {
+  const known = new Set(roles.map(role => role.name))
   const placed = new Set<string>()
-  const layers: O[][] = []
-  let left = orders
+  const layers: R[][] = []
+  let left = roles
   while (left.length > 0) {
-    const ready = left.filter(order => order.dependsOn.every(dep => placed.has(dep) || !known.has(dep)))
+    const ready = left.filter(role => role.dependsOn.every(dep => placed.has(dep) || !known.has(dep)))
     if (ready.length === 0) break
     layers.push(ready)
-    for (const order of ready) placed.add(order.id)
-    left = left.filter(order => !ready.includes(order))
+    for (const role of ready) placed.add(role.name)
+    left = left.filter(role => !ready.includes(role))
   }
 
   return { layers, stuck: left }
-}
-
-
-// ---- the workflow ------------------------------------------------------------
-
-export type Step = { label: string; isGate?: true; isHeavy?: true }
-
-/** The key steps of the kit's tianqi-mission flow, for the step detection; a gate waits for the human. The graph draws only the gates. */
-export const STEPS: Step[] = [
-  { label: 'Intent' },
-  { label: 'Plan' },
-  { label: 'Plan OK?', isGate: true },
-  { label: 'Build' },
-  { label: 'Order review' },
-  { label: 'Slim', isHeavy: true },
-  { label: 'Cut', isHeavy: true },
-  { label: 'Final review', isHeavy: true },
-  { label: 'MR OK?', isGate: true },
-  { label: 'Open MR' },
-  { label: 'Merged?', isGate: true },
-  { label: 'Teardown' },
-  { label: 'main' },
-]
-const at = (label: string) => STEPS.findIndex(step => step.label === label)
-
-/** A light mission (one or two orders) skips the heavy steps: Slim, Cut and Final review. A plan with no orders read is not light. */
-export const isLight = (orders: unknown[]): boolean => orders.length >= 1 && orders.length <= 2
-
-/** The steps a mission of `orders` goes through, as the pane names them: from Plan to Teardown, a light one without the heavy steps. */
-export const stepsOf = (orders: unknown[]): Step[] =>
-  STEPS.filter(step => step.label !== 'Intent' && step.label !== 'main' && !(step.isHeavy && isLight(orders)))
-
-/**
- * The step the mission is at, as an index into STEPS, from what the pane
- * already reads: the plan's problems, the order states, the mission folder's
- * SLIM.md and REVIEW.md, whether the mission branch holds SLIM.md (the
- * cuts merged, so the final review runs), and whether an approval record
- * holds for plan.md. It never passes "MR OK?".
- */
-export const stepOf = (m: { problems: string[]; orders: { state: TroupeOrderState }[] }, files: string[], isSlimMerged = false, isApproved = false): number => {
-  const states = m.orders.map(order => order.state)
-  if (states.length === 0 || m.problems.length > 0) return at('Plan')
-  // Past the gate once an approval record holds for plan.md as it is now.
-  if (states.every(state => state === 'planned')) return isApproved ? at('Build') : at('Plan OK?')
-  if (states.some(state => state === 'planned' || state === 'running')) return at('Build')
-  if (states.some(state => state !== 'reviewed')) return at('Order review')
-  if (isLight(states) || files.includes('REVIEW.md')) return at('MR OK?')
-
-  if (!files.includes('SLIM.md')) return at('Slim')
-
-  return isSlimMerged ? at('Final review') : at('Cut')
 }

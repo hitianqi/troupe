@@ -1,5 +1,5 @@
 import type { TroupeMission } from '../types'
-import { STEPS } from './plan.ts'
+import { STEPS } from './old-plan.ts'
 import { fit, ORDER_GLYPH } from './view.ts'
 import type { Line, Run, Tone } from './view.ts'
 

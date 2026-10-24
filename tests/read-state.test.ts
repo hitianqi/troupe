@@ -1,7 +1,7 @@
 import { expect, test } from 'claude-code/testing'
 
 import type { TroupeOrderState } from '../types'
-import { goalOf, isLight, layersOf, readPlan, stepOf, STEPS, stepsOf } from '../src/plan.ts'
+import { goalOf, isLight, layersOf, readPlan, stepOf, STEPS, stepsOf } from '../src/old-plan.ts'
 import { gitFacts, isApproved, missionBranchOf, planHash, stateOf } from '../src/mission.ts'
 import { detail, textOf } from '../src/view.ts'
 import { parseYaml } from '../src/yaml.ts'
