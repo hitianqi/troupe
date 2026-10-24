@@ -22,6 +22,7 @@ export const validBadgeGlyph = (glyph: string): boolean => {
 }
 
 export type Agent = {
+  usage?: 'claude' | 'codex'
   badge?: Badge
   command: string
   model: string[]
@@ -35,6 +36,7 @@ export type Agent = {
 
 export const AGENTS: Record<string, Agent> = Object.assign(Object.create(null) as Record<string, Agent>, {
   claude: {
+    usage: 'claude',
     badge: { glyph: '✻', tone: 'coral' },
     command: 'claude',
     model: ['--model', '{model}'],
@@ -49,6 +51,7 @@ export const AGENTS: Record<string, Agent> = Object.assign(Object.create(null) a
     paste: 'bracketed',
   },
   codex: {
+    usage: 'codex',
     badge: { glyph: '⬢', tone: 'cyan' },
     command: 'codex',
     model: ['-m', '{model}'],
@@ -101,7 +104,7 @@ export const screenOf = (agent: Agent, captured: string): Screen => {
 
 type Map = { [key: string]: Yaml }
 const isMap = (value: Yaml | undefined): value is Map => typeof value === 'object' && value !== null && !Array.isArray(value)
-const KEYS = ['command', 'model', 'effort', 'permission', 'prompt', 'screen', 'paste', 'badge']
+const KEYS = ['command', 'model', 'effort', 'permission', 'prompt', 'screen', 'paste', 'badge', 'usage']
 const STATES = ['waits', 'working', 'ready'] as const
 
 const lineOf = (source: string, field: string): number => {
@@ -143,6 +146,8 @@ const readAgent = (source: string): Agent => {
   })
   if (data.prompt !== 'last-arg') return fail('prompt', 'must be last-arg')
   if (data.paste !== 'bracketed') return fail('paste', 'must be bracketed')
+  if (data.usage !== undefined && data.usage !== 'claude' && data.usage !== 'codex') return fail('usage', 'must be claude or codex')
+  const usage = data.usage as Agent['usage']
   if (!isMap(data.screen)) return fail('screen', 'must be a mapping')
   const screen: Agent['screen'] = { waits: [], working: [], ready: [] }
   for (const key of Object.keys(data.screen)) if (!STATES.some(state => state === key)) fail(`screen.${key}`, 'is not a screen state')
@@ -166,7 +171,7 @@ const readAgent = (source: string): Agent => {
     badge = { glyph: data.badge.glyph, tone: data.badge.tone as Tone }
   }
 
-  return { command: data.command, model, effort, permission, prompt: data.prompt, screen, paste: data.paste, ...(badge && { badge }) }
+  return { command: data.command, model, effort, permission, prompt: data.prompt, screen, paste: data.paste, ...(badge && { badge }), ...(usage === undefined ? {} : { usage }) }
 }
 
 /** Files replace an adapter in full: built-ins, then home, then repository. Problems must be resolved before use. */
