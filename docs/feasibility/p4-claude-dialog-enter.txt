@@ -1,0 +1,42 @@
+
+ ▐▛███▛█   Claude Code v2.1.310
+▝▜██████▀  Haiku 5.5 with low effort · Claude Pro
+ ▝▝   ▝▝   /private/tmp/troupe-probe/claude-manual
+
+
+❯ Run touch probe-marker once in this directory, then reply PROBE-TOUCH-OK.
+
+  Touching probe-marker file in current directory · 6s
+  ⎿  $ touch probe-marker
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+✳ Hyperspacing… (2s · ↓ 24 tokens)
+                  tmux focus-events off · add 'set -g focus-events on' to ~/.tmux.conf and reattach for focus tracking
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ 
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  ⏸ manual mode on · esc to interrupt · ← for agents
