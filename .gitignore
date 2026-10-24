@@ -6,5 +6,4 @@
 CLAUDE.local.md
 # tooling
 node_modules/
-.claude-plugin/types/
 dist/
