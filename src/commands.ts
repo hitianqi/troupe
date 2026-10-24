@@ -8,7 +8,7 @@ import { clean, mission, mux, NAME, Refusal, repository, runtime, Usage, workflo
 import type { Mission, Reply, Runtime } from './command-context.ts'
 import { append, fold, logPath, PLAN_GATE, readLog } from './log.ts'
 import { createPane, ownedPane } from './panes.ts'
-import { close, dispatch, send, statusOf, teardown } from './role-commands.ts'
+import { close, dispatch, send, statusOf, teardown, waitsOnOf } from './role-commands.ts'
 import { available, installSkill, setup, skillTarget } from './setup.ts'
 import { readResult } from './state.ts'
 import { tmux } from './run.ts'
@@ -84,7 +84,7 @@ const wait = async (r: Runtime, m: Mission, target: { role?: string; gate?: stri
         if (agent === undefined || agent.command !== opened.argv[0]) throw new Refusal(`role ${target.role}: its launched adapter cannot be resolved`)
         const screen = screenOf(agent, pane.screen)
         if (screen === 'ready') return { code: 0, out: `${target.role}: ready\n` }
-        if (screen === 'waits') return { code: 1, out: `${target.role}: waits on you\n${pane.screen.trim()}\n` }
+        if (screen === 'waits') return { code: 1, out: `${target.role}: waits on you\n${waitsOnOf(agent, pane.screen) ?? ''}\n` }
       }
     }
     if (r.now() >= until) return { code: 1, out: `Timed out waiting for ${target.role === undefined ? `gate ${target.gate}` : `role ${target.role}`}\n` }

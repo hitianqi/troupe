@@ -669,3 +669,12 @@ test('forced teardown still refuses foreign panes before changing any resources'
     assert.ok(!w.events().some(e => e.ev === 'teardown'))
   }
 })
+
+test('readiness wait prints only the matched dialog line in a multiline pane', async t => {
+  const w = world(t)
+  await w.approve()
+  await w.call('dispatch', 'api')
+  const pane = [...w.panes.values()][0]
+  pane.screen = 'Earlier agent output\r\n  \r\nWAIT\r\nPermission choices\r\nREADY\r\n'
+  assert.deepEqual(await w.call('wait', '--role', 'api', '--ready'), { code: 1, out: 'api: waits on you\nWAIT\n' })
+})

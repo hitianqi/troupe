@@ -137,8 +137,10 @@ plan with no log. Committed historical plans without logs are skipped.
 Explicit `-m` opens any mission, including a finished one. With none open,
 the panel waits for a new plan.
 
-After opening the MR, run `troupe teardown -m <mission>`. It refuses dirty
-or untracked work and commits unmerged into the plan’s `base` mission branch
+After opening the MR, run `troupe teardown -m <mission>`. It closes only
+role panes; the orchestrator and panel panes opened by `up` stay open.
+It refuses dirty or untracked work and commits unmerged into the plan’s
+`base` mission branch
 unless `--force`; ownership checks still apply. Repeating it with explicit
 `-m` reports nothing left. The MR head and log stay available.
 

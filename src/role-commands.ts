@@ -3,6 +3,7 @@ import { appendFileSync, existsSync, mkdirSync, readFileSync, readdirSync, renam
 import { dirname, join, resolve } from 'node:path'
 
 import { argvOf, screenOf } from './agents.ts'
+import type { Agent } from './agents.ts'
 import { clean, git, locked, mission, mux, Refusal, within } from './command-context.ts'
 import type { Mission, Reply, Runtime } from './command-context.ts'
 import { append, isApproved } from './log.ts'
@@ -28,6 +29,10 @@ export const briefOf = (m: Mission, role: Role, worktree: string, branch: string
   'Use status: done, blocked or failed. Then stop. The result file is ignored by git; do not commit it.', '',
 ].join('\n')
 
+/** The matching dialog line from the same recent rows used by screenOf. */
+export const waitsOnOf = (agent: Agent, screen: string): string | undefined => screen.split(/\r?\n/)
+  .filter(line => line.trim() !== '').slice(-15).find(line => agent.screen.waits.some(pattern => new RegExp(pattern, 'm').test(line)))?.trim()
+
 export const liveOf = (r: Runtime, m: Mission, role: Role): Live & { problem?: string } => {
   const opened = m.folded.roles.get(role.name)
   const pane = opened === undefined ? undefined : ownedPane(r, opened)
@@ -47,8 +52,7 @@ export const liveOf = (r: Runtime, m: Mission, role: Role): Live & { problem?: s
   if (pane?.foreign) problem = 'recorded pane ownership cannot be verified'
   const lines = (pane?.screen ?? '').split(/\r?\n/)
   while (lines.at(-1)?.trim() === '') lines.pop()
-  const waitsOn = pane === undefined || agent === undefined ? undefined : pane.screen.split(/\r?\n/)
-    .filter(line => line.trim() !== '').slice(-15).find(line => agent.screen.waits.some(pattern => new RegExp(pattern, 'm').test(line)))?.trim()
+  const waitsOn = pane === undefined || agent === undefined ? undefined : waitsOnOf(agent, pane.screen)
 
   return {
     state: roleState({ opened: opened !== undefined, closed: opened?.closed, result, pane, screen }),

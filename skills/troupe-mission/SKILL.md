@@ -122,7 +122,8 @@ branch, per the project's conventions. A refused push: tell the person and
 stop. After opening the MR, run `troupe stage teardown`, then
 `troupe teardown -m <mission>`. It removes mission-owned role panes,
 worktrees, branches and temporary briefs/results while keeping the MR head
-and log. Dirty or untracked files and unmerged commits refuse cleanup;
+and log. It closes only role panes; the orchestrator and panel panes opened
+by `up` stay open. Dirty or untracked files and unmerged commits refuse cleanup;
 resolve them before retrying, or ask the person before discarding them with
 `--force`. Repeating teardown with explicit `-m` is safe. Only a person
 merges the MR.
