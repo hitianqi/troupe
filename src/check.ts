@@ -1,10 +1,12 @@
-import { execFileSync } from 'node:child_process'
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join, relative, resolve } from 'node:path'
 
 import { loadAgents } from './agents.ts'
 import { readPlan } from './plan.ts'
+import type { Plan } from './plan.ts'
+import { run } from './run.ts'
+import type { Run } from './run.ts'
 
 // `troupe check [mission]`: finds the plan and prints its problems, or that
 // it is clean. Exit 0 clean, 1 with problems, 2 when there is no plan.
@@ -12,13 +14,15 @@ import { readPlan } from './plan.ts'
 export const MISSIONS = 'docs/missions'
 
 /** The repository's top folder, else `cwd` itself. */
-export const rootOf = (cwd: string): string => {
-  try {
-    return execFileSync('git', ['rev-parse', '--show-toplevel'], { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim()
-  } catch {
-    return cwd
-  }
+export const rootOf = (cwd: string, runner: Run = run): string => {
+  const found = runner('git', ['rev-parse', '--show-toplevel'], { cwd })
+
+  return found.code === 0 ? found.out.trim() : cwd
 }
+
+export const textProblems = (root: string, plan: Plan): string[] => plan.roles
+  .filter(role => role.text !== '' && !role.text.startsWith('workflow:') && !existsSync(join(root, role.text)))
+  .map(role => `role ${role.name}: text ${role.text} is not in the repository`)
 
 /** The plan `want` names: a plan file, a folder holding plan.md, a mission under docs/missions/, or '' for the one whose plan.md changed last. */
 export const findPlan = (root: string, cwd: string, want: string): { path: string } | { missing: string } => {
@@ -49,9 +53,7 @@ export const check = (cwd: string, want: string, home = homedir()): { out: strin
   const problems = [
     ...loaded.problems,
     ...plan.problems,
-    ...plan.roles
-      .filter(role => role.text !== '' && !role.text.startsWith('workflow:') && !existsSync(join(root, role.text)))
-      .map(role => `role ${role.name}: text ${role.text} is not in the repository`),
+    ...textProblems(root, plan),
   ]
   const name = relative(cwd, found.path) || found.path
   if (problems.length === 0) {
