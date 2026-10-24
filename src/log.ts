@@ -12,7 +12,8 @@ export type Event =
   | { ev: 'gate-open'; gate: string; ask?: string; plan?: string }
   | { ev: 'gate-answer'; gate: string; answer: GateAnswer; text?: string; plan?: string }
   | { ev: 'stage'; stage: string }
-  | { ev: 'dispatch'; role: string; session: string; window: string; pane: string; worktree: string; branch: string; base: string; argv: string[] }
+  | { ev: 'dispatch'; role: string; session: string; window: string; pane: string; worktree: string; branch: string; base: string; argv: string[]; owner?: string; agent?: string; socket?: string; server?: string }
+  | { ev: 'up'; session: string; window: string; pane: string; panel: string }
   | { ev: 'send'; role: string; text: string }
   | { ev: 'close'; role: string }
 /** Who wrote a line: what the writer says, not a proof. */
@@ -33,7 +34,7 @@ export const append = (path: string, by: By, event: Event, at = new Date()): Log
   return line
 }
 
-const EVENTS = ['gate-open', 'gate-answer', 'stage', 'dispatch', 'send', 'close']
+const EVENTS = ['gate-open', 'gate-answer', 'stage', 'dispatch', 'send', 'close', 'up']
 
 /** The log's events, and how many lines could not be read (a torn last line, a hand edit). */
 export const readLog = (path: string): { events: Logged[]; unread: number } => {
@@ -80,7 +81,7 @@ export const fold = (events: Logged[]): Folded => {
     } else if (e.ev === 'dispatch') {
       const { at, by: _by, ...dispatch } = e
       out.roles.set(e.role, { ...dispatch, at, sends: 0, closed: false })
-    } else {
+    } else if (e.ev === 'send' || e.ev === 'close') {
       const role = out.roles.get(e.role)
       if (role !== undefined && e.ev === 'send') role.sends += 1
       if (role !== undefined && e.ev === 'close') role.closed = true

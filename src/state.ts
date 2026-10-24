@@ -1,4 +1,3 @@
-import { execFileSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
@@ -6,6 +5,8 @@ import { join } from 'node:path'
 import type { Screen } from './agents.ts'
 import { overlaps } from './plan.ts'
 import type { Role } from './plan.ts'
+import { run, tmux } from './run.ts'
+import type { Run } from './run.ts'
 import { parseYaml } from './yaml.ts'
 import type { Yaml } from './yaml.ts'
 
@@ -54,8 +55,12 @@ export const readResult = (worktree: string): Result | undefined => {
   return existsSync(path) ? resultOf(readFileSync(path, 'utf8')) : undefined
 }
 
-const git = (cwd: string, args: string[]): string =>
-  execFileSync('git', args, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] })
+const git = (cwd: string, args: string[], runner: Run): string => {
+  const result = runner('git', args, { cwd })
+  if (result.code !== 0) throw new Error(result.err || 'git failed')
+
+  return result.out
+}
 
 export type Work = {
   commits: { sha: string; subject: string }[]
@@ -66,8 +71,8 @@ export type Work = {
 }
 
 /** The role's commits since `base` and the files it changed, against its touches. */
-export const workOf = (worktree: string, base: string, touches: string[]): Work => {
-  const commits = git(worktree, ['log', '--format=%h%x09%s', `${base}..HEAD`])
+export const workOf = (worktree: string, base: string, touches: string[], runner: Run = run): Work => {
+  const commits = git(worktree, ['log', '--format=%h%x09%s', `${base}..HEAD`], runner)
     .split('\n')
     .filter(line => line !== '')
     .map(line => {
@@ -76,7 +81,7 @@ export const workOf = (worktree: string, base: string, touches: string[]): Work 
       return { sha, subject: subject.join('\t') }
     })
   const changed = [
-    ...new Set([...git(worktree, ['diff', '--name-only', base]).split('\n'), ...git(worktree, ['ls-files', '--others', '--exclude-standard']).split('\n')]),
+    ...new Set([...git(worktree, ['diff', '--name-only', base], runner).split('\n'), ...git(worktree, ['ls-files', '--others', '--exclude-standard'], runner).split('\n')]),
   ]
     .filter(file => file !== '')
     .sort()
@@ -84,18 +89,39 @@ export const workOf = (worktree: string, base: string, touches: string[]): Work 
   return { commits, changed, outside: changed.filter(file => !touches.some(touch => overlaps(touch, file))) }
 }
 
-export type Pane = { alive: boolean; dead: boolean; screen: string }
+export type Pane = { alive: boolean; dead: boolean; screen: string; foreign?: boolean }
+export type PaneOwner = { session: string; window: string; owner?: string; socket?: string; server?: string }
+const noServer = (err: string): boolean => /no server running|no sessions|No such file or directory/.test(err)
 
 /** The pane's state from tmux: gone, its agent exited (`remain-on-exit`), or alive with its screen. */
-export const paneOf = (pane: string): Pane => {
+export const paneOf = (pane: string, runner: Run = run, env = process.env, expected?: PaneOwner): Pane => {
+  if (expected?.socket !== undefined && expected.socket !== (env.TROUPE_TMUX_SOCKET ?? '')) return { alive: false, dead: false, screen: '', foreign: true }
   try {
-    const dead = execFileSync('tmux', ['display', '-p', '-t', pane, '#{pane_id} #{pane_dead}'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim()
-    if (!dead.startsWith(`${pane} `)) return { alive: false, dead: false, screen: '' }
-    const screen = execFileSync('tmux', ['capture-pane', '-p', '-t', pane], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] })
+    if (expected?.server) {
+      const selected = tmux(['display', '-p', '#{socket_path}'], runner, env)
+      if (selected.code !== 0) {
+        const recorded = tmux(['display', '-p', '#{socket_path}'], runner, env, {}, expected.server)
+        return { alive: false, dead: false, screen: '', ...(recorded.code !== 0 && noServer(recorded.err) ? {} : { foreign: true }) }
+      }
+      if (selected.out.trim() !== expected.server) return { alive: false, dead: false, screen: '', foreign: true }
+    }
+    const identified = tmux(['display', '-p', '-t', pane, '#{pane_id}\t#{pane_dead}\t#{session_id}\t#{window_id}\t#{@troupe-owner}'], runner, env)
+    const [id, dead, session, window, owner] = identified.out.trimEnd().split('\t')
+    if (identified.code !== 0) {
+      const listed = tmux(['list-panes', '-a', '-F', '#{pane_id}'], runner, env)
+      const absent = listed.code === 0 && !listed.out.split(/\r?\n/).includes(pane)
+      return { alive: false, dead: false, screen: '', ...(!absent && !noServer(identified.err) && expected !== undefined ? { foreign: true } : {}) }
+    }
+    if (id !== pane) return { alive: false, dead: false, screen: '', ...(expected === undefined ? {} : { foreign: true }) }
+    if (expected !== undefined && (!expected.owner || owner !== expected.owner || session !== expected.session || window !== expected.window)) {
+      return { alive: false, dead: false, screen: '', foreign: true }
+    }
+    const captured = tmux(['capture-pane', '-p', '-t', pane], runner, env)
+    if (captured.code !== 0) return { alive: true, dead: dead === '1', screen: '' }
 
-    return { alive: true, dead: dead.endsWith(' 1'), screen }
+    return { alive: true, dead: dead === '1', screen: captured.out }
   } catch {
-    return { alive: false, dead: false, screen: '' }
+    return { alive: false, dead: false, screen: '', ...(expected === undefined ? {} : { foreign: true }) }
   }
 }
 
