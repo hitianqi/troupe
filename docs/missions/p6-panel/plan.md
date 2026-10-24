@@ -69,8 +69,8 @@ OpenRig runtime badges, and automatic MR opening during this run.
 
 ## Decisions for you
 
-1. Who runs the roles? **Recommended: Codex gpt-6.1-sol high for both
-   builders and Claude Opus high for review**, with explicit normal editing
+1. Who runs the roles? **Recommended: Codex gpt-6.1-sol high for panel,
+   Codex gpt-6.1-sol medium for commands and Claude Opus medium for review**, with explicit normal editing
    permissions below. Approving takes this recommendation.
 2. How to finish this run? **Recommended: stop with MR gate open after local
    review, integration checks and screen acceptance** as requested; no push,
@@ -110,7 +110,7 @@ roles:
   commands:
     agent: codex
     model: gpt-6.1-sol
-    effort: high
+    effort: medium
     flags: [-a, on-request, -s, workspace-write]
     text: workflow:builder
     goal: "Safe teardown, ready waiting, stale-lock fixes and newest-open-mission selection"
@@ -118,7 +118,7 @@ roles:
   review:
     agent: claude
     model: opus
-    effort: high
+    effort: medium
     flags: [--permission-mode, acceptEdits]
     text: workflow:reviewer
     goal: "Review each branch as it lands against the full brief and safety contracts"
