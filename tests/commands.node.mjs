@@ -111,6 +111,7 @@ const world = t => {
       if (args.includes('@troupe-session')) sessionOwner = args.at(-1)
     }
     if (args[0] === 'display') {
+      if (args.at(-1) === '#{socket_path}') return yes('/unit/socket')
       if (args.at(-1) === '#{session_id}') return yes('$1')
       if (target === '$1') return panes.size ? yes(`$1 ${sessionOwner}`) : no()
       const p = panes.get(target)
@@ -417,6 +418,19 @@ test('changing the explicit tmux socket cannot create a duplicate or target the 
   const other = { ...w.r, env: { TROUPE_TMUX_SOCKET: 'other-socket' } }
   for (const [command, args] of [['dispatch', ['api']], ['send', ['api', 'hello']], ['close', ['api']]]) {
     assert.equal((await execute(command, args, other)).code, 1)
+  }
+  assert.equal(w.panes.size, 1)
+})
+
+test('changing the inherited tmux server refuses operations even if pane IDs are missing there', async t => {
+  const w = world(t)
+  await w.approve()
+  await w.call('dispatch', 'api')
+  const run = (command, args, options) => command === 'tmux' && args.at(-1) === '#{socket_path}'
+    ? { code: 0, out: '/other/server', err: '' }
+    : w.r.run(command, args, options)
+  for (const [command, args] of [['dispatch', ['api']], ['send', ['api', 'hello']], ['close', ['api']]]) {
+    assert.equal((await execute(command, args, { ...w.r, run })).code, 1)
   }
   assert.equal(w.panes.size, 1)
 })

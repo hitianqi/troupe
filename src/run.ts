@@ -18,8 +18,8 @@ export const run: Run = (command, args, options = {}) => {
 }
 
 /** All CLI tmux calls, including live-state reads, go through this helper. */
-export const tmux = (args: string[], runner: Run = run, env = process.env, options: RunOptions = {}): Ran =>
-  runner('tmux', [...(env.TROUPE_TMUX_SOCKET ? ['-L', env.TROUPE_TMUX_SOCKET] : []), ...args], { ...options, env })
+export const tmux = (args: string[], runner: Run = run, env = process.env, options: RunOptions = {}, recordedSocket?: string): Ran =>
+  runner('tmux', [...(recordedSocket ? ['-S', recordedSocket] : env.TROUPE_TMUX_SOCKET ? ['-L', env.TROUPE_TMUX_SOCKET] : []), ...args], { ...options, env })
 
 /** Each element stays one shell word, including quotes, newlines and dollars. */
 export const shellOf = (argv: string[]): string => argv.map(arg => `'${arg.replaceAll("'", "'\\''")}'`).join(' ')

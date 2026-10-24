@@ -12,7 +12,7 @@ export type Event =
   | { ev: 'gate-open'; gate: string; ask?: string; plan?: string }
   | { ev: 'gate-answer'; gate: string; answer: GateAnswer; text?: string; plan?: string }
   | { ev: 'stage'; stage: string }
-  | { ev: 'dispatch'; role: string; session: string; window: string; pane: string; worktree: string; branch: string; base: string; argv: string[]; owner?: string; agent?: string; socket?: string }
+  | { ev: 'dispatch'; role: string; session: string; window: string; pane: string; worktree: string; branch: string; base: string; argv: string[]; owner?: string; agent?: string; socket?: string; server?: string }
   | { ev: 'up'; session: string; window: string; pane: string; panel: string }
   | { ev: 'send'; role: string; text: string }
   | { ev: 'close'; role: string }

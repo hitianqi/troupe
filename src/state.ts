@@ -90,19 +90,27 @@ export const workOf = (worktree: string, base: string, touches: string[], runner
 }
 
 export type Pane = { alive: boolean; dead: boolean; screen: string; foreign?: boolean }
-export type PaneOwner = { session: string; window: string; owner?: string; socket?: string }
+export type PaneOwner = { session: string; window: string; owner?: string; socket?: string; server?: string }
+const noServer = (err: string): boolean => /no server running|no sessions|No such file or directory/.test(err)
 
 /** The pane's state from tmux: gone, its agent exited (`remain-on-exit`), or alive with its screen. */
 export const paneOf = (pane: string, runner: Run = run, env = process.env, expected?: PaneOwner): Pane => {
   if (expected?.socket !== undefined && expected.socket !== (env.TROUPE_TMUX_SOCKET ?? '')) return { alive: false, dead: false, screen: '', foreign: true }
   try {
+    if (expected?.server) {
+      const selected = tmux(['display', '-p', '#{socket_path}'], runner, env)
+      if (selected.code !== 0) {
+        const recorded = tmux(['display', '-p', '#{socket_path}'], runner, env, {}, expected.server)
+        return { alive: false, dead: false, screen: '', ...(recorded.code !== 0 && noServer(recorded.err) ? {} : { foreign: true }) }
+      }
+      if (selected.out.trim() !== expected.server) return { alive: false, dead: false, screen: '', foreign: true }
+    }
     const identified = tmux(['display', '-p', '-t', pane, '#{pane_id}\t#{pane_dead}\t#{session_id}\t#{window_id}\t#{@troupe-owner}'], runner, env)
     const [id, dead, session, window, owner] = identified.out.trimEnd().split('\t')
     if (identified.code !== 0) {
       const listed = tmux(['list-panes', '-a', '-F', '#{pane_id}'], runner, env)
       const absent = listed.code === 0 && !listed.out.split(/\r?\n/).includes(pane)
-      const noServer = /no server running|no sessions|No such file or directory/.test(identified.err)
-      return { alive: false, dead: false, screen: '', ...(!absent && !noServer && expected !== undefined ? { foreign: true } : {}) }
+      return { alive: false, dead: false, screen: '', ...(!absent && !noServer(identified.err) && expected !== undefined ? { foreign: true } : {}) }
     }
     if (id !== pane) return { alive: false, dead: false, screen: '', ...(expected === undefined ? {} : { foreign: true }) }
     if (expected !== undefined && (!expected.owner || owner !== expected.owner || session !== expected.session || window !== expected.window)) {

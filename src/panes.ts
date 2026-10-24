@@ -8,11 +8,11 @@ import { paneOf } from './state.ts'
 import type { Pane, PaneOwner } from './state.ts'
 import { shellOf, tmux } from './run.ts'
 
-export type Created = { session: string; window: string; pane: string; owner: string }
+export type Created = { session: string; window: string; pane: string; owner: string; server: string }
 const IDS = '#{session_id} #{window_id} #{pane_id}'
 export const ownedPane = (r: Runtime, opened: PaneOwner & { pane: string }): Pane => paneOf(opened.pane, r.run, r.env, opened)
 
-const ids = (out: string): Omit<Created, 'owner'> => {
+const ids = (out: string): Omit<Created, 'owner' | 'server'> => {
   const [session = '', window = '', pane = ''] = out.trim().split(/\s+/)
   if (!/^\$\d+$/.test(session) || !/^@\d+$/.test(window) || !/^%\d+$/.test(pane)) throw new Refusal(`tmux returned invalid pane identifiers: ${out.trim()}`)
 
@@ -51,10 +51,13 @@ export const createPane = (r: Runtime, repo: Repository, name: string, cwd: stri
       ? ['new-window', '-d', '-t', `${session}:`, '-n', windowName, ...common]
       : ['new-session', '-d', '-s', sessionName, '-n', windowName, ...common]))
   const owner = randomUUID()
+  let server = ''
   try {
     mux(r, ['set-option', '-p', '-t', opened.pane, 'remain-on-exit', 'on'])
     mux(r, ['set-option', '-p', '-t', opened.pane, '@troupe-owner', owner])
     mux(r, ['select-pane', '-t', opened.pane, '-T', name])
+    server = mux(r, ['display', '-p', '#{socket_path}']).trim()
+    if (server === '') throw new Refusal('tmux did not identify its socket')
     if (session === undefined) {
       const sessionOwner = randomUUID()
       mux(r, ['set-option', '-t', opened.session, '@troupe-session', sessionOwner])
@@ -66,7 +69,7 @@ export const createPane = (r: Runtime, repo: Repository, name: string, cwd: stri
     throw error
   }
 
-  return { ...opened, owner }
+  return { ...opened, owner, server }
 }
 
 /** Tile only a window whose every pane still has a logged owner marker. */
@@ -79,5 +82,5 @@ export const rolesWindow = (r: Runtime, m: Mission): Created | undefined => {
     if (!opened.some(one => pane === `${one.pane} ${one.owner}`)) throw new Refusal('roles window contains a pane troupe did not open')
   }
 
-  return { session: live.session, window: live.window, pane: live.pane, owner: live.owner ?? '' }
+  return { session: live.session, window: live.window, pane: live.pane, owner: live.owner ?? '', server: live.server ?? '' }
 }
