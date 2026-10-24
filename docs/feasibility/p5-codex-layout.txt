@@ -1,0 +1,16 @@
+/private/tmp/troupe-probe/p5-codex
+  git-common-dir: /private/tmp/troupe-probe/p5-codex/.git
+/private/tmp/troupe-probe/p5-codex-a
+  git-common-dir: /private/tmp/troupe-probe/p5-codex/.git
+/private/tmp/troupe-probe/p5-codex/.troupe/worktrees/a
+  git-common-dir: /private/tmp/troupe-probe/p5-codex/.git
+Main checkout exclude:
+# git ls-files --others --exclude-from=.git/info/exclude
+# Lines that start with '#' are comments.
+# For a project mostly in C, the following would be a good set of
+# exclude patterns (uncomment them if you want to use them):
+# *.[oa]
+# *~
+
+/.troupe/
+
