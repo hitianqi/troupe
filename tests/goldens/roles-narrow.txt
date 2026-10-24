@@ -4,11 +4,11 @@
 ────────────────────────────────────────────────────────
 ▌ ◆ panel  waits on you · Trust this fol… o Open window
 
-               role/demo/commands   -a on-request -s w…
-               done · Safe cleanup
-
-  ✻ review     ○ planned      claude gpt-6.1-sol
-               role/demo/review   -a on-request -s wor…
-
+ ─ ✻ review · ○ planned ───────────────────────────────
+   agent    claude gpt-6.1-sol
+   effort   ■■■□□ high
+   ctx      —
+   tokens   —
+   work     —
 
  ↑↓  role   ⏎  detail   o  open   s  send   d  diff   1…

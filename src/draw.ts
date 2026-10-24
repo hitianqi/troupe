@@ -136,7 +136,10 @@ const reflow = (runs: Line, width: number, first = '', rest = ''): Line[] => {
   do {
     const prefix = lines.length === 0 ? first : rest
     const room = Math.max(1, width - prefix.length)
-    let end = Math.min(room, cells.length)
+    // The most characters that fit in `room` terminal cells (a CJK character takes two).
+    let end = 0
+    for (let used = 0; end < cells.length && used + cellsOf(cells[end]?.text ?? '') <= room; end += 1) used += cellsOf(cells[end]?.text ?? '')
+    end = Math.max(1, end)
     if (end < cells.length && cells[end]?.text !== ' ') {
       const space = cells.slice(0, end).map(cell => cell.text).lastIndexOf(' ')
       if (space > 0) end = space
@@ -568,38 +571,29 @@ const mission = (c: Canvas, m: PanelModel, ui: Ui, top: number, bottom: number, 
   }
 }
 
-/** The ROLES tab: one row per role, then its branch and flags; columns drop from the right when the width is short. */
+/** The ROLES tab: each role under its own rule, one fact per line. */
 const rolesTable = (m: PanelModel, width: number): Line[] => {
-  type Column = { title: string; width: number; cell: (role: RoleView) => Line }
-  const all: Column[] = [
-    { title: 'STATE', width: 15, cell: role => [{ text: `${LOOK[role.state].glyph} ${LOOK[role.state].text}`, tone: LOOK[role.state].tone }] },
-    { title: 'AGENT', width: 21, cell: role => [{ text: `${role.agent} ${role.model || 'default'}` }] },
-    { title: 'EFFORT', width: EFFORT + 2, cell: role => effortOf(role.effort) },
-    { title: 'CTX', width: 18, cell: role => contextBar(role, 10) },
-    { title: 'TOKENS', width: 18, cell: role => [{ text: tokensOf(role), tone: 'dim' }] },
-    { title: 'WORK', width: 19, cell: role => {
-      const work = role.work
-      if (work === undefined) return [{ text: '—', tone: 'dim' }]
-      const n = work.commits.length
-
-      return [{ text: `${n} commit${n === 1 ? '' : 's'} · ${work.changed.length}` }, work.outside.length > 0 ? { text: ` ✗${work.outside.length}`, tone: 'error' } : { text: ' ✓', tone: 'ok' }]
-    } },
-    { title: 'TIME', width: 8, cell: role => [{ text: role.elapsed?.replace(/\s*\d+s$/, '') ?? '—', tone: 'dim' }] },
-  ]
-  const NAME = 14
-  const columns: Column[] = []
-  let used = NAME
-  for (const column of all) {
-    if (used + column.width > width) break
-    columns.push(column)
-    used += column.width
-  }
-  const lines: Line[] = [[{ text: `${fit('   ROLE', NAME)}${columns.map(column => fit(column.title, column.width)).join('')}`, tone: 'dim' }]]
+  const lines: Line[] = []
+  const LABEL = 11
   for (const role of m.roles) {
-    lines.push([{ text: ' ' }, badge(role), { text: ' ' }, { text: fit(role.name, NAME - 3), tone: 'bright', bold: true }, ...columns.flatMap(column => fitRuns(column.cell(role), column.width))])
-    lines.push([{ text: ' '.repeat(NAME) }, ...fitRuns([{ text: role.branch, tone: 'dim' }, { text: '   ' }, { text: role.flags.join(' '), tone: 'accent' }], width - NAME)])
-    if (role.state === 'waits') lines.push([{ text: ' '.repeat(NAME) }, { text: fit(`◆ waits on you${role.waitsOn ? ` · ${role.waitsOn}` : ''}`, width - NAME), tone: 'warn' }])
-    else if (role.result !== undefined) lines.push([{ text: ' '.repeat(NAME) }, { text: fit(`${role.result.status || '?'} · ${role.result.summary}`, width - NAME), tone: role.result.status === 'done' ? 'ok' : 'warn' }])
+    const look = LOOK[role.state]
+    const title = `${role.name} · ${look.glyph} ${look.text}`
+    lines.push([{ text: '─ ', tone: 'chrome' }, badge(role), { text: ` ${role.name}`, tone: 'bright', bold: true }, { text: ` · ${look.glyph} ${look.text}`, tone: look.tone }, { text: ` ${'─'.repeat(Math.max(0, width - cellsOf(title) - 5))}`, tone: 'chrome' }])
+    const field = (name: string, value: Line) => lines.push([{ text: fit(`  ${name}`, LABEL), tone: 'dim' }, ...fitRuns(value, width - LABEL)])
+    field('agent', [{ text: `${role.agent} ${role.model || 'default'}` }])
+    field('effort', effortOf(role.effort))
+    field('ctx', contextBar(role, 24))
+    field('tokens', [{ text: role.tokens === undefined ? '—' : `${tokensOf(role)}${role.tokens.window === undefined ? '' : ` · ${count(role.tokens.window)} window`}`, tone: role.tokens === undefined ? 'dim' : undefined }])
+    const work = role.work
+    field('work', work === undefined ? [{ text: '—', tone: 'dim' }] : [
+      { text: `${work.commits.length} commit${work.commits.length === 1 ? '' : 's'} · ${work.changed.length} file${work.changed.length === 1 ? '' : 's'} ` },
+      work.outside.length > 0 ? { text: `✗ ${work.outside.length} outside touches`, tone: 'error' } : { text: '✓ inside touches', tone: 'ok' },
+    ])
+    field('time', [{ text: role.elapsed === undefined ? `— · ${startOf(role)}` : `${role.elapsed} since dispatch`, tone: 'dim' }])
+    field('branch', [{ text: role.branch }])
+    field('flags', [{ text: role.flags.join(' ') || '—', tone: 'accent' }])
+    if (role.state === 'waits') field('waits on', [{ text: role.waitsOn || '—', tone: 'warn' }])
+    if (role.result !== undefined) lines.push(...reflow([{ text: `${role.result.status || '?'} · ${role.result.summary}`, tone: role.result.status === 'done' ? 'ok' : 'warn' }], width, ' '.repeat(LABEL), ' '.repeat(LABEL)).map((line, index) => index === 0 ? [{ text: fit('  result', LABEL), tone: 'dim' as const }, ...line.slice(1)] : line))
     lines.push([])
   }
 
@@ -614,7 +608,7 @@ const other = (c: Canvas, m: PanelModel, ui: Ui, top: number, bottom: number, hi
   if (ui.tab === 2) {
     const table = rolesTable(m, width)
     // A role's block starts at its name row: the header, then blocks separated by a blank line.
-    table.forEach((line, index) => { const name = m.roles.find(role => line.some(run => run.bold && run.text.trim() === role.name)); if (name !== undefined) rows.push({ at: index, role: name.name }) })
+    table.forEach((line, index) => { const name = m.roles.find(role => line[0]?.text === '─ ' && line.some(run => run.bold && run.text.trim() === role.name)); if (name !== undefined) rows.push({ at: index, role: name.name }) })
     lines.push(...table)
   } else if (ui.tab === 3) {
     lines.push(...reflow([{ text: `${m.planPath}  ·  ${m.hash.replace(/^(sha256:.{8}).*$/, '$1')}  ·  `, tone: 'dim' }, checksOf(m), { text: `  ·  f ${ui.full ? 'summary' : 'full text'}`, tone: 'dim' }], width), [])

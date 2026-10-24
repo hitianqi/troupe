@@ -4,21 +4,37 @@
 ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
 ▌ ◆ panel  waits on you · Trust this folder?                                                                                            o Open window
 
-    ROLE       STATE          AGENT                EFFORT        CTX               TOKENS            WORK               TIME
-  ⬢ panel      ◆ waits on you codex gpt-6.1-sol    ■■■□□ high    —                 —                 1 commit · 2 ✗1    5m
-               role/demo/panel   -a on-request -s workspace-write
-               ◆ waits on you · Trust this folder?
+ ─ ⬢ panel · ◆ waits on you ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+   agent    codex gpt-6.1-sol
+   effort   ■■■□□ high
+   ctx      —
+   tokens   —
+   work     1 commit · 2 files ✗ 1 outside touches
+   time     5m 12s since dispatch
+   branch   role/demo/panel
+   flags    -a on-request -s workspace-write
+   waits on Trust this folder?
 
-  ⬢ commands   ○ planned      codex default        unusual       —                 —                 —                  —
-               role/demo/commands   -a on-request -s workspace-write
-               done · Safe cleanup
+ ─ ⬢ commands · ○ planned ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+   agent    codex default
+   effort   unusual
+   ctx      —
+   tokens   —
+   work     —
+   time     — · starts at once
+   branch   role/demo/commands
+   flags    -a on-request -s workspace-write
+   result   done · Safe cleanup
 
-  ✻ review     ○ planned      claude gpt-6.1-sol   ■■■□□ high    —                 —                 —                  —
-               role/demo/review   -a on-request -s workspace-write
-
-
-
-
+ ─ ✻ review · ○ planned ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+   agent    claude gpt-6.1-sol
+   effort   ■■■□□ high
+   ctx      —
+   tokens   —
+   work     —
+   time     — · as each lands
+   branch   role/demo/review
+   flags    -a on-request -s workspace-write
 
 
 
