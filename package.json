@@ -17,7 +17,7 @@
   ],
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
-    "test": "npm run build && node --test tests/cli.node.mjs tests/plan.node.mjs",
+    "test": "npm run build && node --test tests/cli.node.mjs tests/plan.node.mjs tests/state.node.mjs",
     "check": "./check.sh"
   },
   "devDependencies": {
