@@ -141,6 +141,9 @@ export const send = async (r: Runtime, initial: Mission, name: string, text: str
   try {
     mux(r, ['load-buffer', '-b', buffer, '-'], { input: text })
     ready()
+    // New work: the old result goes aside, so `troupe wait --role` waits for the new one.
+    const oldResult = join(opened.worktree, RESULT_FILE)
+    if (existsSync(oldResult)) renameSync(oldResult, join(dirname(m.log), `result-${name}-${randomUUID()}.md`))
     mux(r, ['paste-buffer', '-p', '-d', '-b', buffer, '-t', opened.pane])
     mux(r, ['send-keys', '-t', opened.pane, 'Enter'])
   } finally {

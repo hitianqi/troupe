@@ -33,18 +33,20 @@ troupe: 1
 goal: "<the mission in one sentence: what it delivers>"
 why: "<one line: why now>"
 workflow: troupe-mission
-base: main
+base: mission/<mission>         # roles are cut from it at dispatch; you merge onto it
 profiles:                       # settings several roles share; a role's own fields win
   claude-build:
     agent: claude
     model: opus
     effort: high
     flags: [--permission-mode, acceptEdits]
+    text: workflow:builder      # the workflow's builder rules, then the role's section
   codex-build:
     agent: codex
     model: <model>
     effort: high
     flags: [-a, on-request, -s, workspace-write]
+    text: workflow:builder
 roles:                          # one role = one window, one worktree, one branch
   api:
     use: codex-build
@@ -64,6 +66,7 @@ roles:                          # one role = one window, one worktree, one branc
     goal: "Review each branch as it lands"
     touches: []                 # changes no files
     reviews: [api, web]
+    text: workflow:reviewer
 ```
 
 Each role names its `agent` (`claude`, `codex`, or an adapter in
