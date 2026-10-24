@@ -1,12 +1,14 @@
 import assert from 'node:assert/strict'
-import { execFileSync } from 'node:child_process'
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { execFileSync, spawn } from 'node:child_process'
+import { once } from 'node:events'
+import fs, { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { syncBuiltinESMExports } from 'node:module'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { test } from 'node:test'
 
 import { execute } from '../dist/commands.js'
-import { mission, runtime } from '../dist/command-context.js'
+import { locked, mission, runtime } from '../dist/command-context.js'
 import { append, readLog } from '../dist/log.js'
 import { shellOf } from '../dist/run.js'
 import { INSTALL_MARKER } from '../dist/setup.js'
@@ -341,6 +343,136 @@ test('a changed plan during worktree preparation never launches a role, and lock
   mkdirSync(lock)
   assert.match((await w.call('dispatch', 'api')).out, /another command holds/)
   rmSync(lock, { recursive: true })
+})
+
+test('a command clears a lock whose holder exited and records its own pid while running', async t => {
+  const w = world(t)
+  await w.approve()
+  const child = spawn(process.execPath, ['-e', ''], { stdio: 'ignore' })
+  await once(child, 'exit')
+  const lock = join(w.root, '.git/troupe/m1/command.lock')
+  w.write(join(lock, 'pid'), String(child.pid))
+  const output = []
+  const stdout = t.mock.method(process.stdout, 'write', text => { output.push(String(text)); return true })
+  let result
+  let held = false
+  try {
+    result = await execute('dispatch', ['api'], { ...w.r, run: (command, args, options) => {
+      if (command === 'git' && args[0] === 'worktree' && args[1] === 'add') {
+        assert.equal(readFileSync(join(lock, 'pid'), 'utf8'), String(process.pid))
+        held = true
+      }
+      return w.r.run(command, args, options)
+    } })
+  } finally {
+    stdout.mock.restore()
+  }
+  assert.equal(result.code, 0, result.out)
+  assert.ok(held)
+  assert.equal(output.length, 1)
+  assert.equal(output[0], `Cleared stale command lock ${lock} (process ${child.pid} has exited).\n`)
+  assert.ok(!existsSync(lock))
+})
+
+test('a stale contender cannot remove a lock another command has reclaimed', async t => {
+  const w = world(t)
+  await w.approve()
+  const m = mission(w.r)
+  const lock = join(dirname(m.log), 'command.lock')
+  const child = spawn(process.execPath, ['-e', ''], { stdio: 'ignore' })
+  await once(child, 'exit')
+  w.write(join(lock, 'pid'), String(child.pid))
+  let release
+  const hold = new Promise(resolve => { release = resolve })
+  let winner
+  let entered = false
+  const kill = process.kill.bind(process)
+  const check = t.mock.method(process, 'kill', (pid, signal) => {
+    if (!winner) {
+      check.mock.restore()
+      // B already read the dead pid; A now reclaims and holds the new lock.
+      winner = locked(m, () => hold)
+    }
+    return kill(pid, signal)
+  })
+  const output = []
+  const stdout = t.mock.method(process.stdout, 'write', text => { output.push(String(text)); return true })
+  try {
+    await assert.rejects(locked(m, () => { entered = true }), /another command holds/)
+    assert.equal(entered, false)
+    assert.equal(readFileSync(join(lock, 'pid'), 'utf8'), String(process.pid))
+    assert.ok(!existsSync(join(lock, 'reclaim')))
+    assert.equal(output.length, 1)
+  } finally {
+    release()
+    await winner
+    stdout.mock.restore()
+  }
+  assert.ok(!existsSync(lock))
+})
+
+test('only one contender can remove a dead lock during reclamation', async t => {
+  const w = world(t)
+  await w.approve()
+  const m = mission(w.r)
+  const lock = join(dirname(m.log), 'command.lock')
+  const child = spawn(process.execPath, ['-e', ''], { stdio: 'ignore' })
+  await once(child, 'exit')
+  w.write(join(lock, 'pid'), String(child.pid))
+  let contender
+  let entered = false
+  const remove = fs.rmSync
+  const removal = t.mock.method(fs, 'rmSync', (path, options) => {
+    if (path === lock && !contender) {
+      // A is about to remove the old lock; B observes the same dead pid.
+      contender = locked(m, () => { entered = true })
+    }
+    return remove(path, options)
+  })
+  syncBuiltinESMExports()
+  const output = []
+  const stdout = t.mock.method(process.stdout, 'write', text => { output.push(String(text)); return true })
+  let release
+  const hold = new Promise(resolve => { release = resolve })
+  let winner
+  try {
+    winner = locked(m, () => hold)
+    assert.ok(contender)
+    await assert.rejects(contender, /another command holds/)
+    assert.equal(entered, false)
+    assert.equal(readFileSync(join(lock, 'pid'), 'utf8'), String(process.pid))
+    assert.equal(output.length, 1)
+  } finally {
+    removal.mock.restore()
+    syncBuiltinESMExports()
+    release()
+    await winner
+    stdout.mock.restore()
+  }
+  assert.ok(!existsSync(lock))
+})
+
+test('commands refuse locks with live, missing, unreadable or invalid holder pids', async t => {
+  const w = world(t)
+  await w.approve()
+  const lock = join(w.root, '.git/troupe/m1/command.lock')
+  const kill = process.kill.bind(process)
+  t.mock.method(process, 'kill', (pid, signal) => {
+    if (pid === 1) throw Object.assign(new Error('operation not permitted'), { code: 'EPERM' })
+    return kill(pid, signal)
+  })
+  for (const pid of [String(process.pid), '1', undefined, 'unreadable', '', '0', '-1', '1.5', '99999999999999999999', 'invalid']) {
+    mkdirSync(lock)
+    if (pid === 'unreadable') mkdirSync(join(lock, 'pid'))
+    else if (pid !== undefined) w.write(join(lock, 'pid'), pid)
+    const result = await w.call('dispatch', 'api')
+    assert.equal(result.code, 1)
+    assert.ok(result.out.includes(`another command holds ${lock}`), result.out)
+    if (pid !== String(process.pid) && pid !== '1') assert.ok(result.out.includes(`remove ${lock} by hand once no troupe command is running`), result.out)
+    assert.ok(existsSync(lock))
+    assert.equal(w.panes.size, 0)
+    rmSync(lock, { recursive: true })
+  }
 })
 
 test('redispatch reuses its branch/worktree and archives the old result', async t => {
