@@ -2,12 +2,13 @@ import { existsSync, readFileSync } from 'node:fs'
 import { basename, dirname, join } from 'node:path'
 import { parseArgs } from 'node:util'
 
+import { screenOf } from './agents.ts'
 import { check, findPlan, rootOf } from './check.ts'
 import { clean, mission, mux, NAME, Refusal, repository, runtime, Usage, workflowStages } from './command-context.ts'
 import type { Mission, Reply, Runtime } from './command-context.ts'
 import { append, fold, logPath, PLAN_GATE, readLog } from './log.ts'
 import { createPane, ownedPane } from './panes.ts'
-import { close, dispatch, send, statusOf } from './role-commands.ts'
+import { close, dispatch, send, statusOf, teardown } from './role-commands.ts'
 import { available, installSkill, setup, skillTarget } from './setup.ts'
 import { readResult } from './state.ts'
 import { tmux } from './run.ts'
@@ -15,7 +16,7 @@ import { panel } from './panel.ts'
 
 const OPTIONS: Record<string, string[]> = {
   setup: ['remove'], up: ['orch'], check: [], approve: [], gate: ['no-wait'], stage: [],
-  dispatch: [], status: ['json', 'watch'], send: [], wait: ['role', 'gate', 'timeout'], close: ['all'], panel: ['once', 'plain', 'width', 'height'],
+  dispatch: [], status: ['json', 'watch'], send: [], wait: ['role', 'gate', 'timeout', 'ready'], teardown: ['force'], close: ['all'], panel: ['once', 'plain', 'width', 'height'],
 }
 
 const parsed = (command: string, args: string[]) => {
@@ -25,6 +26,7 @@ const parsed = (command: string, args: string[]) => {
     result = parseArgs({ args, allowPositionals: true, options: {
       mission: { type: 'string', short: 'm' }, remove: { type: 'boolean' }, orch: { type: 'string' },
       'no-wait': { type: 'boolean' }, json: { type: 'boolean' }, watch: { type: 'boolean' },
+      ready: { type: 'boolean' }, force: { type: 'boolean' },
       role: { type: 'string' }, gate: { type: 'string' }, timeout: { type: 'string' }, all: { type: 'boolean' },
       once: { type: 'boolean' }, plain: { type: 'boolean' }, width: { type: 'string' }, height: { type: 'string' },
     } })
@@ -59,7 +61,7 @@ const approve = async (r: Runtime, m: Mission): Promise<Reply> => {
   return { code: 0, out: `Approved ${m.name} (${m.hash})\n` }
 }
 
-const wait = async (r: Runtime, m: Mission, target: { role?: string; gate?: string; seconds?: number }): Promise<Reply> => {
+const wait = async (r: Runtime, m: Mission, target: { role?: string; gate?: string; seconds?: number; ready?: boolean }): Promise<Reply> => {
   const until = target.seconds === undefined ? Infinity : r.now() + target.seconds * 1000
   for (;;) {
     if (r.signal?.aborted) return { code: 1, out: 'Wait cancelled.\n' }
@@ -72,10 +74,18 @@ const wait = async (r: Runtime, m: Mission, target: { role?: string; gate?: stri
     } else {
       const opened = folded.roles.get(target.role ?? '')
       if (opened === undefined) throw new Refusal(`role ${target.role}: not dispatched`)
-      const result = readResult(opened.worktree)
-      if (result?.status) return { code: result.status === 'done' ? 0 : 1, out: `${result.status}: ${result.summary}\n` }
+      const result = target.ready ? undefined : readResult(opened.worktree)
+      if (!target.ready && result?.status) return { code: result.status === 'done' ? 0 : 1, out: `${result.status}: ${result.summary}\n` }
       const pane = ownedPane(r, opened)
       if (opened.closed || !pane.alive || pane.dead) return { code: 1, out: `${target.role}: ${pane.foreign ? 'pane ownership mismatch' : 'pane gone without a result'}\n` }
+      if (target.ready) {
+        const role = m.plan.roles.find(role => role.name === target.role)
+        const agent = m.agents[opened.agent ?? role?.agent ?? '']
+        if (agent === undefined || agent.command !== opened.argv[0]) throw new Refusal(`role ${target.role}: its launched adapter cannot be resolved`)
+        const screen = screenOf(agent, pane.screen)
+        if (screen === 'ready') return { code: 0, out: `${target.role}: ready\n` }
+        if (screen === 'waits') return { code: 1, out: `${target.role}: waits on you\n${pane.screen.trim()}\n` }
+      }
     }
     if (r.now() >= until) return { code: 1, out: `Timed out waiting for ${target.role === undefined ? `gate ${target.gate}` : `role ${target.role}`}\n` }
     await r.sleep(Math.min(2000, until - r.now()))
@@ -122,7 +132,7 @@ const up = (r: Runtime, want: string, orch: string): Reply => {
   let installed = ''
   if (!existsSync(join(skillTarget(r, orch), 'SKILL.md'))) installed = installSkill(r, orch)
   const repo = repository(r)
-  const found = findPlan(repo.root, repo.root, want === '' ? '' : join(repo.root, 'docs/missions', want, 'plan.md'))
+  const found = findPlan(repo.root, repo.root, want === '' ? '' : join(repo.root, 'docs/missions', want, 'plan.md'), r.run)
   const name = want || ('path' in found ? basename(dirname(found.path)) : 'mission')
   const opened = createPane(r, repo, 'mission', repo.root, [orch])
   let panel
@@ -179,10 +189,12 @@ export const execute = async (command: string, args: string[], overrides: Partia
     else if (command === 'gate') count(pos, 1, 2, 'gate <id> ["question"] [--no-wait]')
     else if (command === 'send') count(pos, 1, Infinity, 'send <role> <text…> (or text on stdin)')
     else if (command === 'close') count(pos, values.all ? 0 : 1, values.all ? 0 : 1, 'close <role> | --all')
+    else if (command === 'teardown') count(pos, 0, 0, 'teardown [-m mission] [--force]')
     else if (command === 'status') count(pos, 0, 0, 'status [--json] [--watch]')
     else if (command === 'wait') {
-      count(pos, 0, 0, 'wait (--role <r> | --gate <id>) [--timeout <s>]')
+      count(pos, 0, 0, 'wait (--role <r> [--ready] | --gate <id>) [--timeout <s>]')
       if ((values.role === undefined) === (values.gate === undefined)) throw new Usage('wait requires exactly one of --role and --gate')
+      if (values.ready && values.role === undefined) throw new Usage('--ready requires --role')
       if (values.timeout !== undefined && (values.timeout.trim() === '' || !Number.isFinite(Number(values.timeout)) || Number(values.timeout) < 0)) throw new Usage('--timeout must be a nonnegative number of seconds')
     }
     if (['dispatch', 'stage', 'gate', 'send'].includes(command) || (command === 'close' && !values.all)) id(pos[0], 'name')
@@ -190,6 +202,7 @@ export const execute = async (command: string, args: string[], overrides: Partia
     if (command === 'send' && pos.length === 1 && r.inputTTY) throw new Usage('send needs text arguments or text on stdin')
     if (command === 'status') return await status(r, want, !!values.json, !!values.watch)
     const m = mission(r, want)
+    if (command === 'teardown') return await teardown(r, m, !!values.force)
     if (command === 'approve') return await approve(r, m)
     if (command === 'dispatch') return await dispatch(r, m, id(pos[0], 'role'))
     if (command === 'stage') return stage(r, m, id(pos[0], 'stage'))
@@ -204,7 +217,7 @@ export const execute = async (command: string, args: string[], overrides: Partia
       return await send(r, m, id(pos[0], 'role'), text)
     }
     if (command === 'close') return await close(r, m, values.all ? undefined : id(pos[0], 'role'))
-    if (command === 'wait') return await wait(r, m, { ...(values.role === undefined ? { gate: id(values.gate, 'gate') } : { role: id(values.role, 'role') }), ...(values.timeout === undefined ? {} : { seconds: Number(values.timeout) }) })
+    if (command === 'wait') return await wait(r, m, { ...(values.role === undefined ? { gate: id(values.gate, 'gate') } : { role: id(values.role, 'role'), ready: !!values.ready }), ...(values.timeout === undefined ? {} : { seconds: Number(values.timeout) }) })
     throw new Usage(`unknown command '${command}'`)
   } catch (error) {
     return { code: error instanceof Usage ? 2 : 1, out: `${(error as Error).message}\n` }

@@ -1,12 +1,14 @@
 // The plan format (dist/plan.js, built by npm test) and `troupe check`.
 import assert from 'node:assert/strict'
-import { spawnSync } from 'node:child_process'
-import { mkdtempSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { execFileSync, spawnSync } from 'node:child_process'
+import { mkdtempSync, mkdirSync, readFileSync, rmSync, utimesSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
 import { fileURLToPath } from 'node:url'
 
+import { findPlan } from '../dist/check.js'
+import { append, logPath } from '../dist/log.js'
 import { layersOf, readPlan, sectionsOf } from '../dist/plan.js'
 
 const TEMPLATE = fileURLToPath(new URL('../skills/troupe-mission/templates/plan.md', import.meta.url))
@@ -190,4 +192,38 @@ test('troupe check: clean, problems, and no plan', () => {
   assert.match(bad.stdout, /text docs\/a\.md is not in the repository/)
   assert.equal(run('m1').status, 0)
   assert.equal(run('nowhere').status, 2)
+})
+
+test('default selection skips historical and finished plans, honors explicit names and uses linked common dir', t => {
+  const root = mkdtempSync(join(tmpdir(), 'troupe-selection-'))
+  t.after(() => rmSync(root, { recursive: true, force: true }))
+  const git = (...args) => execFileSync('git', args, { cwd: root, encoding: 'utf8' })
+  git('init', '-q', '-b', 'main')
+  const write = (name, seconds) => {
+    const path = join(root, 'docs/missions', name, 'plan.md')
+    mkdirSync(join(root, 'docs/missions', name), { recursive: true })
+    writeFileSync(path, '# Plan')
+    utimesSync(path, seconds, seconds)
+    return path
+  }
+  const historical = write('history', 50)
+  const open = write('open', 10)
+  const finished = write('finished', 40)
+  git('add', '.')
+  git('-c', 'user.name=Probe', '-c', 'user.email=probe@example.invalid', 'commit', '-qm', 'plans')
+  assert.ok('missing' in findPlan(root, root, ''), 'committed plans alone are historical')
+  append(logPath(join(root, '.git'), 'open'), 'cli', { ev: 'stage', stage: 'build' })
+  append(logPath(join(root, '.git'), 'finished'), 'cli', { ev: 'teardown' })
+  assert.equal(findPlan(root, root, '').path, open)
+  assert.equal(findPlan(root, root, 'history').path, historical)
+  assert.equal(findPlan(root, root, 'finished').path, finished)
+  const linked = join(root, 'linked')
+  git('worktree', 'add', '-qb', 'linked', linked)
+  assert.equal(findPlan(linked, linked, '').path, join(linked, 'docs/missions/open/plan.md'))
+  append(logPath(join(root, '.git'), 'open'), 'cli', { ev: 'teardown' })
+  assert.ok('missing' in findPlan(linked, linked, ''))
+  const fresh = write('fresh', 60)
+  assert.equal(findPlan(root, root, '').path, fresh)
+  git('add', 'docs/missions/fresh/plan.md')
+  assert.equal(findPlan(root, root, '').path, fresh, 'staged plans are still uncommitted')
 })

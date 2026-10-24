@@ -571,3 +571,101 @@ test('changing the inherited tmux server refuses operations even if pane IDs are
   }
   assert.equal(w.panes.size, 1)
 })
+
+test('readiness waits ignore old results, poll unknown/working, and stop on dialogs, gone and timeout', async t => {
+  const w = world(t)
+  await w.approve()
+  await w.call('dispatch', 'api')
+  const opened = w.events().find(e => e.ev === 'dispatch')
+  const pane = w.panes.get(opened.pane)
+  w.write(join(opened.worktree, '.troupe/result.md'), '---\nstatus: done\nsummary: old\n---\n')
+  pane.screen = 'unrecognized'
+  assert.match((await w.call('send', 'api', 'hi')).out, /troupe wait -m m1 --role api --ready/)
+  let polls = 0
+  const ready = await execute('wait', ['--role', 'api', '--ready', '--timeout', '3'], { ...w.r, sleep: async () => { pane.screen = ++polls === 1 ? 'WORKING' : 'READY' } })
+  assert.deepEqual(ready, { code: 0, out: 'api: ready\n' })
+  assert.equal(polls, 2)
+  pane.screen = 'WAIT'
+  assert.deepEqual(await w.call('wait', '--role', 'api', '--ready'), { code: 1, out: 'api: waits on you\nWAIT\n' })
+  pane.screen = 'WORKING'
+  assert.match((await w.call('wait', '--role', 'api', '--ready', '--timeout', '0')).out, /Timed out/)
+  pane.dead = true
+  assert.match((await w.call('wait', '--role', 'api', '--ready')).out, /pane gone/)
+  pane.dead = false
+  pane.owner = 'foreign'
+  assert.match((await w.call('wait', '--role', 'api', '--ready')).out, /ownership mismatch/)
+  assert.equal((await w.call('wait', '--gate', 'plan', '--ready')).code, 2)
+})
+
+test('abandoned reclaim requires manual cleanup and never enters the action', async t => {
+  const w = world(t)
+  const child = spawn(process.execPath, ['-e', ''], { stdio: 'ignore' })
+  await once(child, 'exit')
+  const m = mission(w.r)
+  const lock = join(dirname(m.log), 'command.lock')
+  w.write(join(lock, 'pid'), String(child.pid))
+  mkdirSync(join(lock, 'reclaim'))
+  let entered = false
+  await assert.rejects(locked(m, () => { entered = true }), /remove .* by hand once no troupe command is running.*reclaim/)
+  assert.equal(entered, false)
+  assert.equal(readFileSync(join(lock, 'pid'), 'utf8'), String(child.pid))
+})
+
+test('pid mismatch cleanup tolerates a reclaim directory removed by the winning command', async t => {
+  const w = world(t)
+  const child = spawn(process.execPath, ['-e', ''], { stdio: 'ignore' })
+  await once(child, 'exit')
+  const m = mission(w.r)
+  const lock = join(dirname(m.log), 'command.lock')
+  const reclaim = join(lock, 'reclaim')
+  w.write(join(lock, 'pid'), String(child.pid))
+  const read = fs.readFileSync
+  const remove = fs.rmSync
+  let reads = 0
+  let entered = false
+  const reading = t.mock.method(fs, 'readFileSync', (path, ...args) => {
+    if (path === join(lock, 'pid') && ++reads === 2) {
+      // The winner has replaced the pid and finishes while B checks it.
+      w.write(path, String(process.pid))
+      const result = read(path, ...args)
+      remove(lock, { recursive: true })
+      return result
+    }
+    return read(path, ...args)
+  })
+  let cleanup = false
+  const removing = t.mock.method(fs, 'rmSync', (path, options) => {
+    if (path === reclaim) {
+      cleanup = true
+      assert.equal(existsSync(path), false)
+      assert.equal(options.force, true)
+    }
+    return remove(path, options)
+  })
+  syncBuiltinESMExports()
+  try {
+    await assert.rejects(locked(m, () => { entered = true }), /another command holds/)
+    assert.equal(entered, false)
+    assert.equal(cleanup, true)
+  } finally {
+    reading.mock.restore()
+    removing.mock.restore()
+    syncBuiltinESMExports()
+  }
+})
+
+test('forced teardown still refuses foreign panes before changing any resources', async t => {
+  const w = world(t)
+  await w.approve()
+  await w.call('dispatch', 'api')
+  const opened = w.events().find(e => e.ev === 'dispatch')
+  w.panes.get(opened.pane).owner = 'foreign'
+  for (const args of [[], ['--force']]) {
+    const reply = await w.call('teardown', ...args)
+    assert.equal(reply.code, 1, reply.out)
+    assert.match(reply.out, /ownership cannot be verified/)
+    assert.ok(existsSync(opened.worktree))
+    assert.equal(w.panes.size, 1)
+    assert.ok(!w.events().some(e => e.ev === 'teardown'))
+  }
+})

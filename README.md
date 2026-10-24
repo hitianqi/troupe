@@ -112,7 +112,7 @@ profile; a dependency cycle; two roles whose `touches` overlap without a
 
 ## Commands
 
-All take `-m, --mission <name>` (default: the newest under
+All take `-m, --mission <name>` (default: the newest open mission under
 `docs/missions/`). Exit 0 on success, 1 when refused (with the reasons), 2
 on usage errors.
 
@@ -128,8 +128,23 @@ on usage errors.
 | `dispatch <role>` | open a role: worktree, branch, brief, pane |
 | `status [--json] [--watch]` | each role's state, commits, changes outside `touches`, result |
 | `send <role> <text…>` | type into a role's window, only when it is ready |
-| `wait --role <r> \| --gate <id> [--timeout s]` | wait for a result or an answer |
+| `wait --role <r> [--ready] \| --gate <id> [--timeout s]` | wait for a result, readiness or an answer |
 | `close <role> \| --all` | close troupe's panes; worktrees and branches stay |
+| `teardown [--force]` | close role panes and remove role worktrees, role branches and temporary mission briefs/results; preserve the mission branch and log |
+
+An open mission has a log without a teardown event, or an uncommitted
+plan with no log. Committed historical plans without logs are skipped.
+Explicit `-m` opens any mission, including a finished one. With none open,
+the panel waits for a new plan.
+
+After opening the MR, run `troupe teardown -m <mission>`. It refuses dirty
+or untracked work and commits unmerged into the plan’s `base` mission branch
+unless `--force`; ownership checks still apply. Repeating it with explicit
+`-m` reports nothing left. The MR head and log stay available.
+
+Use `troupe wait --role <r> --ready --timeout 60` after dispatch or before
+sending new work. It succeeds on ready, stops with the dialog on waits, and
+fails if the pane is gone or the timeout expires.
 
 A role finishes by writing `.troupe/result.md` in its worktree, with front
 matter `status: done | blocked | failed` and `summary: "<one line>"`.

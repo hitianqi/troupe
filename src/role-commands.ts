@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto'
-import { appendFileSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
-import { dirname, join } from 'node:path'
+import { appendFileSync, existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, rmdirSync, writeFileSync } from 'node:fs'
+import { dirname, join, resolve } from 'node:path'
 
 import { argvOf, screenOf } from './agents.ts'
 import { clean, git, locked, mission, mux, Refusal, within } from './command-context.ts'
@@ -148,7 +148,7 @@ export const send = async (r: Runtime, initial: Mission, name: string, text: str
     if (pane.foreign) throw new Refusal(`role ${name}: pane was not opened by troupe (ownership mismatch)`)
     if (!pane.alive || pane.dead) throw new Refusal(`role ${name}: pane is gone or its agent exited`)
     const state = screenOf(agent, pane.screen)
-    if (state !== 'ready') throw new Refusal(`role ${name}: pane is ${state}; nothing was typed`)
+    if (state !== 'ready') throw new Refusal(`role ${name}: pane is ${state}; nothing was typed${state === 'unknown' || state === 'working' ? `; run troupe wait -m ${m.name} --role ${name} --ready [--timeout s]` : ''}`)
   }
   ready()
   const buffer = `troupe-${randomUUID()}`
@@ -189,4 +189,72 @@ export const close = async (r: Runtime, initial: Mission, name?: string): Promis
   }
 
   return { code: 0, out: `${lines.join('\n') || 'No open roles.'}\n` }
+})
+
+/** Preflight every resource before cleanup; a refused or interrupted run stays open. */
+export const teardown = async (r: Runtime, initial: Mission, force: boolean): Promise<Reply> => locked(initial, () => {
+  const m = mission(r, initial.name)
+  if (m.problems.some(problem => problem.includes('unread log'))) throw new Refusal('unread log lines; cannot establish teardown ownership')
+  const parent = within(m.root, `.troupe/worktrees/${m.name}`)
+  const prefix = `role/${m.name}/`
+  const target = m.plan.base || `mission/${m.name}`
+  const entries = git(r, m.root, ['worktree', 'list', '--porcelain', '-z']).split('\0\0').filter(Boolean).map(entry => {
+    const fields = entry.split('\0')
+    return { path: fields.find(field => field.startsWith('worktree '))?.slice(9) ?? '', branch: fields.find(field => field.startsWith('branch refs/heads/'))?.slice(18) ?? '' }
+  })
+  const branches = git(r, m.root, ['for-each-ref', '--format=%(refname:short)', `refs/heads/${prefix}`]).trim().split('\n').filter(branch => branch.startsWith(prefix))
+  const trees = entries.filter(entry => entry.branch.startsWith(prefix) || resolve(dirname(entry.path)) === parent)
+  const reasons: string[] = []
+  for (const tree of trees) {
+    if (resolve(dirname(tree.path)) !== parent || !tree.branch.startsWith(prefix)) reasons.push(`${tree.path}: unexpected worktree location or branch; remove manually`)
+    else if (!force && existsSync(tree.path) && git(r, tree.path, ['status', '--porcelain', '--untracked-files=all']).trim()) reasons.push(`${tree.branch}: dirty or untracked changes in ${tree.path}`)
+  }
+  for (const branch of branches) {
+    if (branch === target) reasons.push(`${branch}: is the mission branch; cannot remove`)
+    else if (!force) {
+      const merged = r.run('git', ['merge-base', '--is-ancestor', `refs/heads/${branch}`, target], { cwd: m.root })
+      if (merged.code !== 0) reasons.push(`${branch}: unmerged into ${target}${merged.err.trim() ? ` (${merged.err.trim()})` : ''}`)
+    }
+  }
+  for (const opened of m.folded.roles.values()) {
+    if (!opened.closed && ownedPane(r, opened).foreign) reasons.push(`${opened.role}: pane ownership cannot be verified`)
+  }
+  // Unknown files are never recursively swept up, even with --force.
+  if (existsSync(parent)) for (const name of readdirSync(parent)) {
+    if (!trees.some(tree => resolve(tree.path) === join(parent, name))) reasons.push(`${join(parent, name)}: not a registered role worktree; remove manually`)
+  }
+  if (reasons.length) throw new Refusal(`Teardown refused:\n${reasons.map(reason => `- ${reason}`).join('\n')}`)
+  let removed = 0
+  for (const opened of m.folded.roles.values()) {
+    if (opened.closed) continue
+    const pane = ownedPane(r, opened)
+    if (pane.foreign) throw new Refusal(`${opened.role}: pane ownership cannot be verified`)
+    if (pane.alive) { mux(r, ['kill-pane', '-t', opened.pane]); removed++ }
+    append(m.log, 'cli', { ev: 'close', role: opened.role })
+  }
+  // Agents can finish a write or commit while their panes are closing. Check
+  // again after stopping them, before deleting any worktree or branch.
+  if (!force) {
+    for (const tree of trees) {
+      if (existsSync(tree.path) && git(r, tree.path, ['status', '--porcelain', '--untracked-files=all']).trim()) throw new Refusal(`${tree.branch}: dirty or untracked changes appeared during teardown`)
+    }
+    for (const branch of branches) {
+      if (r.run('git', ['merge-base', '--is-ancestor', `refs/heads/${branch}`, target], { cwd: m.root }).code !== 0) throw new Refusal(`${branch}: unmerged into ${target}; teardown remains incomplete`)
+    }
+  }
+  for (const tree of trees) {
+    git(r, m.root, ['worktree', 'remove', ...(force ? ['--force'] : []), tree.path])
+    removed++
+  }
+  for (const branch of branches) {
+    // Ancestry was checked against the mission branch, rather than HEAD.
+    git(r, m.root, ['branch', '-D', branch])
+    removed++
+  }
+  if (existsSync(parent)) { rmdirSync(parent); removed++ }
+  for (const file of readdirSync(dirname(m.log))) {
+    if (/^(brief-.+|result-.+)\.md$/.test(file)) { rmSync(join(dirname(m.log), file)); removed++ }
+  }
+  if (!m.folded.finished) append(m.log, 'cli', { ev: 'teardown' })
+  return { code: 0, out: removed ? `Tore down ${m.name}; kept mission branch ${target} and ${m.log}\n` : `Nothing left to tear down for ${m.name}.\n` }
 })

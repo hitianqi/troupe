@@ -33,3 +33,8 @@ test('an unknown command prints the usage on stderr and exits 2', () => {
   assert.match(r.stderr, /unknown command 'bogus'/)
   assert.match(r.stderr, /dispatch/)
 })
+
+test('help documents readiness, teardown and newest-open defaults', () => {
+  const r = run('--help')
+  for (const text of ['--ready', 'teardown [--force]', 'newest open', 'finished missions require -m']) assert.ok(r.stdout.includes(text), text)
+})
