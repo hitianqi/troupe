@@ -298,18 +298,19 @@ const flow = (m: PanelModel, ui: Ui, width: number): { canvas: Canvas; boxes: { 
   const lane = Math.min(BOX, 24)
   const side = reviewers.length === 1 && order.length > 0 && width >= INDENT + box + 6 + lane
   const below = side ? [] : reviewers
-  const canvas = new Canvas(width, 3 + order.length * (HEIGHT + 2) + below.length * (HEIGHT + 2))
+  const canvas = new Canvas(width, 3 + order.length * (HEIGHT + 2) + below.length * (HEIGHT + 4))
   const boxes: { name: string; row: number; col: number; width: number; height: number }[] = []
   const roleBox = (role: RoleView, row: number, col: number, w: number, note = '') => {
     const look = LOOK[role.state]
     const selected = role.name === ui.selected
-    const h = HEIGHT + (note === '' ? 0 : 1)
+    const notes = note === '' ? [] : wrap(note, w - 4)
+    const h = HEIGHT + notes.length
     canvas.box(row, col, w, h, selected ? look.tone : role.state === 'planned' ? 'chrome' : look.tone, selected ? DOUBLE : SINGLE)
     canvas.put(row + 1, col + 2, spread(`${look.glyph} ${role.name}`, look.text, w - 4), { tone: look.tone, ...(selected && { bold: true }) })
     canvas.runs(row + 2, col + 2, [badge(role), { text: ` ${fit(`${role.agent} ${role.model || 'default'}`, w - 6)}`, tone: 'dim' }])
     const ctx = contextOf(role) === '—' ? '' : `ctx ${contextOf(role)}`
     canvas.runs(row + 3, col + 2, [...fitRuns(effortOf(role.effort), w - 4 - ctx.length), { text: ctx, tone: 'dim' }])
-    if (note !== '') canvas.put(row + 4, col + 2, fit(note, w - 4), { tone: 'dim' })
+    notes.forEach((one, index) => canvas.put(row + 4 + index, col + 2, one, { tone: 'dim' }))
     boxes.push({ name: role.name, row, col, width: w, height: h })
 
     return row + h
@@ -588,7 +589,11 @@ const rolesTable = (m: PanelModel, width: number): Line[] => {
   const NAME = 14
   const columns: Column[] = []
   let used = NAME
-  for (const column of all) if (used + column.width <= width) { columns.push(column); used += column.width }
+  for (const column of all) {
+    if (used + column.width > width) break
+    columns.push(column)
+    used += column.width
+  }
   const lines: Line[] = [[{ text: `${fit('   ROLE', NAME)}${columns.map(column => fit(column.title, column.width)).join('')}`, tone: 'dim' }]]
   for (const role of m.roles) {
     lines.push([{ text: ' ' }, badge(role), { text: ' ' }, { text: fit(role.name, NAME - 3), tone: 'bright', bold: true }, ...columns.flatMap(column => fitRuns(column.cell(role), column.width))])
@@ -612,7 +617,7 @@ const other = (c: Canvas, m: PanelModel, ui: Ui, top: number, bottom: number, hi
     table.forEach((line, index) => { const name = m.roles.find(role => line.some(run => run.bold && run.text.trim() === role.name)); if (name !== undefined) rows.push({ at: index, role: name.name }) })
     lines.push(...table)
   } else if (ui.tab === 3) {
-    lines.push([{ text: `${m.planPath}  ·  ${m.hash.replace(/^(sha256:.{8}).*$/, '$1')}  ·  `, tone: 'dim' }, checksOf(m), { text: `  ·  f ${ui.full ? 'summary' : 'full text'}`, tone: 'dim' }], [])
+    lines.push(...reflow([{ text: `${m.planPath}  ·  ${m.hash.replace(/^(sha256:.{8}).*$/, '$1')}  ·  `, tone: 'dim' }, checksOf(m), { text: `  ·  f ${ui.full ? 'summary' : 'full text'}`, tone: 'dim' }], width), [])
     if (!ui.full) lines.push([{ text: m.title, tone: 'bright', bold: true }], [])
     lines.push(...(ui.full ? planFull(m, width) : planSummary(m, width)))
   } else if (ui.tab === 4) {

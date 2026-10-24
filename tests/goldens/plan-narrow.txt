@@ -4,6 +4,7 @@
 ────────────────────────────────────────────────────────
 
  docs/missions/auth-refresh/plan.md  ·  sha256:3f9a0c1e
+ ·  checks clean  ·  f summary
 
  A readable mission title
 
@@ -27,7 +28,6 @@
    api:
      agent: codex # adapter
      goal: "keep # inside quotes"
-
 
 
 
