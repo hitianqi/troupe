@@ -1,0 +1,42 @@
+
+ ▐▛███▛█   Claude Code v2.1.310
+▝▜██████▀  Haiku 5.5 · Claude Pro
+ ▝▝   ▝▝   /private/tmp/troupe-probe/claude
+
+
+❯ Reply with exactly PROBE-OK
+
+⏺ PROBE-OK
+
+✻ Baked for 1s · done 4:26 PM
+
+❯ Reply with exactly PASTE-ONE-OK
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+✢ Wandering…
+                  tmux focus-events off · add 'set -g focus-events on' to ~/.tmux.conf and reattach for focus tracking
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ 
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  ⏵⏵ auto mode on (shift+tab to cycle) · esc to interrupt

@@ -577,3 +577,203 @@ the sample mission (`docs/missions/sample/plan.md`, a copy of
 4. The windows open at the end (`p3-c2-tmux-windows.txt`): the
    orchestrator's and `troupe-sample:o1` in the worktree. The scratch server
    was then killed, its socket removed, and the worktree and branch deleted.
+
+
+## Phase 4: the Codex probe (2026-10-24)
+
+Run on macOS in the isolated `tmux -L troupe-probe` server (tmux 3.8),
+120 columns × 42 rows. Installed versions: **codex-cli 0.162.1** and
+**Claude Code 2.1.310**. All model prompts and commands concerned scratch
+repositories under `/private/tmp/troupe-probe/`, each initialized with one
+empty commit. No default tmux server or orchestrator pane was accessed.
+Three Codex sessions and three Haiku sessions were launched; the third
+Claude session deliberately reused a trusted repo to check persisted trust.
+Raw evidence filenames below are relative to `docs/feasibility/`.
+
+### 1. Launch prompt and trust
+
+- **Codex: yes, a fresh repository asks for trust; yes, the launch prompt
+  survives accepting it.** `p4-codex-trust.txt` shows `Folder access`,
+  `Trust this folder?` and default `1. Trust and continue`. Enter continued;
+  `p4-codex-ready.txt` shows both the launch argument `Reply with exactly
+  PROBE-OK` and the response `PROBE-OK`.
+- **Claude: yes, a fresh repository asks for trust; yes, the launch prompt
+  survives accepting it.** `p4-claude-trust.txt` shows `Accessing workspace:`,
+  the safety question and default `No, exit`. Down then Enter selected
+  `Yes, I trust this folder`; `p4-claude-ready.txt` shows the launch prompt
+  and `PROBE-OK`. Do not reuse Codex's default Enter for Claude trust.
+- **Codex pre-trust: yes, persisted user config works.** A fresh
+  `codex-pretrust` repo was given this exact entry in `~/.codex/config.toml`
+  before launch; `p4-codex-pretrust.txt` shows `PRETRUST-OK` with no trust
+  dialog. No permission bypass flag was used:
+
+  ```toml
+  [projects."/private/tmp/troupe-probe/codex-pretrust"]
+  trust_level = "trusted"
+  ```
+
+  **No, the same project key supplied only with `-c` did not skip trust**
+  in the separate `codex-approval` repo (`p4-codex-config-override-trust.txt`).
+  Do not advertise that override as a working pre-trust flag. The
+  [official configuration reference](https://learn.chatgpt.com/docs/config-file/config-reference)
+  documents project trust and the `model_reasoning_effort` key; supported
+  effort levels depend on the model and client.
+- **Claude pre-trust: yes, an earlier interactive trust decision persists;
+  no dedicated interactive pre-trust flag was found in `--help`.** A third
+  Haiku launch in the already accepted `claude` repo returned `PRETRUST-OK`
+  without a dialog (`p4-claude-pretrust.txt`). Programmatically editing
+  Claude's internal trust storage was not tested or proposed. Help says
+  print mode skips trust, but that is not the interactive adapter.
+
+### 2. Ready, working and waits-on-you screens
+
+**Yes, all three states were captured for each harness.** Codex idle:
+`p4-codex-ready.txt`; startup: `p4-codex-working.txt`; active model turn:
+`p4-codex-working-turn.txt` (`Working (0s • esc to interrupt)`); command
+approval: `p4-codex-approval.txt` (`Would you like to run the following
+command?`, `$ ls`, default `1. Yes, proceed (y)`). Claude idle:
+`p4-claude-ready.txt`; working: `p4-claude-working.txt` (`Wandering…`,
+`esc to interrupt`); command approval: `p4-claude-approval.txt`
+(`Bash command`, `Do you want to proceed?`, indented `❯ 1. Yes`).
+
+**No, this account's default Claude mode did not ask for approval.** Its
+idle footer is `auto mode on`; a second fresh repo was therefore launched
+with `--permission-mode manual --effort low`, still `--model haiku`, and
+asked to `touch probe-marker`. This produced the recorded approval. The
+manual run's first prompt also survived trust (`p4-claude-manual-trust.txt`,
+`p4-claude-approval.txt`). This local default must not become troupe's
+implicit permission policy.
+
+**No, Codex `-a untrusted` is not accepted by this version.** It exits 2
+before launch (`p4-codex-untrusted-flag.txt`). The working substitute was
+`-a on-request -s read-only` plus an explicit request for approval for `ls`.
+Ordinary `ls` under `on-request` is not guaranteed to prompt. The
+[official approvals documentation](https://learn.chatgpt.com/docs/agent-approvals-security)
+confirms the retired policy and describes retaining stricter behavior
+through an untrusted project entry with no explicit approval policy; that
+alternative was not live-tested here.
+
+Candidate patterns appear in the adapter table. **No, a prompt glyph alone
+is not a ready signal:** Codex and Claude both retain an empty input box
+while working. Match the bottom composer, exclude active-turn/startup and
+dialog markers first, and reject a nonempty draft. These are observed
+English-screen heuristics, not a state API or proof of race-free delivery.
+An unknown screen must fail closed. Other dialogs and narrow terminals
+still need fixtures before production use.
+
+### 3. Bracketed paste
+
+- **Codex: yes for one line; yes for multiple lines.**
+  `p4-codex-paste-one.txt` shows `PASTE-ONE-OK` in the submitted prompt and
+  response. `p4-codex-paste-multi-submitted.txt` and
+  `p4-codex-paste-multi.txt` show the two-line prompt submitted as one turn
+  and a response containing `PASTE-MULTI-OK` and the second line.
+- **Claude: yes for one line; yes for multiple lines.**
+  `p4-claude-paste-one.txt` and `p4-claude-paste-multi.txt` show the same
+  submitted prompts and responses. The multi-line response included the
+  second line too; the assertion here is delivery as one turn, not exact
+  response formatting.
+
+Both used a file with no final newline, `load-buffer <file>`,
+`paste-buffer -p -d -t <pane>`, then a separate `send-keys -t <pane> Enter`.
+No extra delay was inserted between paste and Enter. This checks short
+prompts only, not a long brief or a partly typed user draft.
+
+### 4. Pasting under an approval dialog
+
+**Codex: no, it does not submit a new prompt; yes, Enter approves the
+pending command.** `p4-codex-dialog-pasted.txt` still shows the unchanged
+`ls` approval after bracketed-pasting `Reply with exactly PASTE-ONE-OK`.
+`p4-codex-dialog-enter.txt` and `p4-codex-dialog-result.txt` show
+`You approved codex to run ls this time` and `PROBE-LS-OK`. The pasted
+prompt never appeared in the composer or transcript.
+
+**Claude: no, it does not submit a new prompt; yes, Enter approves the
+pending command.** `p4-claude-dialog-pasted.txt` still shows the unchanged
+`touch probe-marker` approval. `p4-claude-dialog-enter.txt` and
+`p4-claude-dialog-result.txt` show the command running and
+`PROBE-TOUCH-OK`, with no pasted follow-up. The empty marker file existed
+afterward. Only these harmless scratch commands were approved.
+
+**Never paste into a window that waits on a person.** Bracketed paste does
+not protect against the subsequent Enter answering a dialog.
+
+### 5. Role flags
+
+**Yes, the used flags were accepted and exercised.** Full installed help:
+`p4-codex-help.txt`, `p4-claude-help.txt`. The Codex approval run was:
+
+```sh
+codex -m gpt-6.1-sol -c 'model_reasoning_effort="low"'   -a on-request -s read-only   -c 'projects."/private/tmp/troupe-probe/codex-approval".trust_level="trusted"'   'Run ls in this directory once. Request approval for that command using sandbox_permissions require_escalated with a short justification. Then reply PROBE-LS-OK.'
+```
+
+The trust override failed to pre-trust (question 1); it is omitted from the
+recommended adapter command. The UI confirms `GPT-6.1-Sol low`, and the
+approval behavior is recorded above. `--sandbox` accepts `read-only`,
+`workspace-write`, `danger-full-access`; `--ask-for-approval` accepts
+`on-request`, `never`. Only `read-only` and `on-request` were exercised with
+commands. Model is `-m` / `--model`; effort is `-c model_reasoning_effort=…`,
+not a `--effort` flag. Do not infer other models' effort support from this
+one. `p4-codex-config-warning.txt` records that command-line configuration
+overrides select embedded mode rather than the shared background server.
+A later diagnostic `/status` attempt became ordinary `/status/status`
+input; it did not supply additional configuration evidence.
+
+Claude's second run accepted `--model haiku --effort low
+--permission-mode manual`; its header shows Haiku 5.5 with low effort
+and its final footer shows manual mode (`p4-claude-dialog-result.txt`).
+Help lists permission modes `acceptEdits`, `auto`, `bypassPermissions`,
+`manual`, `dontAsk`, `plan`; the probe used only the account default and
+`manual`. No bypass-everything flag was used in either harness.
+
+### 6. Exit
+
+**Yes, `pane_dead` detects exit with `remain-on-exit on`; no, current
+command alone does not.** Direct tmux agent commands exited normally:
+Codex on Ctrl-D from idle, Claude on `/exit`. Codex printed reconnect and
+usage text; Claude printed a resume command; tmux displayed
+`Pane is dead (status 0, …)` (`p4-codex-exit.txt`, `p4-claude-exit.txt`).
+The corresponding `p4-*-exit-signal.txt` files contain
+`1 codex 0` and `1 claude 0` for `pane_dead`, `pane_current_command`,
+`pane_dead_status`. Live signals were `0 codex` and `0 2.1.310`
+(`p4-*-live-signal.txt`). Dead panes can retain the agent command name.
+A single Ctrl-D did not end the Claude session in this run; `/exit` did.
+
+This relies on launching the agent directly (or `exec` from the shell).
+If an interactive shell survives the agent, `pane_dead` remains 0 and the
+command may become the shell; that variant was not tested. Without
+`remain-on-exit`, a missing pane is also an exit/gone signal. Codex's exit
+text explicitly offers reconnection and stopping a task separately, so
+pane exit must not be treated as proof that every background task ended.
+
+### Adapter table
+
+| Field | Codex 0.162.1 | Claude Code 2.1.310 |
+| --- | --- | --- |
+| Start with first prompt | `codex -m <model> -c 'model_reasoning_effort="<effort>"' -a on-request -s workspace-write "<prompt>"`; tested approval variant used `read-only` | `claude --model <model> --effort <effort> --permission-mode manual "<prompt>"`; initial launch/paste run used `--model haiku` only |
+| Pre-trust | Persist `[projects."<absolute-path>"] trust_level="trusted"` in user config after a trust decision; live-tested on a fresh repo. `-c` alone did not work | Accept trust interactively once; same-repo relaunch skipped it. No supported interactive pre-trust CLI flag found |
+| Ready candidate | Bottom composer `^› Ask Codex to do anything$`, no active `esc to interrupt` / startup / dialog markers, no draft | Bottom composer `^❯[\s\u00a0]*$` between rules, no `esc to interrupt` / dialog markers, no draft |
+| Waits-on-you candidate | `Trust this folder?` or `Would you like to run the following command?` together with `Press enter to confirm` | Trust safety question / `Accessing workspace:`; or `Do you want to proceed?` with indented `❯ 1. Yes` |
+| Paste | `load-buffer <file>` → `paste-buffer -p -d -t <pane>` → separate `send-keys … Enter`; one/multi-line pass | Same; one/multi-line pass |
+| Model / effort | `-m` / `--model`; `-c 'model_reasoning_effort="low"'` tested with `gpt-6.1-sol` | `--model haiku --effort low` tested |
+| Permission / sandbox | `-a on-request`, `-a never`; `-s read-only`, `workspace-write`, `danger-full-access`; only first policy and first sandbox live-tested | `--permission-mode manual` tested; account default was auto. No equivalent general sandbox flag found in help |
+| Exit signal | `pane_dead=1`, `pane_dead_status=0` with direct launch and retained pane; command remains `codex` | Same; command becomes/remains `claude` after exit, live command observed as `2.1.310` |
+
+### What remains open
+
+These observations support a first-prompt adapter for both harnesses on
+this Mac. They do not validate a complete troupe dispatch implementation.
+The screen patterns need broader dialog/resize/version coverage, and a
+screen check followed by paste still has a race. Claude trust inheritance
+in sibling worktrees was not re-tested on this Mac; persisted trust in the
+same repo was. The stricter Codex untrusted-project policy, other effort
+levels, other sandbox modes, long pastes, and `troupe wait` shell timeouts
+were not tested. Issue #2's two-order dry run and orchestrator result
+handoff belong to Phase 5, not this probe.
+
+Cleanup: the orchestrator killed the `troupe-probe` tmux server, removed
+`/private/tmp/troupe-probe/`, and removed the two probe entries from
+`~/.codex/config.toml`. Two probe entries remain intentionally in the
+`projects` object in `~/.claude.json`: `/private/tmp/troupe-probe/claude`
+and `/private/tmp/troupe-probe/claude-manual`. They were left because
+several running Claude sessions rewrite that file. No push or PR was made.
