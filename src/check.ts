@@ -1,7 +1,9 @@
 import { execFileSync } from 'node:child_process'
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
+import { homedir } from 'node:os'
 import { join, relative, resolve } from 'node:path'
 
+import { loadAgents } from './agents.ts'
 import { readPlan } from './plan.ts'
 
 // `troupe check [mission]`: finds the plan and prints its problems, or that
@@ -37,13 +39,15 @@ export const findPlan = (root: string, cwd: string, want: string): { path: strin
   return newest === undefined ? { missing: `no mission under ${MISSIONS}/` } : { path: join(dir, newest.name, 'plan.md') }
 }
 
-export const check = (cwd: string, want: string): { out: string; code: number } => {
+export const check = (cwd: string, want: string, home = homedir()): { out: string; code: number } => {
   const root = rootOf(cwd)
   const found = findPlan(root, cwd, want)
   if ('missing' in found) return { out: `troupe check: ${found.missing}\n`, code: 2 }
-  const plan = readPlan(readFileSync(found.path, 'utf8'))
+  const loaded = loadAgents(root, home)
+  const plan = readPlan(readFileSync(found.path, 'utf8'), loaded.agents)
   // A role's text in the repository must be there; `workflow:` texts are the skill's.
   const problems = [
+    ...loaded.problems,
     ...plan.problems,
     ...plan.roles
       .filter(role => role.text !== '' && !role.text.startsWith('workflow:') && !existsSync(join(root, role.text)))
