@@ -2,12 +2,12 @@
 
 ## Intent
 
-<One paragraph: what the person wants and why; link the issue.>
+<Two or three sentences: what the person wants and why; link the issue.>
 
 ## Done when
 
-- <observable acceptance criterion>
-- <observable acceptance criterion>
+- <one line the person can check: what, not how>
+- <one line the person can check>
 
 ## Out of scope
 

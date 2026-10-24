@@ -1,9 +1,12 @@
+import { badgeOf } from './agents.ts'
+import type { Agent, Badge } from './agents.ts'
 import { isApproved, PLAN_GATE } from './log.ts'
 import type { Folded, Logged } from './log.ts'
 import { sectionsOf } from './plan.ts'
 import type { Plan, Role } from './plan.ts'
 import type { Stage } from './stages.ts'
 import type { Result, RoleState, Work } from './state.ts'
+import type { Tokens } from './usage.ts'
 
 // What the panel draws, built from the files: the plan, the folded log, the
 // workflow's stages and what was read live for each role. Pure: the panel
@@ -16,12 +19,13 @@ export type Live = {
   waitsOn?: string
   /** Context use where the adapter can read it, else absent. */
   context?: string
+  tokens?: Tokens
   work?: Work
   result?: Result
   /** The last lines of its pane. */
   screen?: string[]
 }
-export type RoleView = Role & Live & { branch: string; screen: string[] }
+export type RoleView = Role & Live & { branch: string; screen: string[]; badge?: Badge; dispatchedAt?: string; elapsed?: string }
 export type StageMark = 'done' | 'now' | 'open' | 'gate' | 'todo'
 export type StageView = Stage & { mark: StageMark; note: string }
 export type GateView = { id: string; label: string; ask: string; isPlan: boolean }
@@ -72,6 +76,7 @@ export const decisionsOf = (source: string): Decision[] => {
 }
 
 const describe = (e: Logged, labelOf: (gate: string) => string): string => {
+  if ((e as { ev: string }).ev === 'teardown') return 'mission teardown complete'
   if (e.ev === 'stage') return `stage: ${e.stage}`
   if (e.ev === 'gate-open') return e.gate === PLAN_GATE ? 'plan gate opened' : `asked ${labelOf(e.gate)}: ${e.ask ?? ''}`
   if (e.ev === 'gate-answer') {
@@ -83,7 +88,9 @@ const describe = (e: Logged, labelOf: (gate: string) => string): string => {
   if (e.ev === 'send') return `sent to ${e.role}: ${e.text}`
   if (e.ev === 'up') return `opened mission window ${e.window}`
 
-  return `closed ${e.role}`
+  if (e.ev === 'close') return `closed ${e.role}`
+
+  return `mission: ${(e as { ev: string }).ev}`
 }
 
 export type ModelInput = {
@@ -97,6 +104,7 @@ export type ModelInput = {
   live: Map<string, Live>
   stages: Stage[]
   now: Date
+  agents?: Record<string, Agent>
 }
 
 export const modelOf = (input: ModelInput): PanelModel => {
@@ -105,7 +113,11 @@ export const modelOf = (input: ModelInput): PanelModel => {
   const roles: RoleView[] = plan.roles.map(role => {
     const live = input.live.get(role.name) ?? { state: 'planned' }
 
-    return { ...role, ...live, branch: folded.roles.get(role.name)?.branch ?? `role/${input.mission}/${role.name}`, screen: live.screen ?? [] }
+    const opened = folded.roles.get(role.name)
+    const seconds = opened === undefined ? NaN : Math.max(0, Math.floor((input.now.getTime() - Date.parse(opened.at)) / 1000))
+    const elapsed = !Number.isFinite(seconds) ? undefined : seconds < 60 ? `${seconds}s` : seconds < 3600 ? `${Math.floor(seconds / 60)}m ${seconds % 60}s` : `${Math.floor(seconds / 3600)}h ${Math.floor(seconds % 3600 / 60)}m`
+
+    return { ...role, ...live, badge: badgeOf(role.agent, input.agents?.[role.agent]), branch: opened?.branch ?? `role/${input.mission}/${role.name}`, screen: live.screen ?? [], ...(opened && { dispatchedAt: opened.at }), ...(elapsed && { elapsed }) }
   })
   const planGate = folded.gates.get(PLAN_GATE)
   // The plan gate stands open while the plan as it is now is not approved and someone asked for it.

@@ -13,6 +13,8 @@ export const TONES = {
   ok: '#98c379',
   error: '#e06c75',
   dim: '#9aa3ad',
+  coral: '#f08a7e',
+  cyan: '#65cbd4',
 } as const
 export type Tone = keyof typeof TONES
 export type Style = { tone?: Tone; bold?: true }
@@ -21,24 +23,63 @@ export type Line = Run[]
 
 export const textOf = (line: Line) => line.map(run => run.text).join('')
 
+const WIDE: [number, number][] = [
+  [0x1100, 0x115f], [0x2e80, 0x303e], [0x3040, 0xa4cf], [0xac00, 0xd7a3], [0xf900, 0xfaff], [0xfe10, 0xfe19],
+  [0xfe30, 0xfe6f], [0xff00, 0xff60], [0xffe0, 0xffe6], [0x1f300, 0x1f64f], [0x1f900, 0x1f9ff], [0x20000, 0x3fffd],
+]
+const ZERO: [number, number][] = [[0x300, 0x36f], [0x200b, 0x200d], [0x20d0, 0x20ff], [0xfe00, 0xfe0f]]
+const within = (code: number, ranges: [number, number][]) => ranges.some(([lo, hi]) => code >= lo && code <= hi)
+
+const cellOf = (ch: string) => {
+  const code = ch.codePointAt(0) ?? 0
+
+  return within(code, ZERO) ? 0 : within(code, WIDE) ? 2 : 1
+}
+
+/** Display width of `text` in terminal cells. */
+export const cellsOf = (text: string) => [...text].reduce((sum, ch) => sum + cellOf(ch), 0)
+
+/** The longest head of `text` within `width` cells, and the rest. */
+const cut = (text: string, width: number): [string, string] => {
+  let used = 0
+  let head = ''
+  const chars = [...text]
+  for (const [index, ch] of chars.entries()) {
+    if (used + cellOf(ch) > width) return [head, chars.slice(index).join('')]
+    used += cellOf(ch)
+    head += ch
+  }
+
+  return [head, '']
+}
+
 /** `text` in `width` cells: padded, or cut with `…`. */
-export const fit = (text: string, width: number) =>
-  width <= 0 ? '' : text.length <= width ? text + ' '.repeat(width - text.length) : `${text.slice(0, Math.max(0, width - 1))}…`
+export const fit = (text: string, width: number) => {
+  if (width <= 0) return ''
+  const size = cellsOf(text)
+  if (size <= width) return text + ' '.repeat(width - size)
+  const [head] = cut(text, width - 1)
+
+  return `${head}…${' '.repeat(width - 1 - cellsOf(head))}`
+}
 
 /** Greedy wrap on spaces; a word longer than the width is cut into pieces. */
 export const wrap = (text: string, width: number): string[] => {
+  width = Math.max(1, width)
   const lines: string[] = []
   let line = ''
   for (const word of text.split(/\s+/).filter(Boolean)) {
     let rest = word
-    while (rest.length > width) {
+    while (cellsOf(rest) > width) {
       if (line !== '') lines.push(line)
-      lines.push(rest.slice(0, width))
-      rest = rest.slice(width)
+      let [head, tail] = cut(rest, width)
+      if (head === '') [head, tail] = [[...rest][0] ?? '', [...rest].slice(1).join('')]
+      lines.push(head)
+      rest = tail
       line = ''
     }
     if (line === '') line = rest
-    else if (line.length + 1 + rest.length <= width) line += ` ${rest}`
+    else if (cellsOf(line) + 1 + cellsOf(rest) <= width) line += ` ${rest}`
     else {
       lines.push(line)
       line = rest
@@ -62,14 +103,35 @@ export class Canvas {
     this.height = height
     this.cells = Array.from({ length: height }, () => Array.from({ length: width }, () => ({ ch: ' ' })))
   }
-  /** Writes `text` from (row, col); what falls outside is dropped. Returns the column after it. */
+  private set(line: Cell[], col: number, cell: Cell) {
+    const old = line[col]
+    if (old !== undefined && old.ch === '' && col > 0) line[col - 1] = { ch: ' ' }
+    if (old !== undefined && cellsOf(old.ch) === 2 && col + 1 < this.width) line[col + 1] = { ch: ' ' }
+    line[col] = cell
+  }
+  /** Writes `text` from (row, col); what falls outside is dropped, a wide char that does not fit becomes a space. Returns the column after it, in cells. */
   put(row: number, col: number, text: string, style: Style = {}): number {
     const line = this.cells[row]
-    ;[...text].forEach((ch, index) => {
-      if (line !== undefined && col + index >= 0 && col + index < this.width) line[col + index] = { ch, ...style }
-    })
+    let at = col
+    for (const ch of text) {
+      const size = cellOf(ch)
+      if (line !== undefined && size === 0) {
+        const prev = line[at - 1]
+        if (prev !== undefined && prev.ch !== '' && at - 1 >= 0 && at - 1 < this.width) prev.ch += ch
+      } else if (line !== undefined && size === 1) {
+        if (at >= 0 && at < this.width) this.set(line, at, { ch, ...style })
+      } else if (line !== undefined) {
+        if (at >= 0 && at + 1 < this.width) {
+          this.set(line, at, { ch, ...style })
+          this.set(line, at + 1, { ch: '', ...style })
+        } else {
+          for (const c of [at, at + 1]) if (c >= 0 && c < this.width) this.set(line, c, { ch: ' ', ...style })
+        }
+      }
+      at += size
+    }
 
-    return col + [...text].length
+    return at
   }
   /** Writes runs one after another from (row, col). */
   runs(row: number, col: number, line: Line): number {

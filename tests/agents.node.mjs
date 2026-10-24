@@ -6,7 +6,7 @@ import { dirname, join } from 'node:path'
 import { test } from 'node:test'
 import { fileURLToPath } from 'node:url'
 
-import { AGENTS, argvOf, loadAgents, screenOf, unsetPermission } from '../dist/agents.js'
+import { AGENTS, argvOf, badgeOf, validBadgeGlyph, loadAgents, screenOf, unsetPermission } from '../dist/agents.js'
 import { check } from '../dist/check.js'
 
 const capture = name => readFileSync(new URL(`../docs/feasibility/${name}.txt`, import.meta.url), 'utf8')
@@ -165,4 +165,40 @@ test('troupe check uses loaded adapters and prints broken-file diagnostics', t =
   const run = spawnSync(process.execPath, [cli, 'check', 'plan.md'], { cwd: root, encoding: 'utf8' })
   assert.equal(run.status, 1)
   assert.ok(run.stdout.includes(`${repo('broken')}: line 1:`))
+})
+
+
+test('agent badges have distinct one-cell glyphs, optional adapter overrides and first-letter fallbacks', t => {
+  assert.deepEqual(badgeOf('claude'), { glyph: '✻', tone: 'coral' })
+  assert.deepEqual(badgeOf('codex'), { glyph: '⬢', tone: 'cyan' })
+  assert.deepEqual(badgeOf('custom'), { glyph: 'c', tone: 'dim' })
+  for (const glyph of ['✻', '⬢', 'A', 'λ']) assert.equal(validBadgeGlyph(glyph), true, glyph)
+  for (const glyph of ['', 'AB', ' ', '\n', '\x1b', '界', '🙂', 'e\u0301', '\u0301', '️', '𝄞𝄞']) assert.equal(validBadgeGlyph(glyph), false, glyph)
+  const { root, home, write, repo } = temporary(t)
+  write(repo('custom'), `${adapter('custom')}badge:\n  glyph: λ\n  tone: cyan\n`)
+  const loaded = loadAgents(root, home)
+  assert.deepEqual(loaded.problems, [])
+  assert.deepEqual(loaded.agents.custom.badge, { glyph: 'λ', tone: 'cyan' })
+  assert.deepEqual(badgeOf('custom', loaded.agents.custom), { glyph: 'λ', tone: 'cyan' })
+  assert.equal(loaded.agents.codex.badge.glyph, '⬢')
+  write(repo('codex'), adapter('custom-codex'))
+  assert.deepEqual(badgeOf('codex', loadAgents(root, home).agents.codex), { glyph: 'c', tone: 'dim' }, 'overrides without badges use the adapter fallback')
+})
+
+test('invalid badge glyphs, tones and extra fields report precise adapter diagnostics', t => {
+  const { root, home, write, repo } = temporary(t)
+  for (const [name, badge, field] of [
+    ['wide', 'glyph: 界\n  tone: cyan', 'glyph'],
+    ['emoji', 'glyph: 🙂\n  tone: cyan', 'glyph'],
+    ['multiple', 'glyph: AB\n  tone: cyan', 'glyph'],
+    ['tone', 'glyph: C\n  tone: imaginary', 'tone'],
+    ['extra', 'glyph: C\n  tone: cyan\n  bad: yes', 'bad'],
+  ]) {
+    write(repo(name), `${adapter('custom')}badge:\n  ${badge}\n`)
+    const problem = loadAgents(root, home).problems.find(problem => problem.startsWith(repo(name)))
+    assert.ok(problem.includes(`badge.${field}`), problem)
+    assert.match(problem, /: line (13|14|15):/)
+  }
+  write(repo('mapping'), `${adapter('custom')}badge: [C, cyan]\n`)
+  assert.ok(loadAgents(root, home).problems.some(problem => problem.includes('badge must be a mapping')))
 })

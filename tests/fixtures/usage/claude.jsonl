@@ -1,0 +1,6 @@
+{"type":"mode","mode":"normal"}
+{"type":"file-history-snapshot","snapshot":{"timestamp":"2026-10-24T10:00:00Z"}}
+{"type":"user","timestamp":"2026-10-24T10:00:00.100Z","cwd":"/repo/.troupe/worktrees/m1/api"}
+{"type":"assistant","message":{"id":"one","model":"claude-opus","usage":{"input_tokens":10,"cache_read_input_tokens":80,"cache_creation_input_tokens":10,"output_tokens":20}}}
+{"type":"assistant","message":{"id":"one","model":"claude-opus","usage":{"input_tokens":10,"cache_read_input_tokens":80,"cache_creation_input_tokens":10,"output_tokens":20}}}
+{"type":"assistant","message":{"id":"two","model":"claude-opus","usage":{"input_tokens":5,"cache_read_input_tokens":195,"cache_creation_input_tokens":10,"output_tokens":30}}}
