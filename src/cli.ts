@@ -2,17 +2,17 @@
 import { readFileSync } from 'node:fs'
 
 const COMMANDS: [string, string][] = [
-  ['setup', 'set up troupe in this repository'],
-  ['up', 'call up the troupe from an approved plan'],
-  ['check', 'check the plan and the environment'],
-  ['approve', 'approve the plan'],
-  ['dispatch', 'send an order to a role'],
-  ['status', 'show the mission'],
-  ['send', 'send a message to a role'],
-  ['wait', 'wait for a role to report'],
-  ['stage', 'stage a role\'s work'],
-  ['gate', 'open or pass a checkpoint'],
-  ['close', 'close the mission'],
+  ['setup', 'install the workflow skill for each harness found'],
+  ['up', 'open the orchestrator and the panel in tmux'],
+  ['check', 'check the plan'],
+  ['approve', 'approve the plan (from a terminal only)'],
+  ['dispatch', 'open a role in its own window, worktree and branch'],
+  ['status', 'show each role\'s state'],
+  ['send', 'type a message into a role\'s window when it is ready'],
+  ['wait', 'wait for a role\'s result or a gate\'s answer'],
+  ['stage', 'set the mission\'s current stage'],
+  ['gate', 'ask the person a question in the panel'],
+  ['close', 'close a role\'s window, or the mission'],
 ]
 
 const usage = () =>

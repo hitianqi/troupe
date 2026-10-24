@@ -3,9 +3,10 @@
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
 import { readFileSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
 import { test } from 'node:test'
 
-const cli = new URL('../dist/cli.js', import.meta.url).pathname
+const cli = fileURLToPath(new URL('../dist/cli.js', import.meta.url))
 const run = (...args) => spawnSync(process.execPath, [cli, ...args], { encoding: 'utf8' })
 
 test('--version and -v print the package.json version', () => {
