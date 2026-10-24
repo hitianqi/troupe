@@ -15,7 +15,7 @@
     "skills"
   ],
   "scripts": {
-    "build": "tsc -p tsconfig.build.json",
+    "build": "tsc -p tsconfig.build.json && chmod +x dist/cli.js",
     "test": "npm run build && node --test tests/cli.node.mjs tests/plan.node.mjs tests/state.node.mjs tests/draw.node.mjs tests/agents.node.mjs tests/commands.node.mjs tests/commands-integration.node.mjs tests/panel-live.node.mjs",
     "check": "./check.sh"
   },
