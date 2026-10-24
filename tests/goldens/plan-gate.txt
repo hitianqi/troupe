@@ -38,7 +38,7 @@
  review                    │              │                 │
     ○ review ✻ claude   —  │              ▼                 │
                            │ ╔════════════════════════╗     │         ┌────────────────────────┐
-─ STAGES ───────────────── │ ║ ○ api          planned ║──────────────▶│ ○ review       planned │
+─ STAGES ───────────────── │ ║ ○ api          planned ║─────┼────────▶│ ○ review       planned │
   ✓ Plan                   │ ║ ⬢ codex gpt-6.1-sol    ║     │         │ ✻ claude sonnet        │
   ◆ Plan OK?               │ ║ ▰▰▰▱▱                  ║     │         │ ▰▰▰▱▱                  │
   ○ Build             0/3  │ ╚════════════════════════╝     │         │                        │
@@ -46,7 +46,7 @@
   ◇ MR OK?                 │              ┌─────────────────┘│        │                        │
   ○ Open MR                │              ▼                  │        │                        │
   ○ Teardown               │ ┌────────────────────────┐      │        │                        │
-                           │ │ ○ store        planned │──────────────▶│                        │
+                           │ │ ○ store        planned │──────┼───────▶│                        │
 ─ ACTIVITY ─────────────── │ │ ✻ claude opus          │      │        │                        │
  10:41 plan gate opened    │ │ ▰▰▰▱▱                  │      │        │                        │
                            │ └────────────────────────┘      │        │                        │

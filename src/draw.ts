@@ -115,6 +115,7 @@ const planLines = (m: PanelModel, width: number): Line[] => {
   const lines = reflow([{ text: `${m.planPath} · ${m.hash.slice(0, 15)} · `, tone: 'dim' }, checks], width)
   lines.push([])
   const source = m.planText.split(/\r?\n/)
+  const headingPattern = /^(#{1,6})\s+(.*)$/
   let fence: string | undefined
   for (let i = 0; i < source.length; i++) {
     const text = source[i] ?? ''
@@ -141,7 +142,7 @@ const planLines = (m: PanelModel, width: number): Line[] => {
       continue
     }
     if (text.trim() === '') { lines.push([]); continue }
-    const heading = /^(#{1,6})\s+(.*)$/.exec(text)
+    const heading = headingPattern.exec(text)
     if (heading !== null) {
       const title = heading[2] ?? ''
       const role = m.roles.find(one => title.toLowerCase() === `role: ${one.name}`.toLowerCase())
@@ -160,7 +161,7 @@ const planLines = (m: PanelModel, width: number): Line[] => {
     let paragraph = list === null ? text.trim() : list[3] ?? ''
     while (i + 1 < source.length) {
       const next = source[i + 1] ?? ''
-      if (next.trim() === '' || /^\s*(?:#|```|[-*+] |\d+[.)] )/.test(next)) break
+      if (next.trim() === '' || headingPattern.test(next) || /^\s*(?:```|[-*+] |\d+[.)] )/.test(next)) break
       paragraph += ` ${next.trim()}`
       i++
     }
@@ -266,7 +267,8 @@ const flow = (m: PanelModel, ui: Ui, width: number): { canvas: Canvas; boxes: { 
     canvas.box(row, col, boxWidth, height, selected ? look.tone : role.state === 'planned' ? 'chrome' : look.tone, selected ? DOUBLE : SINGLE)
     canvas.put(row + 1, col + 2, spread(`${look.glyph} ${role.name}`, look.text, boxWidth - 4), { tone: look.tone, ...(selected && { bold: true }) })
     canvas.runs(row + 2, col + 2, [badge(role), { text: ` ${fit(`${role.agent} ${role.model || 'default'}`, boxWidth - 6)}`, tone: 'dim' }])
-    canvas.runs(row + 3, col + 2, [contextOf(role) === '—' ? effortOf(role.effort) : { text: fit(contextOf(role), boxWidth - 4), tone: 'dim' }])
+    const usage = contextOf(role) === '—' ? effortOf(role.effort) : { text: contextOf(role), tone: 'dim' as const }
+    canvas.runs(row + 3, col + 2, [{ ...usage, text: fit(usage.text, boxWidth - 4) }])
     boxes.push({ name: role.name, row, col, width: boxWidth, height })
   }
   const placed = new Map<string, { row: number; center: number; col: number; width: number }>()
@@ -321,7 +323,7 @@ const flow = (m: PanelModel, ui: Ui, width: number): { canvas: Canvas; boxes: { 
     sources.forEach(({ name, box }) => {
       if (box === undefined) return
       const tone = builders.find(one => one.name === name)?.state === 'done' ? 'ok' : 'dim'
-      canvas.put(box.row + 1, box.col + box.width, `${'─'.repeat(Math.max(0, col - box.col - box.width - 1))}▶`, { tone })
+      wire(canvas, box.row + 1, box.col + box.width, `${'─'.repeat(Math.max(0, col - box.col - box.width - 1))}▶`, tone)
     })
   })
 
@@ -350,13 +352,13 @@ const JOINTS: Record<string, string> = {
 }
 
 /** Merge shared stems and buses into a visible junction. */
-const wire = (canvas: Canvas, row: number, col: number, text: string) => {
+const wire = (canvas: Canvas, row: number, col: number, text: string, tone: Tone = 'chrome') => {
   const directions: Record<string, string> = { '│': '1100', '─': '0011', '└': '1001', '┘': '1010', '┌': '0101', '┐': '0110', '├': '1101', '┤': '1110', '┼': '1111', '┴': '1011', '┬': '0111' }
   ;[...text].forEach((glyph, index) => {
     const old = directions[canvas.cells[row]?.[col + index]?.ch ?? '']
     const next = directions[glyph]
     const merged = old === undefined || next === undefined ? glyph : JOINTS[[...old].map((bit, i) => bit === '1' || next[i] === '1' ? '1' : '0').join('')] ?? glyph
-    canvas.put(row, col + index, merged, { tone: 'chrome' })
+    canvas.put(row, col + index, merged, { tone })
   })
 }
 

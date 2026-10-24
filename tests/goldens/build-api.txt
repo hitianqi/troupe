@@ -12,7 +12,7 @@
  review                    │              │                 │
     ○ review ✻ claude   —  │              ▼                 │
                            │ ╔════════════════════════╗     │         ┌────────────────────────┐
-─ STAGES ───────────────── │ ║ ◆ api     waits on you ║──────────────▶│ ○ review       planned │
+─ STAGES ───────────────── │ ║ ◆ api     waits on you ║─────┼────────▶│ ○ review       planned │
   ✓ Plan                   │ ║ ⬢ codex gpt-6.1-sol    ║     │         │ ✻ claude sonnet        │
   ✓ Plan OK?        10:42  │ ║ ▰▰▰▱▱                  ║     │         │ ▰▰▰▱▱                  │
   ● Build             0/3  │ ╚════════════════════════╝     │         │                        │
@@ -20,7 +20,7 @@
   ◇ MR OK?                 │              ┌─────────────────┘│        │                        │
   ○ Open MR                │              ▼                  │        │                        │
   ○ Teardown               │ ┌────────────────────────┐      │        │                        │
-                           │ │ ● store        working │──────────────▶│                        │
+                           │ │ ● store        working │──────┼───────▶│                        │
 ─ ACTIVITY ─────────────── │ │ ✻ claude opus          │      │        │                        │
  12:07 dispatched store    │ │ ▰▰▰▱▱                  │      │        │                        │
  12:07 dispatched api      │ └────────────────────────┘      │        │                        │

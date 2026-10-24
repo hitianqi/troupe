@@ -124,7 +124,7 @@ A paragraph with **bold emphasis** and \`inline code\` that continues
 across source lines and wraps without dropping the final sentinelword.
 
 - A list entry with enough words to wrap on a narrow screen while keeping its continuation indented.
-  The continuation belongs to the same item.
+  #17 regressions belong to the same item.
 12. A numbered entry with enough words to wrap and keep its hanging indentation.
 
 ## Role: api
@@ -298,4 +298,80 @@ test('FLOW parallel reviewed builders retain separate root edges and unobstructe
     assert.ok(inside.every(line => !/[│▼▶]/.test(line)))
   }
   assert.equal(drawn.lines.flat().filter(run => run.text.includes('▶')).length, 2)
+})
+
+
+test('PLAN issue references continue paragraphs and hanging lists; only real headings split them', () => {
+  const tail = '#17 regressions and follow-up details through several wrapped continuation rows.'
+  for (const marker of ['', '- ', '1. ', '1) ']) {
+    const source = `# Title\n\n${marker}Keep checking both\n${' '.repeat(marker.length)}${tail}\n\n## Actual heading\n\nSecond paragraph.\n`
+    for (const width of [52, 150]) {
+      const drawn = draw({ ...model(APPROVED, new Map()), planText: source }, { tab: 3, selected: 'api' }, width, 32)
+      const lines = plain(drawn)
+      const start = lines.findIndex(line => line.includes('Keep checking both'))
+      const paragraph = lines.slice(start, lines.findIndex((line, index) => index > start && line === ''))
+      assert.equal(paragraph.map(line => line.trim()).join(' '), `${marker}Keep checking both ${tail}`)
+      assert.ok(paragraph.slice(1).every(line => line.startsWith(' '.repeat(marker.length + 1))), `hanging indent for ${JSON.stringify(marker)} at ${width}`)
+      if (width === 150) assert.equal(paragraph.length, 1, 'source continuation joins the previous line')
+      assert.ok(lines.some(line => line.startsWith(' ─ Actual heading ')))
+    }
+  }
+  const invalid = '#hashtag # ####### seven hashes stay in this paragraph.'
+  const m = { ...model(APPROVED, new Map()), planText: `# Title\n\nKeep\n#hashtag\n#\n####### seven hashes stay in this paragraph.\n` }
+  assert.ok(plain(draw(m, { tab: 3, selected: 'api' }, 150, 24)).includes(` Keep ${invalid}`))
+  for (let count = 1; count <= 6; count++) {
+    const planText = `# Title\n\nBefore heading.\n${'#'.repeat(count)} Real heading\nAfter heading.\n`
+    const lines = plain(draw({ ...m, planText }, { tab: 3, selected: 'api' }, 150, 24))
+    assert.ok(lines.includes(' Before heading.'))
+    assert.ok(lines.includes(' After heading.'))
+    assert.ok(lines.some(line => line.includes('Real heading') && !line.includes('Before heading.')))
+  }
+})
+
+const cellsOf = line => line.flatMap(run => [...run.text].map(text => ({ ...run, text })))
+
+test('FLOW review arrows keep dependency gutter junctions and their per-branch tones', () => {
+  const roles = [role('panel', { state: 'done' }), role('commands'), role('build', { state: 'done', dependsOn: ['panel'] }), role('review', { touches: [], reviews: ['panel', 'commands', 'build'] })]
+  const drawn = draw(scenario(roles), { tab: 1, selected: 'panel' }, 150, 50)
+  const boxes = drawn.hits.filter(hit => hit.target.kind === 'role' && hit.height > 1)
+  const reviewer = boxes.find(hit => hit.target.name === 'review')
+  for (const [name, tone] of [['panel', 'ok'], ['commands', 'dim']]) {
+    const box = boxes.find(hit => hit.target.name === name)
+    const row = box.row + 1
+    const cells = cellsOf(drawn.lines[row])
+    const above = cellsOf(drawn.lines[row - 1])
+    const below = cellsOf(drawn.lines[row + 1])
+    const crossings = []
+    for (let col = box.col + box.width; col < reviewer.col - 1; col++) {
+      if (above[col]?.text === '│' && below[col]?.text === '│') crossings.push(col)
+    }
+    assert.ok(crossings.length > 0, `${name} arrow crosses a dependency gutter`)
+    for (const col of crossings) {
+      assert.equal(cells[col].text, '┼')
+      assert.equal(cells[col].tone, tone)
+    }
+    assert.equal(cells[reviewer.col - 1].text, '▶')
+    assert.equal(cells[reviewer.col - 1].tone, tone)
+  }
+})
+
+test('FLOW fits long unknown effort inside builder and reviewer borders', () => {
+  const effort = 'ultra-extended-thinking-max'
+  assert.equal(effortOf(effort).text, effort, 'unknown effort remains literal before fitting')
+  for (const width of [78, 150]) {
+    const roles = [role('panel', { effort }), role('review', { effort, touches: [], reviews: ['panel'] })]
+    const drawn = draw(scenario(roles), { tab: 1, selected: 'panel' }, width, 50)
+    const boxes = drawn.hits.filter(hit => hit.target.kind === 'role' && hit.height > 1)
+    assert.equal(boxes.length, 2)
+    for (const box of boxes) {
+      const cells = cellsOf(drawn.lines[box.row + 3])
+      assert.equal(cells[box.col].text, box.target.name === 'panel' ? '║' : '│')
+      assert.equal(cells[box.col + box.width - 1].text, box.target.name === 'panel' ? '║' : '│')
+      const available = box.width - 4
+      const text = cells.slice(box.col + 2, box.col + 2 + available).map(cell => cell.text).join('')
+      assert.equal(text.trimEnd(), effort.length > available ? `${effort.slice(0, available - 1)}…` : effort)
+      assert.equal(cells[box.col + 2].tone, 'accent')
+      assert.ok(cells.slice(box.col + box.width, box.col + box.width + 4).every(cell => cell.text === ' '), 'effort does not leak beyond the border')
+    }
+  }
 })

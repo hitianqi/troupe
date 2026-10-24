@@ -12,8 +12,8 @@
  A paragraph with bold emphasis and inline code that continues across source lines and wraps without dropping
  the final sentinelword.
 
- - A list entry with enough words to wrap on a narrow screen while keeping its continuation indented. The
-   continuation belongs to the same item.
+ - A list entry with enough words to wrap on a narrow screen while keeping its continuation indented. #17
+   regressions belong to the same item.
  12. A numbered entry with enough words to wrap and keep its hanging indentation.
 
  ─ ⬢ Role: api ──────────────────────────────────────────────────────────────────────────────────────────────
