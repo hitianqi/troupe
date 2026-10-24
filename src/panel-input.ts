@@ -120,6 +120,7 @@ export const transition = (ui: PanelUi, action: Input, model: PanelModel | undef
   const tab = /^[1-5]$/.test(key) ? Number(key) : key === 'tab' ? ui.tab % 5 + 1 : key === 'd' ? 5 : key === 'v' ? 3 : key === 'enter' ? 1 : undefined
   if (tab !== undefined) return { ui: { ...ui, tab, scroll: 0 } }
   if (key === '?') return { ui: { ...ui, help: true } }
+  if (key === 'f' && ui.tab === 3) return { ui: { ...ui, full: !ui.full, scroll: 0 } }
   if (key === 'escape') return { ui: { ...ui, message: undefined } }
   if (key === 'o' && selected !== undefined) return { ui, effect: { kind: 'open', role: selected.name } }
   if (key === 's' && selected !== undefined) return { ui: selected.state === 'waits'

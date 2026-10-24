@@ -70,10 +70,11 @@ export const sectionsOf = (source: string): { heading: string; body: string }[] 
   return out.filter(section => section.heading !== '').map(section => ({ heading: section.heading, body: section.body.join('\n').trim() }))
 }
 
+/** Top-level `-` / `*` items, each with its continuation lines joined. */
 const bullets = (body: string): string[] =>
   body
-    .split('\n')
-    .map(line => /^\s*[-*] +(.*)$/.exec(line)?.[1]?.trim())
+    .split(/\n(?=\s*[-*] )/)
+    .map(item => /^\s*[-*] +([\s\S]*)$/.exec(item)?.[1]?.split(/\n\s*\n/)[0]?.replace(/\s+/g, ' ').trim())
     .filter((one): one is string => one !== undefined && one !== '')
 
 export const readPlan = (source: string, agents: Record<string, Agent> = AGENTS): Plan => {

@@ -61,6 +61,10 @@ you merged before it.
   person agrees. It reviews each branch as it lands.
 - A change to how something looks needs a done-when criterion that the
   person has seen and approved it.
+- **The top of the plan is what the person reads at the gate**, and the
+  panel shows each done-when item on one line. Keep the intent to a few
+  sentences and each done-when item to one checkable line, what and not how,
+  usually three to six of them; the how goes in the role sections.
 
 Run `troupe check` until it is clean. Commit the plan on the mission branch.
 

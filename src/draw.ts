@@ -1,8 +1,8 @@
 import { badgeOf } from './agents.ts'
-import { Canvas, DOUBLE, fit, SINGLE, wrap } from './canvas.ts'
+import { Canvas, cellsOf, DOUBLE, fit, SINGLE, wrap } from './canvas.ts'
 import type { Line, Run, Tone } from './canvas.ts'
 import type { PanelModel, RoleView, StageMark } from './model.ts'
-import { layersOf } from './plan.ts'
+import { layersOf, sectionsOf } from './plan.ts'
 import type { RoleState } from './state.ts'
 
 // The panel's screen (design section 5b): title bar, tabs, the goal, the
@@ -12,7 +12,7 @@ import type { RoleState } from './state.ts'
 // last. Every clickable part is also a target, so a click finds what it hit.
 
 export const TABS = ['MISSION', 'ROLES', 'PLAN', 'LOG', 'DIFF'] as const
-export type Ui = { tab: number; selected: string; input?: { label: string; text: string }; scroll?: number; message?: string; help?: boolean }
+export type Ui = { tab: number; selected: string; input?: { label: string; text: string }; scroll?: number; message?: string; help?: boolean; full?: boolean }
 export type Target = { kind: 'role'; name: string } | { kind: 'tab'; tab: number } | { kind: 'key'; key: string; role?: string }
 export type Hit = { row: number; col: number; width: number; height: number; target: Target }
 export type Drawn = { lines: Line[]; hits: Hit[]; maxScroll: number }
@@ -51,15 +51,35 @@ const rule = (title: string, width: number): Line => [{ text: `─ ${title} ${'�
 const startOf = (role: RoleView) =>
   role.dependsOn.length > 0 ? `after ${role.dependsOn.join(', ')}` : role.touches.length === 0 && role.reviews.length > 0 ? 'as each lands' : 'starts at once'
 
-const contextOf = (role: RoleView) => {
-  const value = role.context?.trim()
-  if (!value || /^(?:—|unknown|n\/a)$/i.test(value)) return '—'
-  const percent = /^(\d+(?:\.\d+)?)%$/.exec(value)
-  if (percent === null) return value
-  const filled = Math.round(Math.max(0, Math.min(100, Number(percent[1]))) / 10)
+/** Context use as a share of the window, from the agent's transcript; undefined when unknown. */
+const shareOf = (role: RoleView): number | undefined => {
+  const tokens = role.tokens
+  if (tokens?.window === undefined || tokens.window <= 0) return undefined
 
-  return `${'▰'.repeat(filled)}${'▱'.repeat(10 - filled)} ${value}`
+  return Math.max(0, Math.min(1, tokens.used / tokens.window))
 }
+
+/** `62%`, or `—` while it cannot be read. */
+const contextOf = (role: RoleView) => {
+  const share = shareOf(role)
+
+  return share === undefined ? '—' : `${Math.round(share * 100)}%`
+}
+
+/** A thin bar for context use, its tone rising as the window fills. */
+const contextBar = (role: RoleView, cells: number): Line => {
+  const share = shareOf(role)
+  if (share === undefined) return [{ text: fit('—', cells + 5), tone: 'dim' }]
+  const filled = Math.round(share * cells)
+  const tone: Tone = share >= 0.85 ? 'error' : share >= 0.6 ? 'warn' : 'ok'
+
+  return [{ text: '━'.repeat(filled), tone }, { text: '─'.repeat(cells - filled), tone: 'chrome' }, { text: ` ${contextOf(role).padStart(4)}`, tone: 'dim' }]
+}
+
+/** 1234 → 1.2k, 1234567 → 1.2M. */
+const count = (n: number) => (n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : n >= 1e3 ? `${(n / 1e3).toFixed(n >= 1e4 ? 0 : 1)}k` : String(n))
+
+const tokensOf = (role: RoleView) => (role.tokens === undefined ? '—' : `${count(role.tokens.input)} in · ${count(role.tokens.output)} out`)
 
 const badge = (role: RoleView): Run => {
   const one = role.badge ?? badgeOf(role.agent)
@@ -67,11 +87,30 @@ const badge = (role: RoleView): Run => {
   return { text: one.glyph, tone: one.tone }
 }
 
-export const effortOf = (effort: string): Run => {
-  const levels: Record<string, number> = { minimal: 1, low: 1, medium: 2, high: 3, xhigh: 4, max: 5 }
-  const count = Object.hasOwn(levels, effort) ? levels[effort] : undefined
+const LEVELS: Record<string, number> = { minimal: 1, low: 1, medium: 2, high: 3, xhigh: 4, max: 5 }
 
-  return { text: count === undefined ? effort || 'default' : '▰'.repeat(count) + '▱'.repeat(5 - count), tone: effort === '' ? 'dim' : 'accent' }
+/** Effort as five square cells and its word: `■■■□□ high`; unset is `default`, an unknown word stays as written. */
+export const effortOf = (effort: string): Line => {
+  const level = Object.hasOwn(LEVELS, effort) ? LEVELS[effort] : undefined
+  if (level === undefined) return [{ text: effort || 'default', tone: 'dim' }]
+
+  return [{ text: '■'.repeat(level), tone: 'accent' }, { text: '□'.repeat(5 - level), tone: 'chrome' }, { text: ` ${effort}`, tone: 'dim' }]
+}
+const EFFORT = 12
+
+/** A line's runs padded or cut to `width` cells. */
+const fitRuns = (runs: Line, width: number): Line => {
+  const out: Line = []
+  let left = width
+  for (const run of runs) {
+    if (left <= 0) break
+    const text = cellsOf(run.text) <= left ? run.text : fit(run.text, left)
+    out.push({ ...run, text })
+    left -= cellsOf(text)
+  }
+  if (left > 0) out.push({ text: ' '.repeat(left) })
+
+  return out
 }
 
 /** Inline styles survive wrapping; markdown markers never reach the canvas. */
@@ -110,10 +149,9 @@ const reflow = (runs: Line, width: number, first = '', rest = ''): Line[] => {
   return lines
 }
 
-const planLines = (m: PanelModel, width: number): Line[] => {
-  const checks: Run = m.problems.length === 0 ? { text: 'checks clean', tone: 'ok' } : { text: `${m.problems.length} problems`, tone: 'error' }
-  const lines = reflow([{ text: `${m.planPath} · ${m.hash.slice(0, 15)} · `, tone: 'dim' }, checks], width)
-  lines.push([])
+/** The whole plan, rendered: `f` on the PLAN tab. */
+const planFull = (m: PanelModel, width: number): Line[] => {
+  const lines: Line[] = []
   const source = m.planText.split(/\r?\n/)
   const headingPattern = /^(#{1,6})\s+(.*)$/
   let fence: string | undefined
@@ -173,43 +211,52 @@ const planLines = (m: PanelModel, width: number): Line[] => {
 
 // ---- the parts -------------------------------------------------------------
 
-/** The plan gate's lines inside its box: goal, why, done when, the roles with their real flags, the plan file and its checks, the decisions, the buttons. */
-const planGate = (m: PanelModel, inner: number): { lines: Line[]; buttons: number } => {
-  const label = (name: string) => fit(name, 11)
+const checksOf = (m: PanelModel): Run =>
+  m.problems.length === 0 ? { text: 'checks clean', tone: 'ok' } : { text: `${m.problems.length} problem${m.problems.length === 1 ? '' : 's'}`, tone: 'error' }
+
+/** The plan at a glance, the same in the plan gate and on the PLAN tab: goal, why, one line per done-when, one block per role, decisions, out of scope. */
+const planSummary = (m: PanelModel, width: number): Line[] => {
   const lines: Line[] = []
-  const field = (name: string, text: string, tone?: Tone) =>
-    wrap(text, inner - 11).forEach((one, index) => lines.push([{ text: label(index === 0 ? name : ''), tone: 'dim' }, { text: one, ...(tone && { tone }) }]))
+  const field = (name: string, text: string) => lines.push(...reflow(inline(text), width, fit(name, 7), ' '.repeat(7)).map(([label, ...rest]) => [{ ...label, tone: 'dim' as const }, ...rest] as Line))
+  const head = (title: string) => lines.push([], rule(title, width))
   field('Goal', m.goal || m.title)
   if (m.why !== '') field('Why', m.why)
-  m.doneWhen.forEach((one, index) =>
-    wrap(one, inner - 13).forEach((piece, at) => lines.push([{ text: label(index === 0 && at === 0 ? 'Done when' : ''), tone: 'dim' }, { text: at === 0 ? '· ' : '  ' }, { text: piece }])),
-  )
-  lines.push([])
-  lines.push([{ text: `${fit('ROLE', 8)}${fit('AGENT', 9)}${fit('MODEL', 13)}${fit('EFFORT', 8)}FLAGS`, tone: 'dim' }])
+  if (m.doneWhen.length > 0) head('DONE WHEN')
+  m.doneWhen.forEach((one, index) => lines.push([{ text: ` ${String(index + 1).padStart(2)}  `, tone: 'dim' }, ...fitRuns(inline(one), width - 5)]))
+  head('ROLES')
   for (const role of m.roles) {
+    const agent = `${role.agent} ${role.model || 'default'}`
     lines.push([
-      { text: fit(role.name, 8), tone: 'bright', bold: true },
-      badge(role), { text: ` ${fit(role.agent, 6)} ${fit(role.model || 'default', 13)}` },
-      { ...effortOf(role.effort), text: fit(effortOf(role.effort).text, 8) },
-      { text: fit(role.flags.join(' '), inner - 38), tone: 'accent' },
+      { text: ' ' }, badge(role), { text: ' ' },
+      { text: fit(role.name, 11), tone: 'bright', bold: true },
+      { text: fit(agent, 20), tone: 'dim' },
+      ...fitRuns(effortOf(role.effort), EFFORT + 2),
+      { text: fit(startOf(role), Math.max(0, width - 48)), tone: 'dim' },
     ])
-    const start = `   · ${startOf(role)}`
-    lines.push([{ text: '        ↳ ', tone: 'dim' }, { text: fit(role.goal, inner - 10 - start.length) }, { text: start, tone: 'dim' }])
-    lines.push([{ text: `          ${role.touches.length === 0 ? 'touches — changes nothing' : fit(`touches ${role.touches.join(' ')}`, inner - 10)}`, tone: 'dim' }])
+    lines.push([{ text: '   ' }, ...fitRuns(inline(role.goal), width - 3)])
+    const touches = role.touches.length === 0 ? 'changes nothing' : role.touches.length <= 4 ? role.touches.join('  ') : `${role.touches.slice(0, 4).join('  ')}  +${role.touches.length - 4}`
+    lines.push([{ text: `   ${fit(touches, width - 3)}`, tone: 'chrome' }])
   }
-  lines.push([])
-  const short = m.hash.replace(/^(sha256:.{4}).*$/, '$1…')
-  lines.push([
-    { text: `${m.planPath}  ·  ${short}  ·  `, tone: 'dim' },
-    m.problems.length === 0 ? { text: 'checks clean', tone: 'ok' } : { text: `${m.problems.length} problem${m.problems.length === 1 ? '' : 's'}`, tone: 'error' },
-  ])
-  for (const problem of m.problems) wrap(problem, inner - 4).forEach((one, index) => lines.push([{ text: `${index === 0 ? '  - ' : '    '}${one}`, tone: 'error' }]))
-  if (m.decisions.length > 0) lines.push([])
+  for (const problem of m.problems) wrap(problem, width - 4).forEach((one, index) => lines.push([{ text: `${index === 0 ? '  - ' : '    '}${one}`, tone: 'error' }]))
+  if (m.decisions.length > 0) head('DECISIONS')
   for (const one of m.decisions) {
-    const rec = one.recommended === '' ? '' : `  recommended: ${one.recommended}`
-    lines.push([{ text: fit(`Decision ${one.n}`, 12), tone: 'dim' }, { text: fit(one.ask, inner - 12 - rec.length) }, { text: rec, tone: 'ok' }])
+    const rec = one.recommended === '' ? '' : `→ ${one.recommended}`
+    const ask = Math.min(cellsOf(one.ask) + 3, Math.max(20, width - 5 - rec.length))
+    lines.push([{ text: ` ${one.n.padStart(2)}  `, tone: 'dim' }, ...fitRuns(inline(one.ask), ask), { text: fit(rec, width - 5 - ask).trimEnd(), tone: 'ok' }])
   }
-  lines.push([])
+  const out = sectionsOf(m.planText).find(section => /^out of scope$/i.test(section.heading))?.body.replace(/\s+/g, ' ').trim() ?? ''
+  if (out !== '') {
+    head('OUT OF SCOPE')
+    lines.push(...reflow(inline(out), width, ' ', ' ').slice(0, 2))
+  }
+
+  return lines
+}
+
+/** The plan gate: the summary, where the plan lives and its checks, the buttons. */
+const planGate = (m: PanelModel, inner: number): { lines: Line[]; buttons: number } => {
+  const lines = planSummary(m, inner)
+  lines.push([], [{ text: `${m.planPath}  ·  ${m.hash.replace(/^(sha256:.{4}).*$/, '$1…')}  ·  `, tone: 'dim' }, checksOf(m)], [])
   const buttons = lines.length
   const isClean = m.problems.length === 0
   const note = !isClean ? 'fix the plan first' : m.decisions.length > 0 ? 'approving takes the recommendations' : ''
@@ -231,101 +278,87 @@ const askGate = (ask: string, inner: number): { lines: Line[]; buttons: number }
   return { lines: [...lines, [{ text: ' a Approve', tone: 'ok', bold: true }, { text: '    c Change…' }]], buttons: lines.length }
 }
 
-/** Builders layer only on depends_on. Review-only roles watch each branch from a side lane. */
+/**
+ * The FLOW. Builders stack top to bottom in dependency order: a trunk from the
+ * orchestrator feeds each one that starts at once, and an arrow joins a role to
+ * the one right above it when it depends on it. A reviewer reviews each branch
+ * as it lands, so it sits in a lane to the right, joined to every role it
+ * reviews by an edge that lights once that role is done; without room for the
+ * lane it sits below with a line saying so.
+ */
 const flow = (m: PanelModel, ui: Ui, width: number): { canvas: Canvas; boxes: { name: string; row: number; col: number; width: number; height: number }[] } => {
   const reviewers = m.roles.filter(role => role.touches.length === 0 && role.reviews.length > 0)
   const builders = m.roles.filter(role => !reviewers.includes(role))
   const known = new Set(builders.map(role => role.name))
-  const nodes = builders.map(role => ({ role, name: role.name, dependsOn: role.dependsOn.filter(dep => known.has(dep)) }))
-  const { layers, stuck } = layersOf(nodes)
-  if (stuck.length > 0) layers.push(stuck)
-  const laneWidth = 26
-  const gutters = builders.length + 2
-  const side = builders.length > 0 && reviewers.length > 0 && width >= BOX + gutters + reviewers.length * (laneWidth + GAP)
-  const builderWidth = side ? width - reviewers.length * (laneWidth + GAP) : width
-  const chainWidth = Math.max(8, builderWidth - gutters)
-  const rows: { nodes: typeof nodes; box: number }[] = layers.flatMap(layer => {
-    // Each reviewed branch gets its own horizontal edge, clear of other boxes.
-    if (side) return layer.map(node => ({ nodes: [node], box: Math.min(BOX, chainWidth) }))
-    const box = Math.min(BOX, Math.floor((chainWidth - (layer.length - 1) * GAP) / Math.max(1, layer.length)))
-    if (box >= 18) return [{ nodes: layer, box }]
-    const per = Math.max(1, Math.floor((chainWidth + GAP) / (BOX + GAP)))
-
-    return Array.from({ length: Math.ceil(layer.length / per) }, (_, index) => ({ nodes: layer.slice(index * per, index * per + per), box: Math.min(BOX, chainWidth) }))
-  })
-  const builderEnd = 3 + rows.length * 8
-  const fallbackWidth = Math.min(width, Math.max(BOX, 48))
-  const reviewerNotes = reviewers.map(role => wrap(`reviews ${role.reviews.join(', ')} as each lands`, fallbackWidth - 4))
-  const canvas = new Canvas(width, builderEnd + (side ? 0 : reviewerNotes.reduce((n, lines) => n + 6 + lines.length, 0)))
+  const { layers, stuck } = layersOf(builders.map(role => ({ name: role.name, dependsOn: role.dependsOn.filter(dep => known.has(dep)) })))
+  const order = [...layers.flat(), ...stuck].map(node => builders.find(role => role.name === node.name)).filter(role => role !== undefined)
+  const INDENT = 5
+  const HEIGHT = 5
+  const box = Math.max(16, Math.min(BOX, width - INDENT))
+  const lane = Math.min(BOX, 24)
+  const side = reviewers.length === 1 && order.length > 0 && width >= INDENT + box + 6 + lane
+  const below = side ? [] : reviewers
+  const canvas = new Canvas(width, 3 + order.length * (HEIGHT + 2) + below.length * (HEIGHT + 2))
   const boxes: { name: string; row: number; col: number; width: number; height: number }[] = []
-  const orchWidth = Math.min(BOX, chainWidth)
-  canvas.box(0, 0, orchWidth, 3, 'chrome')
-  canvas.put(1, 2, fit('● orchestrator', orchWidth - 4), { tone: 'bright' })
-  const roleBox = (role: RoleView, row: number, col: number, boxWidth: number, height = 5) => {
+  const roleBox = (role: RoleView, row: number, col: number, w: number, note = '') => {
     const look = LOOK[role.state]
     const selected = role.name === ui.selected
-    canvas.box(row, col, boxWidth, height, selected ? look.tone : role.state === 'planned' ? 'chrome' : look.tone, selected ? DOUBLE : SINGLE)
-    canvas.put(row + 1, col + 2, spread(`${look.glyph} ${role.name}`, look.text, boxWidth - 4), { tone: look.tone, ...(selected && { bold: true }) })
-    canvas.runs(row + 2, col + 2, [badge(role), { text: ` ${fit(`${role.agent} ${role.model || 'default'}`, boxWidth - 6)}`, tone: 'dim' }])
-    const usage = contextOf(role) === '—' ? effortOf(role.effort) : { text: contextOf(role), tone: 'dim' as const }
-    canvas.runs(row + 3, col + 2, [{ ...usage, text: fit(usage.text, boxWidth - 4) }])
-    boxes.push({ name: role.name, row, col, width: boxWidth, height })
+    const h = HEIGHT + (note === '' ? 0 : 1)
+    canvas.box(row, col, w, h, selected ? look.tone : role.state === 'planned' ? 'chrome' : look.tone, selected ? DOUBLE : SINGLE)
+    canvas.put(row + 1, col + 2, spread(`${look.glyph} ${role.name}`, look.text, w - 4), { tone: look.tone, ...(selected && { bold: true }) })
+    canvas.runs(row + 2, col + 2, [badge(role), { text: ` ${fit(`${role.agent} ${role.model || 'default'}`, w - 6)}`, tone: 'dim' }])
+    const ctx = contextOf(role) === '—' ? '' : `ctx ${contextOf(role)}`
+    canvas.runs(row + 3, col + 2, [...fitRuns(effortOf(role.effort), w - 4 - ctx.length), { text: ctx, tone: 'dim' }])
+    if (note !== '') canvas.put(row + 4, col + 2, fit(note, w - 4), { tone: 'dim' })
+    boxes.push({ name: role.name, row, col, width: w, height: h })
+
+    return row + h
   }
-  const placed = new Map<string, { row: number; center: number; col: number; width: number }>()
-  let row = 3
-  for (const one of rows) {
-    one.nodes.forEach((node, index) => {
-      const col = index * (one.box + GAP)
-      const center = col + Math.floor(one.box / 2)
-      roleBox(node.role, row + 3, col, one.box)
-      placed.set(node.name, { row: row + 3, center, col, width: one.box })
-    })
-    row += 8
-  }
-  // Route vertical edges in dedicated gutters so a long dependency never cuts
-  // through an unrelated builder (including roots wrapped into a later row).
-  for (const node of nodes) {
-    const child = placed.get(node.name)
-    if (child === undefined) continue
-    const sources = node.dependsOn.length === 0 ? [''] : node.dependsOn
-    for (const name of sources) {
-      const parent = name === '' ? { row: -2, center: Math.floor(orchWidth / 2) } : placed.get(name)
-      if (parent === undefined) continue
-      const from = parent.row + 5
-      const to = child.row - 2
-      if (to < from) continue
-      if (parent.center === child.center && to === from + 1) {
-        connect(canvas, from, [parent.center], [child.center])
-        continue
-      }
-      const gutter = chainWidth + 1 + (name === '' ? 0 : builders.findIndex(role => role.name === name) + 1)
-      wire(canvas, from, parent.center, `└${'─'.repeat(Math.max(0, gutter - parent.center - 1))}┐`)
-      for (let r = from + 1; r < to; r++) wire(canvas, r, gutter, '│')
-      wire(canvas, to, child.center, `┌${'─'.repeat(Math.max(0, gutter - child.center - 1))}┘`)
-      canvas.put(to + 1, child.center, '▼', { tone: 'chrome' })
-    }
-  }
-  let below = builderEnd
-  reviewers.forEach((role, index) => {
-    if (!side) {
-      const note = reviewerNotes[index] ?? []
-      const height = 5 + note.length
-      roleBox(role, below, 0, fallbackWidth, height)
-      note.forEach((line, i) => canvas.put(below + 4 + i, 2, line, { tone: 'dim' }))
-      below += height + 1
-      return
-    }
-    const sources = role.reviews.map(name => ({ name, box: placed.get(name) })).filter(one => one.box !== undefined)
-    const first = sources.length === 0 ? 6 : Math.min(...sources.map(one => one.box?.row ?? 6))
-    const last = Math.max(first, ...sources.map(one => one.box?.row ?? first))
-    const col = builderWidth + GAP + index * (laneWidth + GAP)
-    roleBox(role, first, col, laneWidth, Math.max(5, last - first + 5))
-    sources.forEach(({ name, box }) => {
-      if (box === undefined) return
-      const tone = builders.find(one => one.name === name)?.state === 'done' ? 'ok' : 'dim'
-      wire(canvas, box.row + 1, box.col + box.width, `${'─'.repeat(Math.max(0, col - box.col - box.width - 1))}▶`, tone)
-    })
+
+  canvas.box(0, 0, Math.min(BOX, width), 3, 'chrome')
+  canvas.put(1, 2, fit('● orchestrator', Math.min(BOX, width) - 4), { tone: 'bright' })
+  const mids = new Map<string, number>()
+  const roots: number[] = []
+  order.forEach((role, index) => {
+    const row = 3 + index * (HEIGHT + 2) + 1
+    roleBox(role, row, INDENT, box)
+    mids.set(role.name, row + 2)
+    if (role.dependsOn.filter(dep => known.has(dep)).length === 0) roots.push(row + 2)
+    else if (index > 0 && role.dependsOn.includes(order[index - 1]?.name ?? '')) {
+      const center = INDENT + Math.floor(box / 2)
+      canvas.put(row - 2, center, '│', { tone: 'chrome' })
+      canvas.put(row - 1, center, '▼', { tone: 'chrome' })
+    } else canvas.put(row - 1, INDENT + 2, fit(`after ${role.dependsOn.join(', ')}`, box - 2), { tone: 'dim' })
   })
+  // The trunk: from under the orchestrator down to the last role that starts at once.
+  if (roots.length > 0) {
+    wire(canvas, 2, 2, '┬')
+    for (let row = 3; row < Math.max(...roots); row += 1) wire(canvas, row, 2, '│')
+    for (const row of roots) wire(canvas, row, 2, `${row === Math.max(...roots) ? '└' : '├'}─`), canvas.put(row, INDENT - 1, '▶', { tone: 'chrome' })
+  }
+
+  const reviewer = reviewers[0]
+  if (side && reviewer !== undefined) {
+    const sources = reviewer.reviews.map(name => ({ name, mid: mids.get(name), done: builders.find(one => one.name === name)?.state === 'done' })).filter(one => one.mid !== undefined)
+    const spine = INDENT + box + 2
+    const rows = sources.map(one => one.mid ?? 0)
+    const mid = rows.length === 0 ? 6 : Math.round((Math.min(...rows) + Math.max(...rows)) / 2)
+    // Dim edges first, lit ones over them, so a landed branch reads all the way to the reviewer.
+    for (const one of [...sources.filter(one => !one.done), ...sources.filter(one => one.done)]) {
+      const tone: Tone = one.done ? 'ok' : 'chrome'
+      const at = one.mid ?? mid
+      wire(canvas, at, INDENT + box, '─'.repeat(spine - INDENT - box), tone)
+      for (let row = Math.min(at, mid) + 1; row < Math.max(at, mid); row += 1) wire(canvas, row, spine, '│', tone)
+      // Partial joints merge: a source above and one below make ├ on the reviewer's row.
+      wire(canvas, at, spine, at < mid ? '┐' : at > mid ? '┘' : '─', tone)
+      if (at !== mid) wire(canvas, mid, spine, at < mid ? '└' : '┌', tone)
+      wire(canvas, mid, spine + 1, '──', tone)
+      canvas.put(mid, spine + 3, '▶', { tone })
+    }
+    roleBox(reviewer, Math.max(0, mid - 2), spine + 4, Math.min(lane, width - spine - 4))
+  }
+  let row = 3 + order.length * (HEIGHT + 2)
+  for (const role of below) row = roleBox(role, row, INDENT, box, `reviews ${role.reviews.join(', ')} as each lands`) + 1
 
   return { canvas, boxes }
 }
@@ -369,7 +402,8 @@ const detail = (role: RoleView, width: number, room: number): { lines: Line[]; k
   const field = (name: string, text: string, tone?: Tone) =>
     wrap(text, width - 10).slice(0, 2).forEach((one, index) => lines.push([{ text: fit(index === 0 ? ` ${name}` : '', 10), tone: 'dim' }, { text: one, ...(tone && { tone }) }]))
   field('goal', role.goal)
-  lines.push([{ text: fit(' agent', 10), tone: 'dim' }, badge(role), { text: ` ${role.agent} ${role.model || 'default'} ` }, effortOf(role.effort)])
+  lines.push([{ text: fit(' agent', 10), tone: 'dim' }, badge(role), { text: ` ${role.agent} ${role.model || 'default'}   ` }, ...effortOf(role.effort)])
+  if (role.tokens !== undefined) lines.push([{ text: fit(' context', 10), tone: 'dim' }, ...contextBar(role, 16), { text: `   ${tokensOf(role)}`, tone: 'dim' }])
   lines.push([{ text: fit('', 10) }, { text: fit(role.flags.join(' '), width - 10), tone: 'accent' }])
   const commits = role.work?.commits.length ?? 0
   field('branch', `${role.branch}${commits > 0 ? `  ·  ${commits} commit${commits === 1 ? '' : 's'}` : ''}`)
@@ -494,9 +528,9 @@ const mission = (c: Canvas, m: PanelModel, ui: Ui, top: number, bottom: number, 
           { text: role.name === ui.selected ? '▸' : ' ', tone: 'accent' },
           { text: role.dependsOn.length > 0 ? ' └ ' : '   ', tone: 'chrome' },
           { text: `${look.glyph} `, tone: look.tone },
-          { text: fit(role.name, 7), ...(role.name === ui.selected && { tone: 'bright' as const, bold: true as const }) },
-          badge(role), { text: ` ${fit(role.agent, 6)}`, tone: 'dim' },
-          { text: (role.context || '—').padStart(4), tone: 'dim' },
+          { text: fit(role.name, 12), ...(role.name === ui.selected && { tone: 'bright' as const, bold: true as const }) },
+          badge(role),
+          { text: contextOf(role).padStart(5), tone: 'dim' },
         ],
       })
     }
@@ -533,61 +567,54 @@ const mission = (c: Canvas, m: PanelModel, ui: Ui, top: number, bottom: number, 
   }
 }
 
-/** Card content wraps inside its border; a row's taller card sets the next row. */
-const roleCards = (m: PanelModel, ui: Ui, width: number) => {
-  const columns = width >= 90 ? 2 : 1
-  const gap = 2
-  const cardWidth = Math.floor((width - gap * (columns - 1)) / columns)
-  const inner = cardWidth - 4
-  const cards = m.roles.map(role => {
-    const look = LOOK[role.state]
-    const lines: Line[] = []
-    const field = (label: string, value: string, tone?: Tone) => lines.push(...reflow([{ text: `${label} `, tone: 'dim' }, { text: value, ...(tone && { tone }) }], inner))
-    lines.push(...reflow([badge(role), { text: ` ${role.name} · ${look.glyph} ${look.text}`, tone: look.tone, bold: true }], inner))
-    lines.push(...reflow([{ text: `${role.model || 'default'} ` }, effortOf(role.effort)], inner))
-    field('flags', role.flags.join(' ') || '—', 'accent')
-    field('branch', role.branch)
-    const work = role.work
-    field('work', work === undefined ? '— commits · — files inside / — outside touches' : `${work.commits.length} commits · ${work.changed.length - work.outside.length} files inside / ${work.outside.length} outside touches`, work?.outside.length ? 'error' : undefined)
-    field('starts', startOf(role).replace(/^starts /, ''))
-    field('elapsed', role.elapsed === undefined ? '—' : `${role.elapsed} since dispatch`)
-    field('context', contextOf(role) || '—')
-    if (role.state === 'waits') field('waits on', role.waitsOn || '—', 'warn')
-    field('result', role.result === undefined ? '—' : `${role.result.status || '?'} · ${role.result.summary}`, role.result?.status === 'done' ? 'ok' : undefined)
-    field('last', role.screen.filter(line => line.trim() !== '').at(-1)?.trim() || '—')
+/** The ROLES tab: one row per role, then its branch and flags; columns drop from the right when the width is short. */
+const rolesTable = (m: PanelModel, width: number): Line[] => {
+  type Column = { title: string; width: number; cell: (role: RoleView) => Line }
+  const all: Column[] = [
+    { title: 'STATE', width: 15, cell: role => [{ text: `${LOOK[role.state].glyph} ${LOOK[role.state].text}`, tone: LOOK[role.state].tone }] },
+    { title: 'AGENT', width: 21, cell: role => [{ text: `${role.agent} ${role.model || 'default'}` }] },
+    { title: 'EFFORT', width: EFFORT + 2, cell: role => effortOf(role.effort) },
+    { title: 'CTX', width: 18, cell: role => contextBar(role, 10) },
+    { title: 'TOKENS', width: 18, cell: role => [{ text: tokensOf(role), tone: 'dim' }] },
+    { title: 'WORK', width: 19, cell: role => {
+      const work = role.work
+      if (work === undefined) return [{ text: '—', tone: 'dim' }]
+      const n = work.commits.length
 
-    return { role, lines }
-  })
-  const boxes: { name: string; row: number; col: number; width: number; height: number }[] = []
-  let height = 0
-  for (let index = 0; index < cards.length; index += columns) {
-    const group = cards.slice(index, index + columns)
-    const h = Math.max(...group.map(card => card.lines.length)) + 2
-    group.forEach((card, col) => boxes.push({ name: card.role.name, row: height, col: col * (cardWidth + gap), width: cardWidth, height: h }))
-    height += h + 1
+      return [{ text: `${n} commit${n === 1 ? '' : 's'} · ${work.changed.length}` }, work.outside.length > 0 ? { text: ` ✗${work.outside.length}`, tone: 'error' } : { text: ' ✓', tone: 'ok' }]
+    } },
+    { title: 'TIME', width: 8, cell: role => [{ text: role.elapsed?.replace(/\s*\d+s$/, '') ?? '—', tone: 'dim' }] },
+  ]
+  const NAME = 14
+  const columns: Column[] = []
+  let used = NAME
+  for (const column of all) if (used + column.width <= width) { columns.push(column); used += column.width }
+  const lines: Line[] = [[{ text: `${fit('   ROLE', NAME)}${columns.map(column => fit(column.title, column.width)).join('')}`, tone: 'dim' }]]
+  for (const role of m.roles) {
+    lines.push([{ text: ' ' }, badge(role), { text: ' ' }, { text: fit(role.name, NAME - 3), tone: 'bright', bold: true }, ...columns.flatMap(column => fitRuns(column.cell(role), column.width))])
+    lines.push([{ text: ' '.repeat(NAME) }, ...fitRuns([{ text: role.branch, tone: 'dim' }, { text: '   ' }, { text: role.flags.join(' '), tone: 'accent' }], width - NAME)])
+    if (role.state === 'waits') lines.push([{ text: ' '.repeat(NAME) }, { text: fit(`◆ waits on you${role.waitsOn ? ` · ${role.waitsOn}` : ''}`, width - NAME), tone: 'warn' }])
+    else if (role.result !== undefined) lines.push([{ text: ' '.repeat(NAME) }, { text: fit(`${role.result.status || '?'} · ${role.result.summary}`, width - NAME), tone: role.result.status === 'done' ? 'ok' : 'warn' }])
+    lines.push([])
   }
-  const canvas = new Canvas(width, Math.max(0, height - 1))
-  cards.forEach((card, index) => {
-    const box = boxes[index]
-    if (box === undefined) return
-    const selected = card.role.name === ui.selected
-    canvas.box(box.row, box.col, box.width, box.height, selected ? 'accent' : 'chrome', selected ? DOUBLE : SINGLE)
-    card.lines.forEach((line, i) => canvas.runs(box.row + i + 1, box.col + 2, line))
-  })
 
-  return { lines: canvas.lines(), boxes }
+  return lines
 }
 
 /** ROLES, PLAN, LOG and DIFF use the whole width. */
 const other = (c: Canvas, m: PanelModel, ui: Ui, top: number, bottom: number, hit: (row: number, col: number, w: number, h: number, target: Target) => void): number => {
   const lines: Line[] = []
   const width = c.width - 2
-  let cards: ReturnType<typeof roleCards> | undefined
+  const rows: { at: number; role: string }[] = []
   if (ui.tab === 2) {
-    cards = roleCards(m, ui, width)
-    lines.push(...cards.lines)
+    const table = rolesTable(m, width)
+    // A role's block starts at its name row: the header, then blocks separated by a blank line.
+    table.forEach((line, index) => { const name = m.roles.find(role => line.some(run => run.bold && run.text.trim() === role.name)); if (name !== undefined) rows.push({ at: index, role: name.name }) })
+    lines.push(...table)
   } else if (ui.tab === 3) {
-    lines.push(...planLines(m, width))
+    lines.push([{ text: `${m.planPath}  ·  ${m.hash.replace(/^(sha256:.{8}).*$/, '$1')}  ·  `, tone: 'dim' }, checksOf(m), { text: `  ·  f ${ui.full ? 'summary' : 'full text'}`, tone: 'dim' }], [])
+    if (!ui.full) lines.push([{ text: m.title, tone: 'bright', bold: true }], [])
+    lines.push(...(ui.full ? planFull(m, width) : planSummary(m, width)))
   } else if (ui.tab === 4) {
     for (const e of m.log) {
       const { at, by, ev, ...rest } = e
@@ -615,11 +642,7 @@ const other = (c: Canvas, m: PanelModel, ui: Ui, top: number, bottom: number, hi
   lines.slice(from, from + room).forEach((line, index) => {
     c.runs(top + index, 1, line)
   })
-  for (const box of cards?.boxes ?? []) {
-    const row = Math.max(top, top + box.row - from)
-    const end = Math.min(bottom, top + box.row + box.height - from)
-    if (end > row) hit(row, 1 + box.col, box.width, end - row, { kind: 'role', name: box.name })
-  }
+  for (const one of rows) if (one.at >= from && one.at < from + room) hit(top + one.at - from, 1, width, 1, { kind: 'role', name: one.role })
 
   return maxScroll
 }
