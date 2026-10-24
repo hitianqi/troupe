@@ -217,7 +217,7 @@ const planFull = (m: PanelModel, width: number): Line[] => {
 const checksOf = (m: PanelModel): Run =>
   m.problems.length === 0 ? { text: 'checks clean', tone: 'ok' } : { text: `${m.problems.length} problem${m.problems.length === 1 ? '' : 's'}`, tone: 'error' }
 
-/** The plan at a glance, the same in the plan gate and on the PLAN tab: goal, why, one line per done-when, one block per role, decisions, out of scope. */
+/** The plan's parts, the same in the plan gate and on the PLAN tab: goal, why, done when, each role, decisions, out of scope; wrapped, never cut. */
 const planSummary = (m: PanelModel, width: number): Line[] => {
   const lines: Line[] = []
   const field = (name: string, text: string) => lines.push(...reflow(inline(text), width, fit(name, 7), ' '.repeat(7)).map(([label, ...rest]) => [{ ...label, tone: 'dim' as const }, ...rest] as Line))
@@ -225,9 +225,12 @@ const planSummary = (m: PanelModel, width: number): Line[] => {
   field('Goal', m.goal || m.title)
   if (m.why !== '') field('Why', m.why)
   if (m.doneWhen.length > 0) head('DONE WHEN')
-  m.doneWhen.forEach((one, index) => lines.push([{ text: ` ${String(index + 1).padStart(2)}  `, tone: 'dim' }, ...fitRuns(inline(one), width - 5)]))
+  // Numbered items wrap under their text; the plan is never cut short here.
+  const item = (n: string, runs: Line) => lines.push(...reflow(runs, width, '     ', '     ').map((line, index) => index === 0 ? [{ text: ` ${n.padStart(2)}  `, tone: 'dim' as const }, ...line.slice(1)] : line))
+  m.doneWhen.forEach((one, index) => item(String(index + 1), inline(one)))
   head('ROLES')
-  for (const role of m.roles) {
+  m.roles.forEach((role, index) => {
+    if (index > 0) lines.push([])
     const agent = `${role.agent} ${role.model || 'default'}`
     lines.push([
       { text: ' ' }, badge(role), { text: ' ' },
@@ -236,21 +239,19 @@ const planSummary = (m: PanelModel, width: number): Line[] => {
       ...fitRuns(effortOf(role.effort), EFFORT + 2),
       { text: fit(startOf(role), Math.max(0, width - 48)), tone: 'dim' },
     ])
-    lines.push([{ text: '   ' }, ...fitRuns(inline(role.goal), width - 3)])
-    const touches = role.touches.length === 0 ? 'changes nothing' : role.touches.length <= 4 ? role.touches.join('  ') : `${role.touches.slice(0, 4).join('  ')}  +${role.touches.length - 4}`
-    lines.push([{ text: `   ${fit(touches, width - 3)}`, tone: 'chrome' }])
-  }
+    lines.push(...reflow(inline(role.goal), width, '   ', '   '))
+    lines.push(...reflow([{ text: role.touches.length === 0 ? 'changes nothing' : role.touches.join('  '), tone: 'chrome' }], width, '   ', '   '))
+  })
   for (const problem of m.problems) wrap(problem, width - 4).forEach((one, index) => lines.push([{ text: `${index === 0 ? '  - ' : '    '}${one}`, tone: 'error' }]))
   if (m.decisions.length > 0) head('DECISIONS')
   for (const one of m.decisions) {
     const rec = one.recommended === '' ? '' : `→ ${one.recommended}`
-    const ask = Math.min(cellsOf(one.ask) + 3, Math.max(20, width - 5 - rec.length))
-    lines.push([{ text: ` ${one.n.padStart(2)}  `, tone: 'dim' }, ...fitRuns(inline(one.ask), ask), { text: fit(rec, width - 5 - ask).trimEnd(), tone: 'ok' }])
+    item(one.n, [...inline(one.ask), { text: ` ${rec}`, tone: 'ok' }])
   }
   const out = sectionsOf(m.planText).find(section => /^out of scope$/i.test(section.heading))?.body.replace(/\s+/g, ' ').trim() ?? ''
   if (out !== '') {
     head('OUT OF SCOPE')
-    lines.push(...reflow(inline(out), width, ' ', ' ').slice(0, 2))
+    lines.push(...reflow(inline(out), width, ' ', ' '))
   }
 
   return lines

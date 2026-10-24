@@ -15,18 +15,21 @@
 │  ⬢ api        codex gpt-6.1-sol   ■■■□□ high    starts at once                               │
 │    Rotate the token on refresh; refuse a reused one with 401 reuse                           │
 │    src/api/refresh.ts  src/api/errors.ts                                                     │
+│                                                                                              │
 │  ✻ store      claude opus         ■■■□□ high    starts at once                               │
 │    Keep a token family and a used flag per token                                             │
 │    src/store/  migrations/                                                                   │
+│                                                                                              │
 │  ✻ web        claude sonnet       ■■□□□ medium  after api                                    │
 │    Sign the user out when a refresh is refused                                               │
 │    web/src/session/                                                                          │
+│                                                                                              │
 │  ✻ review     claude sonnet       ■■■□□ high    as each lands                                │
 │    Review each branch as it lands                                                            │
 │    changes nothing                                                                           │
 │                                                                                              │
 │ ─ DECISIONS ──────────────────────────────────────────────────────────────────────────────── │
-│   1  Grace period for a token used twice?   → 10 s                                           │
+│   1  Grace period for a token used twice? → 10 s                                             │
 │                                                                                              │
 │ ─ OUT OF SCOPE ───────────────────────────────────────────────────────────────────────────── │
 │  Access-token lifetime; the admin session list.                                              │
@@ -51,8 +54,5 @@
   ○ Review            0/1  │   │  ┌────────────────────────┐  │   ┌──────────────────────┐
   ◇ MR OK?                 │   │  │ ○ store        planned │  │   │ ○ review     planned │
   ○ Open MR                │   └─▶│ ✻ claude opus          │──┼──▶│ ✻ claude sonnet      │
-  ○ Teardown               │      │ ■■■□□ high             │  │   │ ■■■□□ high           │
-                           │      └────────────────────────┘  │   └──────────────────────┘
-─ ACTIVITY ─────────────── │                                  │
 
  a  approve   c  change   v  plan   ↑↓  role   1-5  tabs   ?  help
