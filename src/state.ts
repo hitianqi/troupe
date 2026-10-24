@@ -97,16 +97,22 @@ export const paneOf = (pane: string, runner: Run = run, env = process.env, expec
   try {
     const identified = tmux(['display', '-p', '-t', pane, '#{pane_id}\t#{pane_dead}\t#{session_id}\t#{window_id}\t#{@troupe-owner}'], runner, env)
     const [id, dead, session, window, owner] = identified.out.trimEnd().split('\t')
-    if (identified.code !== 0 || id !== pane) return { alive: false, dead: false, screen: '' }
+    if (identified.code !== 0) {
+      const listed = tmux(['list-panes', '-a', '-F', '#{pane_id}'], runner, env)
+      const absent = listed.code === 0 && !listed.out.split(/\r?\n/).includes(pane)
+      const noServer = /no server running|no sessions|No such file or directory/.test(identified.err)
+      return { alive: false, dead: false, screen: '', ...(!absent && !noServer && expected !== undefined ? { foreign: true } : {}) }
+    }
+    if (id !== pane) return { alive: false, dead: false, screen: '', ...(expected === undefined ? {} : { foreign: true }) }
     if (expected !== undefined && (!expected.owner || owner !== expected.owner || session !== expected.session || window !== expected.window)) {
       return { alive: false, dead: false, screen: '', foreign: true }
     }
     const captured = tmux(['capture-pane', '-p', '-t', pane], runner, env)
-    if (captured.code !== 0) return { alive: false, dead: false, screen: '' }
+    if (captured.code !== 0) return { alive: true, dead: dead === '1', screen: '' }
 
     return { alive: true, dead: dead === '1', screen: captured.out }
   } catch {
-    return { alive: false, dead: false, screen: '' }
+    return { alive: false, dead: false, screen: '', ...(expected === undefined ? {} : { foreign: true }) }
   }
 }
 

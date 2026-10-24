@@ -99,8 +99,11 @@ export const roleText = (r: Runtime, root: string, workflow: string, ref: string
   let path: string
   if (ref.startsWith('workflow:')) {
     const name = ref.slice('workflow:'.length)
-    const dir = workflowDirs(r, workflow).find(dir => existsSync(dir)) ?? join(r.packageRoot, 'skills', workflow)
-    path = within(dir, `roles/${name.endsWith('.md') ? name : `${name}.md`}`)
+    const dir = workflowDirs(r, workflow).find(dir => existsSync(join(dir, 'SKILL.md'))) ?? join(r.packageRoot, 'skills', workflow)
+    const file = name.endsWith('.md') ? name : `${name}.md`
+    path = within(dir, `roles/${file}`)
+    // The mod's skill uses references/ until the CLI skill rewrite in step 8.
+    if (!existsSync(path)) path = within(dir, `references/${file}`)
   } else path = within(root, ref)
 
   return { ref, bytes: existsSync(path) ? readFileSync(path, 'utf8') : undefined }

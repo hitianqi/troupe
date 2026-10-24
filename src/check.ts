@@ -43,8 +43,8 @@ export const findPlan = (root: string, cwd: string, want: string): { path: strin
   return newest === undefined ? { missing: `no mission under ${MISSIONS}/` } : { path: join(dir, newest.name, 'plan.md') }
 }
 
-export const check = (cwd: string, want: string, home = homedir()): { out: string; code: number } => {
-  const root = rootOf(cwd)
+export const check = (cwd: string, want: string, home = homedir(), runner: Run = run): { out: string; code: number } => {
+  const root = rootOf(cwd, runner)
   const found = findPlan(root, cwd, want)
   if ('missing' in found) return { out: `troupe check: ${found.missing}\n`, code: 2 }
   const loaded = loadAgents(root, home)

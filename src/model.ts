@@ -81,6 +81,7 @@ const describe = (e: Logged, labelOf: (gate: string) => string): string => {
   }
   if (e.ev === 'dispatch') return `dispatched ${e.role}`
   if (e.ev === 'send') return `sent to ${e.role}: ${e.text}`
+  if (e.ev === 'up') return `opened mission window ${e.window}`
 
   return `closed ${e.role}`
 }
