@@ -1,0 +1,58 @@
+ troupe  auth-refresh  ·  Plan OK?                                      ◆ 1 needs you  ·  12:07
+  1 MISSION   2 ROLES   3 PLAN   4 LOG   5 DIFF
+                                Refresh tokens rotate on every use, and a reused one is refused
+────────────────────────────────────────────────────────────────────────────────────────────────
+┌─ ◆ APPROVE THE PLAN ─────────────────────────────────────────────────────────────────────────┐
+│ Goal       Refresh tokens rotate on every use, and a reused one is refused                   │
+│ Why        Stolen refresh tokens stay valid for 30 days today (issue #212)                   │
+│ Done when  · A refresh returns a new token; the old one then gets 401 reuse                  │
+│            · A reused token revokes every token of its family                                │
+│            · The web app signs out on 401 reuse, and nowhere else                            │
+│                                                                                              │
+│ ROLE    AGENT   MODEL        EFFORT  FLAGS                                                   │
+│ api     codex   gpt-6.1-sol  high    -a on-request -s workspace-write                        │
+│         ↳ Rotate the token on refresh; refuse a reused one with 401 reuse   · starts at once │
+│           touches src/api/refresh.ts src/api/errors.ts                                       │
+│ store   claude  opus         high    --permission-mode acceptEdits                           │
+│         ↳ Keep a token family and a used flag per token                     · starts at once │
+│           touches src/store/ migrations/                                                     │
+│ web     claude  sonnet       medium  --permission-mode acceptEdits                           │
+│         ↳ Sign the user out when a refresh is refused                            · after api │
+│           touches web/src/session/                                                           │
+│ review  claude  sonnet       high    --permission-mode acceptEdits                           │
+│         ↳ Review each branch as it lands                                     · as each lands │
+│           touches — changes nothing                                                          │
+│                                                                                              │
+│ docs/missions/auth-refresh/plan.md  ·  sha256:3f9a…  ·  checks clean                         │
+│                                                                                              │
+│ Decision 1  Grace period for a token used twice?                           recommended: 10 s │
+│                                                                                              │
+│  a Approve    c Change…    v Read the plan               approving takes the recommendations │
+└──────────────────────────────────────────────────────────────────────────────────────────────┘
+
+─ ROLES ────────────────── │ ─ FLOW ────────────────────────────────────────────────────────────
+ build                     │ ┌────────────────────────┐
+▸   ○ api     codex     —  │ │ ● orchestrator         │
+    ○ store   claude    —  │ └────────────────────────┘
+  └ ○ web     claude    —  │              │
+ review                    │              ├───────────────────────────────┐
+    ○ review  claude    —  │              ▼                               ▼
+                           │ ╔════════════════════════╗      ┌────────────────────────┐
+─ STAGES ───────────────── │ ║ ○ api          planned ║      │ ○ store        planned │
+  ✓ Plan                   │ ║ codex gpt-6.1-sol    — ║      │ claude opus          — │
+  ◆ Plan OK?               │ ╚════════════════════════╝      └────────────────────────┘
+  ○ Build             0/3  │              │
+  ○ Review            0/1  │              │
+  ◇ MR OK?                 │              ▼
+  ○ Open MR                │ ┌────────────────────────┐
+  ○ Done                   │ │ ○ web          planned │
+                           │ │ claude sonnet        — │
+─ ACTIVITY ─────────────── │ └────────────────────────┘
+ 10:41 plan gate opened    │              │
+                           │              │
+                           │              ▼
+                           │ ┌────────────────────────┐
+                           │ │ ○ review       planned │
+                           │ │ claude sonnet        — │
+
+ a  approve   c  change   v  plan   ↑↓  role   1-5  tabs   ?  help

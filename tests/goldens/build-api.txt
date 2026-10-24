@@ -1,0 +1,58 @@
+ troupe  auth-refresh  ·  Build                                         ◆ 1 needs you  ·  12:07
+  1 MISSION   2 ROLES   3 PLAN   4 LOG   5 DIFF
+                                Refresh tokens rotate on every use, and a reused one is refused
+────────────────────────────────────────────────────────────────────────────────────────────────
+▌ ◆ api    waits on you · Trust this folder?                                      o Open window
+
+─ ROLES ────────────────── │ ─ FLOW ────────────────────────────────────────────────────────────
+ build                     │ ┌────────────────────────┐
+▸   ◆ api     codex     —  │ │ ● orchestrator         │
+    ● store   claude    —  │ └────────────────────────┘
+  └ ○ web     claude    —  │              │
+ review                    │              ├───────────────────────────────┐
+    ○ review  claude    —  │              ▼                               ▼
+                           │ ╔════════════════════════╗      ┌────────────────────────┐
+─ STAGES ───────────────── │ ║ ◆ api     waits on you ║      │ ● store        working │
+  ✓ Plan                   │ ║ codex gpt-6.1-sol    — ║      │ claude opus          — │
+  ✓ Plan OK?        10:42  │ ╚════════════════════════╝      └────────────────────────┘
+  ● Build             0/3  │              │
+  ○ Review            0/1  │              │
+  ◇ MR OK?                 │              ▼
+  ○ Open MR                │ ┌────────────────────────┐
+  ○ Done                   │ │ ○ web          planned │
+                           │ │ claude sonnet        — │
+─ ACTIVITY ─────────────── │ └────────────────────────┘
+ 12:07 dispatched store    │              │
+ 12:07 dispatched api      │              │
+ 10:42 stage: build        │              ▼
+ 10:42 plan approved       │ ┌────────────────────────┐
+ 10:41 plan gate opened    │ │ ○ review       planned │
+                           │ │ claude sonnet        — │
+                           │ └────────────────────────┘
+                           │
+                           │ ─ ◆ api · waits on you ────────────────────────────────────────────
+                           │  goal     Rotate the token on refresh; refuse a reused one with 401
+                           │           reuse
+                           │  agent    codex gpt-6.1-sol high
+                           │           -a on-request -s workspace-write
+                           │  branch   role/auth-refresh/api
+                           │  touches  src/api/refresh.ts src/api/errors.ts
+                           │  diff     0 files changed · inside touches ✓
+                           │
+                           │ ┌─ its window, live · codex ──────────────────────────────────────┐
+                           │ │                                                                 │
+                           │ │   Trust this folder?                                            │
+                           │ │   /Users/me/app/.troupe/worktrees/auth-refresh/api              │
+                           │ │                                                                 │
+                           │ │ › 1. Trust and continue                                         │
+                           │ │   2. Exit                                                       │
+                           │ │                                                                 │
+                           │ │   Press enter to confirm                                        │
+                           │ └─────────────────────────────────────────────────────────────────┘
+                           │  o Open window    s Send…    d Diff    answer it first
+                           │
+                           │
+                           │
+                           │
+
+ ↑↓  role   ⏎  detail   o  open   s  send   d  diff   1-5  tabs   ?  help
