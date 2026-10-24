@@ -3,8 +3,7 @@ import { graph } from './graph.ts'
 import { compactOrders, compactRoles, detail, headerLine } from './view.ts'
 import type { Line } from './view.ts'
 
-// The view top to bottom, as lines of styled runs: what the in-session pane
-// paints (draw-pane.tsx; the engine scrolls it) and what bin/troupe-panel
+// The view top to bottom, as lines of styled runs: what bin/troupe-panel
 // paints as ANSI through a viewport of its own. No engine import, so plain
 // Node runs it.
 

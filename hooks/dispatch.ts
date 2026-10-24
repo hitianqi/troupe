@@ -3,11 +3,11 @@ import type { EngineInterface, On } from 'claude-code'
 
 import type { TroupeRoleSession, TroupeRoleWindow } from '../types'
 import { approvalOf } from './approval.ts'
-import { baseOf, doneMarker, gitFacts, isReviewOf, missionBranchOf } from './mission.ts'
-import { ANCESTRY, ownPaneOf, tmux } from './panel.ts'
+import { baseOf, doneMarker, gitFacts, isReviewOf, missionBranchOf } from '../src/mission.ts'
+import { ownPaneOf, tmux } from './panel.ts'
 import { ownTranscript } from './metrics.ts'
-import { isLight, layersOf, readPlan } from './plan.ts'
-import type { PlanOrder, PlanRead } from './plan.ts'
+import { isLight, layersOf, readPlan } from '../src/plan.ts'
+import type { PlanOrder, PlanRead } from '../src/plan.ts'
 
 // troupe_dispatch, troupe_status and troupe_close: one Claude window per
 // order or review, in a tmux session of its own (`troupe-<mission>`) on the
@@ -205,8 +205,7 @@ async function ownPermissionMode($: EngineInterface): Promise<string> {
 
 /** The orchestrator's tmux server: its socket, found as the panel finds it; undefined outside tmux. */
 async function ownSocket($: EngineInterface): Promise<{ socket: string } | undefined> {
-  const ancestry = (await ok(run($, ANCESTRY))) ?? ''
-  const own = ownPaneOf({ tmux: await $.env.get('TMUX'), tmuxPane: await $.env.get('TMUX_PANE') }, ancestry)
+  const own = ownPaneOf({ tmux: await $.env.get('TMUX'), tmuxPane: await $.env.get('TMUX_PANE') }, '')
 
   return own && { socket: own.socket }
 }

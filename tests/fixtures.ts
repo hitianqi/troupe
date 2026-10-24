@@ -75,8 +75,8 @@ export const BAD_YAML = plan(`orders:
     model: opus
 `)
 
-/** The builder asks for a skill no session has; the goal comes from the block's goal: key. */
-export const MISSING_SKILL = plan(`goal: "Show the demo mission in a pane"
+/** The builder names two skills; the goal comes from the block's goal: key. */
+export const NAMED_SKILLS = plan(`goal: "Show the demo mission in a pane"
 roles:
   builder: [plugin-authoring, troupe-no-such-skill]
 orders:
@@ -88,6 +88,3 @@ orders:
     depends_on: []
     model: opus
 `)
-
-/** The skills the test session lists: `shared:systematic-debugging` listed bare, as the engine does. */
-export const SESSION_SKILLS = ['plugin-authoring', 'systematic-debugging', 'codex:rescue']

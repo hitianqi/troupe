@@ -5,32 +5,21 @@ import { panelColumns } from '../hooks/panel.ts'
 import { VALID } from './fixtures.ts'
 
 // /troupe inside tmux: the split beside the session's own pane, its reuse,
-// /troupe close, the close at session end, and the fallback with no tmux.
-// These hooks stand for the engine and for tmux, as an OpenRig seat sees
-// them: no TMUX in the engine's environment, the pane's shell two levels up
-// has it (docs/FEASIBILITY.md, "Phase 2").
+// /troupe close, the close at session end, and the refusal with no tmux.
+// These hooks stand for the engine and for tmux: the engine's TMUX and
+// TMUX_PANE name the session's pane, and `sh` answers the engine's pid.
 
 const SOCKET = '/tmp/tmux-1000/default'
-const SEAT = `100\t\t\n90\t\t\n80\t${SOCKET},3506,126\t%126\n1\t\t\n`
+const SESSION_TMUX = { TMUX: `${SOCKET},3506,126`, TMUX_PANE: '%126' }
 const ok = (stdout = '') => ({ value: { exitCode: 0, stdout, stderr: '', isStdoutTruncated: false, isStderrTruncated: false } })
 const failed = (stderr: string) => ({ value: { exitCode: 1, stdout: '', stderr, isStdoutTruncated: false, isStderrTruncated: false } })
 
-type Tmux = { ancestry: string; env?: { TMUX: string; TMUX_PANE: string }; panes: Set<string>; calls: string[][]; writes: string[]; ui: string[] }
+type Tmux = { env?: { TMUX: string; TMUX_PANE: string }; panes: Set<string>; calls: string[][]; writes: string[] }
 
 /** A checkout with docs/missions/p2 and p9, a session in /repo, and a fake tmux. */
 function serves(on: On, given: Partial<Tmux> = {}): Tmux {
-  const tmux: Tmux = { ancestry: SEAT, panes: new Set(['%126']), calls: [], writes: [], ui: [], ...given }
+  const tmux: Tmux = { env: SESSION_TMUX, panes: new Set(['%126']), calls: [], writes: [], ...given }
   on('command.register', () => ({ value: { command: 'troupe' } }))
-  on('ui.open', (_, e) => {
-    tmux.ui.push(`open ${e.id}`)
-
-    return { value: { isPlaced: true } }
-  })
-  on('ui.close', (_, e) => {
-    tmux.ui.push(`close ${e.id}`)
-
-    return { value: undefined }
-  })
   on('ui.log', () => ({ value: undefined }))
   on('session.start', (_, e) => ({ cwd: e.cwd }))
   on('session.end', (_, e) => ({ sessionId: e.sessionId }))
@@ -45,13 +34,11 @@ function serves(on: On, given: Partial<Tmux> = {}): Tmux {
 
     return { value: undefined }
   })
-  on('session.usage', () => ({ deny: 'no usage here' }))
-  on('agent.list', () => ({ value: [] }))
   on('env.get', (_, e) => ({ value: tmux.env?.[e.name as 'TMUX' | 'TMUX_PANE'] }))
   on('process.run', (_, e) => {
     const argv = [...e.argv]
     if (argv[0] === 'node') return ok('/usr/bin/node\n')
-    if (argv[0] === 'sh') return ok(tmux.ancestry)
+    if (argv[0] === 'sh') return ok('100\n')
     tmux.calls.push(argv)
     const verb = argv[argv[1] === '-S' ? 3 : 1]
     const target = argv[argv.indexOf('-t') + 1] ?? ''
@@ -83,7 +70,7 @@ test('the panel takes half the window, at least 30 columns', async () => {
   expect([panelColumns(50), panelColumns(76), panelColumns(158), panelColumns(200)]).toEqual([30, 38, 79, 100])
 })
 
-test('inside tmux /troupe splits troupe-panel right of the session pane, found through its ancestors', async ($, on) => {
+test("inside tmux /troupe splits troupe-panel right of the session pane its TMUX names", async ($, on) => {
   const clock = mock.clock(on)
   const tmux = serves(on)
   await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
@@ -96,14 +83,13 @@ test('inside tmux /troupe splits troupe-panel right of the session pane, found t
   expect(split?.slice(0, 16)).toEqual(['tmux', '-S', SOCKET, 'split-window', '-h', '-d', '-l', '38', '-t', '%126', '-c', '/repo', '-P', '-F', '#{pane_id}', '/usr/bin/node'])
   expect(split?.[16]).toMatch(/\/bin\/troupe-panel$/)
   expect(split?.slice(17)).toEqual(['docs/missions/p2', '--owner', '100'])
-  // The engine's facts are in the mission folder before the panel first reads it.
-  expect(tmux.writes).toHaveLength(1)
-  expect(tmux.writes[0]).toMatch(/\/docs\/missions\/p2\/\.troupe-state\.json$/)
+  // Nothing is written for the panel: it reads the mission folder itself.
+  expect(tmux.writes).toEqual([])
 })
 
-test("the engine's own TMUX, when it has one, names the socket and the pane", async ($, on) => {
+test('a TMUX socket path with a space is passed whole', async ($, on) => {
   const clock = mock.clock(on)
-  const tmux = serves(on, { ancestry: '100\t\t\n1\t\t\n', env: { TMUX: '/tmp/my socket,9,0', TMUX_PANE: '%7' }, panes: new Set(['%7']) })
+  const tmux = serves(on, { env: { TMUX: '/tmp/my socket,9,0', TMUX_PANE: '%7' }, panes: new Set(['%7']) })
   await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
   await clock.settle()
 
@@ -149,7 +135,7 @@ test('/troupe close and the session end close the panel', async ($, on) => {
   await clock.settle()
   await run($, 'p2')
 
-  expect(await run($, 'close')).toContain('troupe panel closed; the in-session pane is back.')
+  expect(await run($, 'close')).toContain('troupe panel closed.')
   expect(tmux.panes.has('%200')).toBe(false)
   expect(await run($, 'close')).toContain('no troupe panel is open.')
 
@@ -159,31 +145,13 @@ test('/troupe close and the session end close the panel', async ($, on) => {
   expect(tmux.panes.has('%200')).toBe(false)
 })
 
-test('with no tmux above the session: the in-session pane, no split, no file written', async ($, on) => {
+test('outside tmux /troupe says troupe needs it: no split, no file written', async ($, on) => {
   const clock = mock.clock(on)
-  const tmux = serves(on, { ancestry: '100\t\t\n1\t\t\n', panes: new Set() })
+  const tmux = serves(on, { env: undefined, panes: new Set() })
   await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
   await clock.settle()
 
-  expect(await run($, 'p2')).toContain('no tmux: showing the in-session pane')
+  expect(await run($, 'p2')).toContain('troupe needs tmux')
   expect(splits(tmux)).toEqual([])
   expect(tmux.writes).toEqual([])
-})
-
-test('one view at a time: the pane closes while the panel is open, and comes back on /troupe close', async ($, on) => {
-  const clock = mock.clock(on)
-  const tmux = serves(on)
-  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
-  await clock.settle()
-  expect(tmux.ui).toEqual(['open troupe'])
-
-  await run($, 'p2')
-  expect(tmux.ui).toEqual(['open troupe', 'close troupe'])
-  // A reload with the panel still open does not open the pane again.
-  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
-  await clock.settle()
-  expect(tmux.ui).toEqual(['open troupe', 'close troupe'])
-
-  await run($, 'close')
-  expect(tmux.ui).toEqual(['open troupe', 'close troupe', 'open troupe'])
 })

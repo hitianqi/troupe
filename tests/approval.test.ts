@@ -7,10 +7,12 @@ import { OVERLAP, VALID } from './fixtures.ts'
 // The Approve / Change dialog that /troupe raises once the plan is shown,
 // against a fake folder and a person who answers from a script: Approve
 // writes the record, Change hands the words to the conversation, and a plan
-// with problems or an approved one is not asked about. No tmux: /troupe
-// shows the in-session pane.
+// with problems or an approved one is not asked about. Inside a fake tmux:
+// /troupe splits the panel first, then asks.
 
 const DIR = 'docs/missions/demo'
+/** The engine's environment inside tmux. */
+const TMUX: Record<string, string | undefined> = { TMUX: '/tmp/tmux-1000/default,1,0', TMUX_PANE: '%1' }
 
 type World = {
   files: Map<string, string>
@@ -32,15 +34,16 @@ function world(on: On, files: Record<string, string> = { [`${DIR}/plan.md`]: VAL
   const w: World = { files: new Map(Object.entries(files)), answers: [], asked: [], options: [], submitted: [], clock: mock.clock(on) }
   on('command.register', () => ({ value: { command: 'troupe' } }))
   on('tool.register', (_, e) => ({ value: { tool: `mcp__troupe__${e.name}` } }))
-  on('ui.open', () => ({ value: { isPlaced: true } }))
-  on('ui.close', () => ({ value: undefined }))
   on('ui.log', () => ({ value: undefined }))
   on('session.start', (_, e) => ({ cwd: e.cwd }))
   on('session.cwd', () => ({ value: '/work/repo' }))
-  on('session.usage', () => ({ deny: 'no usage here' }))
-  on('agent.list', () => ({ value: [] }))
-  on('env.get', () => ({ value: undefined }))
-  on('process.run', () => ({ value: { exitCode: 1, stdout: '', stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }))
+  on('env.get', (_, e) => ({ value: TMUX[e.name] }))
+  on('process.run', (_, e) => {
+    const format = e.argv.at(-1)
+    const stdout = e.argv[0] === 'sh' ? '100\n' : e.argv.includes('split-window') ? '%2\n' : format === '#{window_width}' ? '160\n' : format === '#{pane_width}' ? '80\n' : ''
+
+    return { value: { exitCode: 0, stdout, stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
+  })
   on('fs.list', () => ({ value: [] }))
   on('fs.stat', (_, e) => (w.files.has(local(e.path)) ? { value: { kind: 'file' as const, size: 1, mtimeMs: 1, isLink: false } } : { deny: 'ENOENT' }))
   on('fs.read', (_, e) => {

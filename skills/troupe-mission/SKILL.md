@@ -38,14 +38,14 @@ script by its absolute path.
 dependency layer and then as `plan.md` lists them; there is no slim and no
 separate final review, and the review of the order that runs last is also
 the final review of the whole mission. Three orders or more is full mode.
-troupe decides the same way (two orders or fewer is light): the pane leaves
+troupe decides the same way (two orders or fewer is light): the panel leaves
 out Slim, Cut and Final review, and `troupe_dispatch` refuses a light
 mission's second order until the first is merged, whatever `depends_on`
 says.
 
 ## The tools troupe gives you
 
-The troupe mod, loaded in this session, adds the pane or panel, the
+The troupe mod, loaded in this session, adds the panel (inside tmux), the
 `/troupe` command and four tools:
 
 - **`troupe_dispatch {mission, order, role}`** opens one Claude window for
@@ -86,7 +86,7 @@ The troupe mod, loaded in this session, adds the pane or panel, the
 
 A builder hands back by writing `DONE-<id>.md` in its worktree's mission
 folder; a reviewer by writing its report there. troupe copies both into
-your mission folder every 2 s, for the mission the pane shows (the newest
+your mission folder every 2 s, for the mission the panel shows (the newest
 `plan.md`, or the one `/troupe <mission>` names).
 
 `troupe_dispatch` takes an order's build and its review. The other jobs
@@ -97,14 +97,14 @@ offered at all, the mod is not loaded. Either way, run the orders as Agent
 subagents too, as `references/orchestrator.md` ("Without role windows")
 describes, and tell the human once why.
 
-## The shapes the pane reads
+## The shapes the panel reads
 
-The troupe pane draws the mission from files, so these names are a contract.
+The troupe panel draws the mission from files, so these names are a contract.
 Keep them exactly.
 
 - The plan is `docs/missions/<mission>/plan.md`, from `templates/plan.md`.
   Its orders live in one ```` ```yaml ```` block that has an `orders:` key, with
-  optional `goal:` and `roles:` keys. Keep each value on one line: the pane
+  optional `goal:` and `roles:` keys. Keep each value on one line: the panel
   reads block mappings and sequences, quoted and plain scalars, flow lists
   and comments, and flags anything else (`|` or `>` blocks, values over
   several lines, `\u` escapes) as a problem.
@@ -123,21 +123,19 @@ Keep them exactly.
   `mission/p4` or `feature/p4`. It does not start with `order/`.
 - An order is merged when the mission branch has a commit whose subject
   starts with `<id>: `. Only order merges get that subject.
-- An Agent subagent working on an order (its fixer, or its builder without
-  role windows) has a description that starts with `<id>:`, such as
-  `o2: fix the parser`. Only they do: the pane counts an agent with that
-  prefix as the order running. Give reviewer and slim agents descriptions
-  that do not start with an id, such as `review o2` or `slim pass`.
-- From these the pane infers the step: plan problems hold it at Plan, all
+- An order runs while its branch `order/<mission>/<id>` has commits the
+  mission branch lacks; the panel reads that from git, whoever made the
+  commits (a role window or an Agent subagent).
+- From these the panel infers the step: plan problems hold it at Plan, all
   orders planned at "Plan OK?" until the approval holds, a planned or
   running order at Build, a built but unreviewed one at Order review. Once
   every order is reviewed, a light mission is at "MR OK?"; a full one is at
   Slim, at Cut once `SLIM.md` exists, at Final review once the mission
   branch holds `SLIM.md`, and at "MR OK?" once `REVIEW.md` exists.
 
-The pane shows the mission whose `plan.md` changed last, or the one
+The panel shows the mission whose `plan.md` changed last, or the one
 `/troupe <mission>` names; editing another mission's `plan.md` while this
-one runs moves the pane, and troupe's copying of results, to it.
+one runs moves the panel, and troupe's copying of results, to it.
 
 ## 1. Brief
 
@@ -151,7 +149,7 @@ now.
 
 Create the mission branch from the base branch, named by the project's
 conventions (else `mission/<mission>`), in the checkout this session runs
-in: the pane reads the mission folder there, and you merge there. If that
+in: the panel reads the mission folder there, and you merge there. If that
 checkout has uncommitted work (`git switch -c` would carry it onto the
 branch), ask the human before switching. Copy `templates/plan.md` to
 `docs/missions/<mission>/plan.md` and fill it in.
@@ -178,13 +176,13 @@ branch), ask the human before switching. Copy `templates/plan.md` to
   first producer, a mechanical change the checks fully cover. When unsure,
   `opus`. An order that decides how something looks (a screen, an
   animation, copy on a page) is always `opus`.
-- **The block's `goal`** is the mission in one sentence; the pane shows it
+- **The block's `goal`** is the mission in one sentence; the panel shows it
   first.
 - **The `roles` block** names orchestrator, builder and reviewer, each with
   `model`, `effort` (low to max), `duty` (a list of one-line duties) and
   `skills` (the skills that role should load). The short form
   `reviewer: [skills]` keeps the defaults. A role window's brief lists its
-  role's skills; the pane flags a skill the session does not list. A role
+  role's skills; the panel lists them as written. A role
   window runs at its role's `effort` (`claude --effort`), and a builder
   window at its order's `model`.
 - **A project's verify skill.** If the project has a `verify-<app>` skill
@@ -204,8 +202,8 @@ branch), ask the human before switching. Copy `templates/plan.md` to
 **Check the plan before the gate.** The rules: no duplicate or missing id,
 `kind` is `code` or `research`, a code order has `touches` and `why`, every
 `depends_on` names a known order, no dependency cycle, and overlapping
-`touches` are joined by `depends_on`. The pane's header says "plan checks
-clean" or lists the problems; without the pane, check the rules by reading
+`touches` are joined by `depends_on`. The panel's header says "plan checks
+clean" or lists the problems; without the panel, check the rules by reading
 the block. The plan does not go to the human with a problem left.
 **Commit `plan.md` on the mission branch**: troupe dispatches only a plan
 the mission branch holds.
@@ -273,7 +271,7 @@ or on another builder's branch.
   worktree. A wait that times out: check `troupe_status` and tell the human
   which window to look at.
 - **As each order lands**, read its `DONE-<id>.md`. If troupe has not
-  copied it into your mission folder (the pane shows another mission), copy
+  copied it into your mission folder (the panel shows another mission), copy
   it. Check the order's diff against its `touches`, on its last branch
   (`order/<mission>/<id>-fix` after a fix round, else
   `order/<mission>/<id>`):

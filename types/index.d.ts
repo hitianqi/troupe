@@ -14,7 +14,7 @@ export type TroupeRole = {
   model: string
   effort: string
   duty: string[]
-  skills: { name: string; isFound: boolean }[]
+  skills: string[]
 }
 
 /** One mission as the pane draws it: what plan.md says, checked, with each order's state. */
@@ -82,8 +82,6 @@ declare module 'claude-code' {
     troupe: {
       /** What `/troupe <mission>` named: a mission name, or a mission folder's path; '' for the newest. */
       target: string
-      /** The mission drawn, or why there is none. */
-      mission: TroupeMission | { missing: string } | null
       /** The panel split beside the session, while it is open. */
       panel: TroupePanel | null
       /** The role sessions troupe opened, keyed by mission name. */

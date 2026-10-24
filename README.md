@@ -1,29 +1,49 @@
 # troupe
 
-A Claude Code mod that shows a planned mission beside the chat: inside tmux
-in a panel split to the right of the session, elsewhere in a pane of the
-session. It also asks the person to approve the plan, and gives the
-conversation four tools: three that run the mission's orders in Claude
+A Claude Code mod that shows a planned mission beside the chat, in a tmux
+panel split to the right of the session. It also asks the person to approve
+the plan, and gives the conversation four tools: three that run the mission's orders in Claude
 windows of their own (`troupe_dispatch`, `troupe_status` and `troupe_close`)
 and one that records what the mission cost (`troupe_metrics`). A mission of
 one or two orders runs in light mode. The plugin also carries the
 `troupe-mission` skill, which runs a mission from brief to merged MR.
-`ROADMAP.md` holds the decisions and the phases; this is Phase 3.
+`ROADMAP.md` holds the decisions and the phases.
+
+> **Direction (2026-10-24).** This README describes the Claude Code mod that
+> Phases 0–3 built (v0.6.0 after the cleanup), and it stays accurate for the
+> code as it is. The project is moving away from that form (ROADMAP,
+> "Direction"): no mod, but a `troupe` CLI and the standalone
+> `troupe-panel`, so that the orchestrator and the roles can run Claude Code
+> or Codex. Going away: the mod's `/troupe` dialog and tools, the fixed
+> `builder` / `reviewer` roles and the model allow-list, light mode and
+> metrics as part of the core. Staying: plan first, approval
+> before any role window opens, one worktree per role, and the persistent
+> panel, which gains approval, per-role lights and click-through. Do not
+> build on what is going away. The 2026-10-24 cleanup (v0.6.0) already
+> removed the in-session pane, OpenRig seat support and `.troupe-state.json`.
+
+## Layout
+
+- `src/`: the mission as data and as a view, with no engine import (the plan
+  reader and its checks, order states from files and git, the approval hash,
+  the graph and the lines the panel paints). The CLI will build on it.
+- `bin/troupe-panel`: the panel, a plain Node program that draws from `src/`.
+- `hooks/`: the Claude Code mod (`/troupe`, the approval dialog, the role
+  window tools, metrics). It goes when the CLI replaces it.
+- `skills/troupe-mission/` and `templates/`: the default workflow.
+- `tests/`, `check.sh`; `docs/`: the feasibility record and the missions that
+  built troupe.
 
 ## Requirements
 
-- **tmux** (tested on 3.4). `troupe_dispatch` needs it: role windows open in
-  a tmux session of their own, and without tmux the tool refuses. For the
-  panel it is optional: without it, `/troupe` falls back to the in-session
-  pane.
+- **tmux** (tested on 3.4), with Claude Code started inside it (`$TMUX`
+  set). The panel splits beside the session's pane and role windows open in
+  a tmux session of their own; outside tmux, `/troupe` says so and
+  `troupe_dispatch` refuses.
 - **git**, with the mission branch and the plan committed on it, for
   `troupe_dispatch` (see below).
-- **Node 22.18 or later** on the `PATH` for `bin/troupe-panel`: it runs the
-  mod's own `.ts` files with Node's type stripping.
-- **Linux**, when Claude Code runs without `$TMUX` in its environment (an
-  OpenRig seat, for one): the mod then finds the session's tmux pane, and its
-  socket, in the environment of the nearest ancestor process that has one,
-  read from `/proc`. With `$TMUX` set, any system works.
+- **Node 22.18 or later** on the `PATH` for `bin/troupe-panel`: it runs
+  `src/`'s `.ts` files with Node's type stripping.
 
 ## The panel
 
@@ -35,29 +55,15 @@ one or two orders runs in light mode. The plugin also carries the
 - `/troupe` again reuses the open panel (another mission redraws it in the
   same pane); a hot reload of the mod keeps it, and a panel pane that was
   closed by hand is split again.
-- `/troupe close` closes it and brings the in-session pane back; the end of
-  the session closes it too. If Claude Code dies without ending, the panel
-  leaves within 2 s on its own (`--owner`). While the panel is open, the
-  in-session pane is closed: one view at a time.
-- In an OpenRig seat, a split beside the seat's pane cuts that seat off
-  from `rig send` and queue wakes while it is open: OpenRig expects a
-  single pane in the seat's window. Close the panel (`/troupe close`)
-  before you leave such a seat.
-- Outside tmux, `/troupe` says `no tmux: showing the in-session pane` and
-  opens the pane, as below.
+- `/troupe close` closes it; the end of the session closes it too. If
+  Claude Code dies without ending, the panel leaves within 2 s on its own
+  (`--owner`).
 - After it shows the plan, `/troupe` asks for the person's approval, as
   described in the next section.
 
-While the panel is open, the mod writes `.troupe-state.json` in the mission
-folder: what only the engine knows, the session's skill names and its
-subagents (description and status), from which the panel draws the skills'
-✓ / ✗ and the orders' running and done states. It is rewritten only when
-it changes, and git ignores it.
-
 `bin/troupe-panel <mission dir> [--width N] [--once] [--plain] [--owner PID]`
-also runs by hand, in any terminal: it draws the same view as the pane, in
-the same colours, from the same code (`hooks/lines.ts`). It redraws when
-what it shows changes (the folder and the facts polled every 2 s, git
+also runs by hand, in any terminal, and draws from `src/lines.ts`. It
+redraws when what it shows changes (the folder polled every 2 s, git
 every 10 s) or the terminal is resized, and exits on SIGTERM or ctrl+c.
 It never draws more rows than the terminal has: the header stays on top,
 and the rest scrolls, with `↑ N more` and `↓ N more rows` saying what is
@@ -65,10 +71,7 @@ out of view. ↑/↓ or j/k scroll a row, PgUp/PgDn a page, Home/End to the
 ends, and the mouse wheel three rows. Keys reach it while its pane has the
 focus (click it, or `tmux select-pane`; click the transcript to go back).
 The wheel needs tmux's mouse mode: `set -g mouse on`. `--once`
-prints one screen and exits; `--plain` drops the colours. With no
-`.troupe-state.json` beside it, it shows only the running orders git
-shows and says the session lists no skills to check against; one left by
-an earlier session is read as it stands.
+prints one screen and exits; `--plain` drops the colours.
 
 ## Approving the plan
 
@@ -148,8 +151,7 @@ branches stay.
 
 - A tmux session of their own, `troupe-<mission>`, on the orchestrator's
   tmux server, with one window per order (named for the order) or review
-  (`review-<id>`). Never a pane or window in the orchestrator's session: in
-  an OpenRig seat that would cut the seat off from `rig send`.
+  (`review-<id>`), never a pane or window in the orchestrator's session.
 - Each window runs `claude --model <model> --effort <effort> --permission-mode
   <mode>` in its own worktree, beside the repository:
   `../<repo>-<mission>-<order>`, on the branch `order/<mission>/<order>` cut
@@ -191,8 +193,8 @@ branches stay.
 
 ### Light mode
 
-A mission of one or two orders is light, in the dispatch rules, the pane and
-the panel:
+A mission of one or two orders is light, in the dispatch rules and the
+panel:
 
 - **One after the other.** `troupe_dispatch` refuses an order while an order
   before it is not merged onto the mission branch, whatever `depends_on` says.
@@ -215,7 +217,7 @@ the panel:
 The plugin carries `skills/troupe-mission/`, with its `references/` and the
 `templates/` folder (`plan.md`, `REVIEW.md`, `SLIM.md`). It tells the
 orchestrator, for anyone and not only for one team, how to run a mission in
-the file shapes the pane reads. Its steps:
+the file shapes the panel reads. Its steps:
 
 1. **Brief**: who wants the outcome, what it is for, what counts as done.
 2. **Plan**: `docs/missions/<mission>/plan.md` on the mission branch, split by
@@ -296,7 +298,7 @@ noted under `nulls`, and the counts may then be low.
 - **The brief is pasted, not typed.** Raw keys sent to a claude that has just
   started can leave the Enter as a newline (`docs/FEASIBILITY.md`, case 12).
 - **`APPROVAL.json` is advisory** (above).
-- **Results are collected only for the mission the pane shows**: the newest
+- **Results are collected only for the mission the panel shows**: the newest
   `plan.md`, or the one `/troupe` names. Run `/troupe <mission>` to collect
   another mission's.
 - **Done means merged.** A `DONE-<id>.md` shows the order as `done` on the
@@ -307,9 +309,7 @@ noted under `nulls`, and the counts may then be low.
   mission folder before merging; the mod logs this once. It cannot delete
   files itself.
 - **Role windows inherit the tmux server's environment**, not the
-  orchestrator's. Start the tmux server from a plain shell: one started from
-  an OpenRig seat carried that seat's `OPENRIG_*` variables into the role
-  windows. troupe has not been run on OpenRig's own tmux server.
+  orchestrator's. Start the tmux server from a plain shell.
 - **A globally installed troupe loads in role windows too.** troupe starts
   them with `claude --model`, `--effort` and `--permission-mode` only.
   `claude --bare` would skip the hooks of installed plugins, but it also
@@ -333,19 +333,18 @@ noted under `nulls`, and the counts may then be low.
 - **The role windows' own progress** (what a window is doing) is not shown;
   the panel knows an order only as planned, running (its branch is ahead of
   the mission branch), done or reviewed.
-- The `/proc` route that finds the session's tmux pane without `$TMUX` is
-  Linux only, as before. `troupe_dispatch` uses it.
+- **macOS**: the mod has not been run there yet, and one panel test needs
+  GNU `script -c` and `timeout` (ROADMAP, Phase 5).
 
-## What the pane shows
+## What the panel shows
 
-The pane `troupe` (and the panel) reads `docs/missions/<mission>/plan.md` under the
+The panel reads `docs/missions/<mission>/plan.md` under the
 session's working directory: the mission whose `plan.md` changed last (on a
 tie, the higher name, so `p1` over `p0`), or the one named by
 `/troupe <mission>`. `/troupe <path>` takes a mission folder by its path
 instead, such as `/troupe ../other-checkout/docs/missions/p1`. It is drawn
 in the OpenRig TUI's own style and colours, most important first (the
-panel scrolls what does not fit, the pane leaves it to the engine's own
-window):
+panel scrolls what does not fit):
 
 1. **Header**: `TROUPE · <mission> · light · plan checks clean · <goal>`. The
    goal is the `goal:` key of the plan's YAML block, else the first
@@ -359,12 +358,12 @@ window):
    green ✓, waiting grey. Below 107 columns the flow stacks top to bottom.
 3. **ROLES and ORDERS**, one line each: a role's glyph, name, model, state
    and what it is on; an order's glyph, id, model, state and `← ` the
-   orders it waits on. A role's state comes from what the pane reads: the
+   orders it waits on. A role's state comes from what the panel reads: the
    orchestrator "needs you" at a gate, the builder works while an order
    runs, the reviewer while one is done but not reviewed.
 4. **Detail**, like OpenRig's detail view: `── GOAL`, `── ORDERS · n` and
    `── ROLES · n`, each role with its model, effort meter, duty bullets and
-   skills ✓ / ✗.
+   skills.
 
 Below 46 columns the ROLES and ORDERS lines leave out the model. Below 48
 columns each DETAIL label takes its own line, with the value under it.
@@ -372,14 +371,12 @@ columns each DETAIL label takes its own line, with the value under it.
 A role in the plan's `roles` block is either `name: [skills]` or a mapping
 with `model`, `effort`, `duty` (a list of lines) and `skills`; what it
 leaves out, and a plan with no block, gets the defaults for orchestrator,
-builder and reviewer. A skill counts if the session lists it under either
-spelling (`shared:x` and `x`). An order's state comes from the mission's
+builder and reviewer. An order's state comes from the mission's
 own artefacts, in this order: `reviewed` with a `REVIEW-<id>.md` (or
 `REVIEW-<id>-<n>.md`) in the mission folder; `done` once merged onto the
 mission branch (one commit titled `<id>: …`) or with its `DONE-<id>.md` in
 the folder; `running` while its branch `order/<mission>/<id>` has
-commits the mission branch lacks, or a subagent whose description starts
-with `<id>:` is live; `done` when such a subagent finished; else `planned`.
+commits the mission branch lacks; else `planned`.
 The mission branch is the local branch named for the mission
 (`feature/NO-JIRA-p2`, or `p2`); git is asked at most every 10 s. A review
 that fails still counts as reviewed, so an order in a fix round stays
@@ -394,36 +391,11 @@ of `low`, `medium`, `high`, `xhigh`, `max`. A plan with no orders read is
 not called light. The problems are listed under GOAL;
 they never stop the drawing.
 
-It polls plan.md every 2 s and redraws when the file changes. It asks for
-the session's skills again every 30 s, or at the next poll if the last ask
-failed. `templates/plan.md` is the plan format with `goal` and the full
-`roles` block. Keep each value on one line: the pane reads the YAML that
+It polls plan.md every 2 s and redraws when the file changes.
+`templates/plan.md` is the plan format with `goal` and the full
+`roles` block. Keep each value on one line: the panel reads the YAML that
 format uses, and flags anything else (`|` or `>` blocks, multi-line values,
 `\u` escapes) as a problem with its line.
-
-## The in-session pane
-
-Outside tmux, `/troupe` opens the pane `troupe` instead. A pane that opens by itself is placed only in a terminal at least 144
-columns wide. Once you open it with `/troupe`, it is placed at any width.
-
-- **Docked**: in Claude Code's fullscreen layout from 110 columns, the pane
-  sits beside the transcript, floor to ceiling, and draws what its rows hold.
-  It stays in place as the transcript scrolls. The engine sets the dock's
-  width (about 50 columns in a 230-column terminal here, whatever the pane
-  asks for); drag it to 107 columns or more for the graph's groups side by
-  side.
-- **Inline**: on the main screen (the default inside tmux), the pane sits
-  above the prompt, with the rows the engine gives it: it asks for all of
-  the view when it opens, and the person can resize it. A view taller than
-  the pane scrolls in the engine's own window (the arrows while the pane
-  is focused); the header scrolls with it. The inline
-  block is part of the terminal's own output, so scrolling the terminal
-  back moves it out of view with everything else.
-
-Of the pane's two forms only the docked one keeps it fixed (the tmux panel
-needs neither). `/tui fullscreen` switches
-a running session (it restarts and resumes it, and saves `"tui":
-"fullscreen"` in `~/.claude/settings.json`; `/tui default` goes back).
 
 ## Loading it
 
@@ -438,15 +410,16 @@ The plugin carries the skill `troupe-mission` (see "The skill").
 ## Checking it
 
 `./check.sh` runs `claude plugin validate .`, `claude plugin test .`, the
-Node test of troupe-panel (`node --test tests/panel.node.mjs`), the workflow
+Node test of troupe-panel (on macOS its terminal test fails: it needs GNU
+`script -c` and `timeout`) (`node --test tests/panel.node.mjs`), the workflow
 walkthrough check (`docs/missions/workflow/check-sample.mjs`) and
 `tsc -p .` (after `npm install`). `tsc` needs the API types the engine lays
 in `.claude-plugin/types/` when it loads the mod from this folder; without
 them the script says so and skips `tsc`.
 
-The acceptance run, a real two-order mission run through troupe, is not done:
-it was deferred, and GitLab issue AI/troupe#3
-(https://git.i.prover.com/AI/troupe/-/work_items/3) holds the task, the recipe
-to attach and `docs/missions/p4/compare.md`, the protocol it follows. So
-light mode and `troupe_metrics` are covered by the plugin tests and the
-order reviews, not yet by a mission of their own.
+The acceptance run, a real two-order mission run through troupe, was not
+done. It was deferred in Phase 3 and closed on 2026-10-24 (issue #3): it
+would have measured the mod that the new direction replaces. So light mode
+and `troupe_metrics` are covered by the plugin tests and the order reviews
+only. The comparison protocol, `docs/missions/p4/compare.md`, may come back
+for the new form.
