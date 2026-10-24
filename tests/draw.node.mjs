@@ -6,7 +6,7 @@ import { readFileSync, writeFileSync } from 'node:fs'
 import { test } from 'node:test'
 import { fileURLToPath } from 'node:url'
 
-import { paint, textOf, TONES } from '../dist/canvas.js'
+import { Canvas, cellsOf as widthOf, fit, paint, textOf, TONES, wrap } from '../dist/canvas.js'
 import { draw, effortOf } from '../dist/draw.js'
 import { fold } from '../dist/log.js'
 import { decisionsOf, modelOf } from '../dist/model.js'
@@ -374,4 +374,54 @@ test('FLOW fits long unknown effort inside builder and reviewer borders', () => 
       assert.ok(cells.slice(box.col + box.width, box.col + box.width + 4).every(cell => cell.text === ' '), 'effort does not leak beyond the border')
     }
   }
+})
+
+test('cellsOf counts wide as two and combining as zero', () => {
+  assert.equal(widthOf('abc'), 3)
+  assert.equal(widthOf('中文'), 4)
+  assert.equal(widthOf('한글a'), 5)
+  assert.equal(widthOf('e\u0301'), 1)
+  assert.equal(widthOf('a\u200db'), 2)
+  assert.equal(widthOf('〿'), 1)
+})
+
+test('fit pads and cuts by cells without half a wide char', () => {
+  assert.equal(fit('中文', 6), '中文  ')
+  assert.equal(fit('中文字', 5), '中文…')
+  assert.equal(fit('中文字', 4), '中… ')
+  assert.equal(widthOf(fit('中文字符', 4)), 4)
+  assert.equal(fit('abc', 5), 'abc  ')
+  assert.equal(fit('abcdef', 4), 'abc…')
+})
+
+test('wrap breaks CJK at character boundaries within the width', () => {
+  const lines = wrap('结果摘要已经完成all good', 6)
+  assert.ok(lines.length > 1)
+  for (const line of lines) assert.ok(widthOf(line) <= 6, line)
+  assert.equal(lines.join('').replace(/ /g, ''), '结果摘要已经完成allgood')
+  assert.deepEqual(wrap('ab cd', 5), ['ab cd'])
+})
+
+test('Canvas.put stores a wide char in two cells and repairs overwrites', () => {
+  const canvas = new Canvas(6, 1)
+  assert.equal(canvas.put(0, 0, '中a'), 3)
+  assert.equal(textOf(canvas.lines()[0] ?? []), '中a')
+  canvas.put(0, 1, 'x')
+  assert.equal(textOf(canvas.lines()[0] ?? []), ' xa')
+  canvas.put(0, 0, '中')
+  canvas.put(0, 0, 'y')
+  assert.equal(textOf(canvas.lines()[0] ?? []), 'y a')
+  const edge = new Canvas(3, 1)
+  assert.equal(edge.put(0, 2, '中'), 4)
+  assert.equal(textOf(edge.lines()[0] ?? []), '')
+  assert.equal(edge.cells[0][2].ch, ' ')
+})
+
+test('a box with CJK keeps its right border at the right column', () => {
+  const canvas = new Canvas(10, 3)
+  canvas.box(0, 0, 10, 3, 'chrome')
+  canvas.put(1, 1, fit('中文字符串测试', 8), { tone: 'bright' })
+  const row = textOf(canvas.lines()[1] ?? [])
+  assert.equal(widthOf(row), 10)
+  assert.ok(row.startsWith('│') && row.endsWith('│'))
 })
