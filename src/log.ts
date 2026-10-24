@@ -16,6 +16,7 @@ export type Event =
   | { ev: 'up'; session: string; window: string; pane: string; panel: string }
   | { ev: 'send'; role: string; text: string }
   | { ev: 'close'; role: string }
+  | { ev: 'teardown'; role?: never }
 /** Who wrote a line: what the writer says, not a proof. */
 export type By = 'cli' | 'panel' | 'orch'
 export type Logged = Event & { at: string; by: By }
@@ -34,7 +35,7 @@ export const append = (path: string, by: By, event: Event, at = new Date()): Log
   return line
 }
 
-const EVENTS = ['gate-open', 'gate-answer', 'stage', 'dispatch', 'send', 'close', 'up']
+const EVENTS = ['gate-open', 'gate-answer', 'stage', 'dispatch', 'send', 'close', 'up', 'teardown']
 
 /** The log's events, and how many lines could not be read (a torn last line, a hand edit). */
 export const readLog = (path: string): { events: Logged[]; unread: number } => {
@@ -58,6 +59,7 @@ export const readLog = (path: string): { events: Logged[]; unread: number } => {
 export type Gate = { id: string; ask: string; openedAt: string; answer?: GateAnswer; text?: string; plan?: string; answeredAt?: string }
 export type Opened = Extract<Event, { ev: 'dispatch' }> & { at: string; sends: number; closed: boolean }
 export type Folded = {
+  finished: boolean
   /** The stage the orchestrator last named, '' before any. */
   stage: string
   /** Each gate by id as it stands now: a gate opened again starts unanswered. */
@@ -69,9 +71,13 @@ export type Folded = {
 }
 
 export const fold = (events: Logged[]): Folded => {
-  const out: Folded = { stage: '', gates: new Map(), roles: new Map(), approved: '' }
+  const out: Folded = { finished: false, stage: '', gates: new Map(), roles: new Map(), approved: '' }
   for (const e of events) {
-    if (e.ev === 'stage') out.stage = e.stage
+    if (e.ev === 'teardown') {
+      out.finished = true
+      out.stage = 'teardown'
+      for (const role of out.roles.values()) role.closed = true
+    } else if (e.ev === 'stage') out.stage = e.stage
     else if (e.ev === 'gate-open') out.gates.set(e.gate, { id: e.gate, ask: e.ask ?? '', openedAt: e.at, ...(e.plan === undefined ? {} : { plan: e.plan }) })
     else if (e.ev === 'gate-answer') {
       const gate = out.gates.get(e.gate) ?? { id: e.gate, ask: '', openedAt: e.at }

@@ -88,6 +88,10 @@ fail it (send it back, or change the plan and get it approved again). Then
 it goes to review. `blocked` or `failed`: read why, then answer it with
 `troupe send`, change the plan, or ask the person.
 
+For startup readiness or before sending follow-up work, run
+`troupe wait --role <role> --ready --timeout 60`; a dialog or gone pane
+ends the wait early so you can act on it.
+
 ## 5. Review, fix, merge
 
 `troupe stage review` once the first branch lands. Dispatch the reviewer,
@@ -111,14 +115,18 @@ When every role is merged: `troupe stage mr-ok`, then
 recommendation>"`. Nothing is pushed before `approve`. A change sends you to
 the fix loop or the plan.
 
-## 7. Open the MR and finish
+## 7. Open the MR and teardown
 
 `troupe stage mr`; push the mission branch and open one MR against the base
 branch, per the project's conventions. A refused push: tell the person and
-stop. Then `troupe stage done` and `troupe close --all`; the worktrees under
-`.troupe/worktrees/<mission>/` and the role branches stay. Tell the person
-where they are, and offer to remove them once the MR is merged
-(`git worktree remove`, `git branch -D`). Only a person merges the MR.
+stop. After opening the MR, run `troupe stage teardown`, then
+`troupe teardown -m <mission>`. It removes mission-owned role panes,
+worktrees, branches and temporary briefs/results while keeping the MR head
+and log. It closes only role panes; the orchestrator and panel panes opened
+by `up` stay open. Dirty or untracked files and unmerged commits refuse cleanup;
+resolve them before retrying, or ask the person before discarding them with
+`--force`. Repeating teardown with explicit `-m` is safe. Only a person
+merges the MR.
 
 ## Telling the person
 

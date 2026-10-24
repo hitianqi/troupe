@@ -106,3 +106,14 @@ test('role state: planned, closed, the result first, gone, then the screen', () 
   assert.deepEqual(waitingOn(web, new Map([['api', 'done'], ['store', 'working']])), ['store'])
   assert.deepEqual(paneOf('%999999'), { alive: false, dead: false, screen: '' })
 })
+
+test('teardown is a readable terminal lifecycle event and closes folded role records', () => {
+  const events = [
+    { ev: 'dispatch', role: 'api', session: '$1', window: '@1', pane: '%1', worktree: '/scratch', branch: 'role/m/api', base: 'abc', argv: ['fake'], at: '2026-01-01', by: 'cli' },
+    { ev: 'teardown', at: '2026-01-02', by: 'cli' },
+  ]
+  const state = fold(events)
+  assert.equal(state.finished, true)
+  assert.equal(state.stage, 'teardown')
+  assert.equal(state.roles.get('api').closed, true)
+})

@@ -118,7 +118,7 @@ export type Mission = Repository & { name: string; path: string; source: string;
 export const mission = (r: Runtime, want = ''): Mission => {
   if (want !== '' && !NAME.test(want)) throw new Usage('mission must be a folder name under docs/missions')
   const repo = repository(r)
-  const found = findPlan(repo.root, repo.root, want === '' ? '' : join(repo.root, 'docs/missions', want, 'plan.md'))
+  const found = findPlan(repo.root, repo.root, want === '' ? '' : join(repo.root, 'docs/missions', want, 'plan.md'), r.run)
   if ('missing' in found) throw new Refusal(found.missing)
   const name = basename(dirname(found.path))
   if (!NAME.test(name)) throw new Refusal(`invalid mission folder: ${name}`)
@@ -179,13 +179,13 @@ export const locked = async <T>(m: Mission, action: () => Promise<T> | T): Promi
     try {
       mkdirSync(reclaim)
     } catch {
-      throw refused()
+      throw new Refusal(`another command holds ${dir}; remove ${dir} by hand once no troupe command is running (reclaim directory exists)`)
     }
     try {
       // Another command may have reclaimed the directory since our first read.
       if (Number(readFileSync(join(dir, 'pid'), 'utf8').trim()) !== pid) throw refused()
     } catch {
-      rmSync(reclaim, { recursive: true })
+      rmSync(reclaim, { recursive: true, force: true })
       throw refused()
     }
     try {

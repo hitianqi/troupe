@@ -96,13 +96,14 @@ export const panel = async (r: Runtime, options: PanelOptions, terminal: Termina
     }
     const refresh = () => {
       reading = readPanel(r, options.mission)
-      if ('mission' in reading) {
-        if (missionName !== undefined && missionName !== reading.mission.name) {
+      const nextMission = 'mission' in reading ? reading.mission.name : undefined
+      if (missionName !== nextMission) {
+        if (missionName !== undefined) {
           const typing = ui.input !== undefined
           ui = { ...ui, selected: '', scroll: 0, input: undefined, help: false, ...(typing ? { message: 'Mission changed; input cancelled.' } : {}) }
           if (typing) messageUntil = r.now() + 4000
         }
-        missionName = reading.mission.name
+        missionName = nextMission
       }
       normalize()
       paintFrame()
