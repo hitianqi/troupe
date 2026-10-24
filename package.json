@@ -1,12 +1,27 @@
 {
-  "name": "troupe",
+  "name": "@troupe/cli",
+  "version": "0.6.0",
   "private": true,
   "type": "module",
-  "description": "Development tooling for the troupe mod: type-checking only",
+  "description": "One command calls up an agent troupe: each role in its own tmux window and git worktree",
+  "bin": {
+    "troupe": "dist/cli.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "files": [
+    "dist",
+    "skills",
+    "templates"
+  ],
   "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "test": "npm run build && node --test tests/cli.node.mjs",
     "check": "./check.sh"
   },
   "devDependencies": {
+    "@types/node": "20.19.43",
     "typescript": "5.9.3"
   }
 }
