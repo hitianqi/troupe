@@ -1,0 +1,42 @@
+╭─────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│ ✨ Update available! 0.162.1 -> 0.164.0                                                             │
+│ Run sh -c 'curl -fsSL https://chatgpt.com/codex/install.sh | CODEX_NON_INTERACTIVE=1 sh' to update. │
+│                                                                                                     │
+│ See full release notes:                                                                             │
+│ https://github.com/openai/codex/releases/latest                                                     │
+╰─────────────────────────────────────────────────────────────────────────────────────────────────────╯
+
+
+  >_ OpenAI Codex (v0.162.1)
+     /private/tmp/troupe-probe/p5-codex
+
+
+› Reply with exactly MAIN-OK
+
+
+• MAIN-OK
+
+  Worked for 3s • 18:08
+
+
+› $troupe-p5-sentinel
+
+
+• SKILL-COBALT-4827
+
+  Worked for 3s • 18:10
+
+
+
+
+
+
+
+
+
+
+
+› Ask Codex to do anything
+
+  GPT-6.1-Sol medium · /private/tmp/troupe-probe/p5-codex · Reply with MAIN-OK
+  ← for agents · ? for shortcuts

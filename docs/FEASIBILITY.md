@@ -777,3 +777,181 @@ Cleanup: the orchestrator killed the `troupe-probe` tmux server, removed
 `projects` object in `~/.claude.json`: `/private/tmp/troupe-probe/claude`
 and `/private/tmp/troupe-probe/claude-manual`. They were left because
 several running Claude sessions rewrite that file. No push or PR was made.
+
+
+## Phase 5 step 0: trust, context, skills (2026-10-24)
+
+Run on this Mac with **codex-cli 0.162.1**, **Claude Code 2.1.310**, and
+**tmux 3.8**, in the isolated `tmux -L troupe-probe` server, 120 × 42.
+Three sessions per harness; every Claude launch used `--model haiku`
+(three runs, within the four-run limit). No default tmux server or other
+worktree was touched. Evidence names below refer to `docs/feasibility/`.
+Versions and launch commands are in `p5-<harness>-version.txt` and
+`p5-<harness>-invocations.txt`.
+
+Each harness got a separate fresh repo with one initial commit. Its main
+checkout showed trust, which was accepted once: Enter in Codex, Down then
+Enter in Claude. Only afterward were two linked worktrees created with
+`git worktree add`: a sibling and a nested `.troupe/worktrees/a`. The
+main repo's `.git/info/exclude` contained `/.troupe/`. The layouts and
+shared git directories are recorded in `p5-<harness>-layout.txt`.
+No pre-trust flag or worktree-specific trust entry was supplied.
+
+### 1. Trust in a sibling worktree
+
+**Claude: no, it did not ask again.** The main checkout
+`/private/tmp/troupe-probe/p5-claude` showed the safety question and default
+`No, exit` (`p5-claude-main-trust.txt`). After accepting it, the sibling
+`/private/tmp/troupe-probe/p5-claude-a` ran its first prompt and returned
+`SIBLING-OK` without another dialog (`p5-claude-sibling-after-launch.txt`,
+`p5-claude-sibling-ready.txt`). This re-checks the Linux Phase 2 observation
+on this Mac with a fresh repo, rather than the existing troupe checkout.
+
+**Codex: no, it did not ask again.** The main checkout
+`/private/tmp/troupe-probe/p5-codex` showed `Trust this folder?`
+(`p5-codex-main-trust.txt`). After acceptance, the sibling
+`/private/tmp/troupe-probe/p5-codex-a` immediately worked on its launch
+prompt and returned `SIBLING-OK` (`p5-codex-sibling-after-launch.txt`,
+`p5-codex-sibling-ready.txt`).
+
+### 2. Trust in a worktree inside the trusted checkout
+
+**Claude: yes, it skipped the dialog.** The fresh linked worktree at
+`/private/tmp/troupe-probe/p5-claude/.troupe/worktrees/a` returned
+`NESTED-OK` without a trust answer (`p5-claude-nested-after-launch.txt`,
+`p5-claude-nested-ready.txt`).
+
+**Codex: yes, it skipped the dialog.** The corresponding fresh linked
+worktree at `/private/tmp/troupe-probe/p5-codex/.troupe/worktrees/a` worked
+on its launch prompt and returned `NESTED-OK` without a trust answer
+(`p5-codex-nested-after-launch.txt`, `p5-codex-nested-ready.txt`).
+
+The filtered trust-state records (`p5-codex-trust-entries.txt`,
+`p5-claude-trust-entries.txt`) showed only each main checkout's accepted
+trust entry, with no sibling or nested entry. These tests establish trust
+reuse for **linked worktrees of the trusted repository**. They do not
+isolate arbitrary parent-folder inheritance: both the sibling and nested
+worktree also share the main repo's git common directory. An unrelated
+repository inside a trusted directory was not tested.
+
+### 3. Context use on the default screen
+
+**Codex: no context-used or context-left value was shown after one short
+turn.** `p5-codex-main-ready.txt` shows this footer:
+
+```text
+  GPT-6.1-Sol medium · /private/tmp/troupe-probe/p5-codex · Reply with MAIN-OK
+  ← for agents · ? for shortcuts
+```
+
+It also shows `Worked for 3s` and the input placeholder. Those are not a
+context measure. The completed sibling and nested screens likewise show
+no context counter. No custom `tui.status_line` was configured, as recorded
+in `p5-codex-trust-entries.txt`. **Context extraction pattern: none
+(`null`); display `—`.**
+
+**Claude: no context-used or context-left value was shown after one short
+turn.** `p5-claude-main-ready.txt` shows a completed `MAIN-OK` turn, an empty
+input box, and this footer:
+
+```text
+  ⏵⏵ auto mode on (shift+tab to cycle)
+```
+
+Some other idle captures include `◐ medium · /effort` above the input box
+(`p5-claude-sibling-ready.txt`, `p5-claude-nested-ready.txt`); that is effort,
+not context. No user `statusLine` was configured
+(`p5-claude-trust-entries.txt`). **Context extraction pattern: none
+(`null`); display `—`.**
+
+These are default launch screens with the installed account configuration
+at this terminal size, not a claim that either harness can never expose
+context usage. A configured status line or explicit context/status command
+was outside this check. Do not invent a percentage from effort, timing,
+model name, or the screen's text length.
+
+### 4. Skill discovery and personal install paths
+
+**Codex: yes, a repo-local `.agents/skills/<name>/SKILL.md` was discovered
+and invoked by 0.162.1.** `codex --help` did not name skill directories
+(`p5-codex-help.txt`). The installed binary contains `.agents/skills`
+strings (`p5-codex-skill-strings.txt`). The
+[official Build skills documentation](https://learn.chatgpt.com/docs/build-skills)
+names `~/.agents/skills` for personal skills, and `.agents/skills` within
+repositories. Repository discovery scans from the working directory up to
+the repository root (`p5-codex-skills-docs.txt`).
+
+For the live check, the scratch repo's initial commit included
+`.agents/skills/troupe-p5-sentinel/SKILL.md`, with `name`, `description`,
+and an instruction to return `SKILL-COBALT-4827`
+(`p5-codex-skill-fixture.txt`). The selector displayed the skill and its
+description (`p5-codex-skill-selector.txt`); after selecting it, the submitted
+prompt `$troupe-p5-sentinel` produced that marker
+(`p5-codex-skill-inserted.txt`, `p5-codex-skill-result.txt`). The marker was
+not in the submitted prompt, which confirms skill body loading.
+
+An initial attempt ending `Use $troupe-p5-sentinel.` left the selector at
+`no matches`; Enter did not submit it (`p5-codex-skill-no-match.txt`). The
+corrected bare mention matched; one Enter inserted the selected skill and
+a separate Enter submitted it. This is a selector interaction, so callers
+must not assume every Enter after pasting a `$` mention sends a turn.
+
+**Personal Codex location: `~/.agents/skills/<name>/SKILL.md`, from official
+docs; the live fixture used the explicitly permitted repo-local equivalent.**
+No skill was installed into the real home directory, and no scratch
+`CODEX_HOME` was needed. The legacy `~/.codex/skills` personal-discovery
+behavior was not tested; do not choose it merely because bundled system
+skills happen to exist below `.codex`.
+
+**Claude: yes, its documented personal skill path is
+`~/.claude/skills/<name>/SKILL.md`.** The
+[official Claude Code skills documentation](https://code.claude.com/docs/en/skills)
+lists that personal path and `.claude/skills/<name>/SKILL.md` for project
+skills (`p5-claude-skills-docs.txt`). This was a docs-only confirmation,
+as requested; no fourth Claude run and no personal skill write were needed.
+
+### What this means for troupe
+
+| Adapter field / decision | Codex 0.162.1 | Claude Code 2.1.310 |
+| --- | --- | --- |
+| Role worktree location | A fresh linked sibling and `.troupe/worktrees/a` both reused main-repo trust | Same |
+| Pre-trust opt-in required for each role? | No for these linked worktrees after main-repo acceptance | No for these linked worktrees after main-repo acceptance |
+| Context pattern on default screen | None / `null`; panel displays `—` | None / `null`; panel displays `—` |
+| Personal workflow skill install | `~/.agents/skills/troupe-mission/SKILL.md` (docs; repo-local loader confirmed live) | `~/.claude/skills/troupe-mission/SKILL.md` (docs only) |
+| Repo-local skill location | `.agents/skills/<name>/SKILL.md` (live-tested) | `.claude/skills/<name>/SKILL.md` (docs only) |
+
+Troupe can keep role worktrees inside the main checkout, for example
+`.troupe/worktrees/<mission>/<role>`, with `/.troupe/` in the common
+`info/exclude`; the tested nested layout worked for both harnesses.
+Trust does not force that placement: sibling linked worktrees worked too.
+No automatic trust-file edits or per-role pre-trust opt-in are needed for
+the tested normal path. A genuinely untrusted main repo still needs its
+initial human trust decision, and an unexpected role trust dialog must
+remain `waits on you`; the Phase 4 dialog guards still apply. Keep the
+role's raw permission flags pinned as the decided Phase 5 design requires;
+trust reuse does not establish permission policy.
+
+`troupe setup` can install the workflow into the personal locations in the
+table and report what it writes. Both adapters should currently expose no
+context parser and show `—`, rather than a fabricated value.
+
+### Limits and cleanup
+
+Not tested: unrelated nested repositories, arbitrary trusted parent
+folders, alternate trust/config policies, symlink/path aliases, other
+versions, resizing, long-context screens, customized context status lines,
+or personal Codex skill loading under a replaced `HOME`/`CODEX_HOME`.
+The personal Codex path comes from current official docs, with this
+installed version's repository loader confirmed by the sentinel skill.
+
+Cleanup succeeded: `tmux -L troupe-probe` was killed,
+`/private/tmp/troupe-probe/` was removed, and the one automatically added
+`p5-codex` trust entry was removed from `~/.codex/config.toml`
+(`p5-codex-cleanup.txt`). Before that targeted removal, the config was
+backed up within the scratch folder; the backup was removed with that
+folder. Unrelated config and personal skill folders were preserved.
+The generated Claude project entry
+`/private/tmp/troupe-probe/p5-claude` remains in `~/.claude.json`;
+that file was deliberately not rewritten because running Claude sessions
+rewrite it. No other Claude trust entry was added by these runs. Normal
+harness session history was not purged. No push was made.

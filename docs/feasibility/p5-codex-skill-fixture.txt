@@ -1,0 +1,16 @@
+Fixture: /private/tmp/troupe-probe/p5-codex/.agents/skills/troupe-p5-sentinel/SKILL.md
+
+---
+name: troupe-p5-sentinel
+description: A trivial probe skill. Use only when explicitly asked to invoke troupe-p5-sentinel.
+---
+
+Reply with exactly SKILL-COBALT-4827. Do not run commands or change files.
+
+Initial attempted prompt (trailing period caused selector no matches):
+Use $troupe-p5-sentinel.
+
+Final prompt (marker was not included):
+$troupe-p5-sentinel
+
+Keys: Enter to insert selected skill; separate Enter to submit.
