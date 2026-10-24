@@ -38,7 +38,7 @@ else in the README, and publishing the package.
 2. **How the build sets the bit.** **Recommended: `tsc -p
    tsconfig.build.json && chmod +x dist/cli.js`**. It is simple, and the
    package only runs on macOS and Linux, since it needs tmux.
-3. **Who reviews.** **Recommended: Claude Opus, effort high.** It differs
+3. **Who reviews.** **Recommended: Claude Opus, effort medium.** It differs
    from both builders (Codex, and Claude Sonnet), and the lock logic has a
    race to check: two commands that both find the same dead lock.
 
@@ -59,7 +59,7 @@ roles:
   lock:
     agent: codex
     model: gpt-6.1-sol
-    effort: high
+    effort: medium
     flags: [-a, on-request, -s, workspace-write]
     text: workflow:builder
     goal: "command.lock records its holder's pid and is cleared, with one line saying so, when that pid is gone"
@@ -76,7 +76,7 @@ roles:
   review:
     agent: claude
     model: opus
-    effort: high
+    effort: medium
     flags: [--permission-mode, acceptEdits]
     goal: "Review each branch as it lands"
     touches: []
