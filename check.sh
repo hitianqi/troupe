@@ -6,6 +6,9 @@ cd "$(dirname "$0")"
 claude --version
 claude plugin validate .
 claude plugin test .
+# The CLI package: build it, then its tests (CI runs the same as npm test).
+npm run build
+node --test tests/cli.node.mjs
 # troupe-panel under plain Node (22.18 or later), against the Phase 1 goldens.
 node --test tests/panel.node.mjs
 # The workflow walkthrough: the sample mission read by the pane's own reader
