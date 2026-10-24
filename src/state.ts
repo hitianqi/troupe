@@ -90,10 +90,11 @@ export const workOf = (worktree: string, base: string, touches: string[], runner
 }
 
 export type Pane = { alive: boolean; dead: boolean; screen: string; foreign?: boolean }
-export type PaneOwner = { session: string; window: string; owner?: string }
+export type PaneOwner = { session: string; window: string; owner?: string; socket?: string }
 
 /** The pane's state from tmux: gone, its agent exited (`remain-on-exit`), or alive with its screen. */
 export const paneOf = (pane: string, runner: Run = run, env = process.env, expected?: PaneOwner): Pane => {
+  if (expected?.socket !== undefined && expected.socket !== (env.TROUPE_TMUX_SOCKET ?? '')) return { alive: false, dead: false, screen: '', foreign: true }
   try {
     const identified = tmux(['display', '-p', '-t', pane, '#{pane_id}\t#{pane_dead}\t#{session_id}\t#{window_id}\t#{@troupe-owner}'], runner, env)
     const [id, dead, session, window, owner] = identified.out.trimEnd().split('\t')

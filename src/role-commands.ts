@@ -111,7 +111,12 @@ export const dispatch = async (r: Runtime, initial: Mission, name: string): Prom
   if (agent === undefined) throw new Refusal(`unknown agent: ${role.agent}`)
   const argv = argvOf(agent, role, `Read the brief in ${brief} and follow it.`)
   const opened = createPane(r, m, name, worktree, argv, window, false, 'roles')
-  append(m.log, 'cli', { ev: 'dispatch', role: name, ...opened, worktree, branch, base, argv, agent: role.agent })
+  try {
+    append(m.log, 'cli', { ev: 'dispatch', role: name, ...opened, worktree, branch, base, argv, agent: role.agent, socket: r.env.TROUPE_TMUX_SOCKET ?? '' })
+  } catch (error) {
+    if (ownedPane(r, opened).alive) tmux(['kill-pane', '-t', opened.pane], r.run, r.env)
+    throw error
+  }
   mux(r, ['select-layout', '-t', opened.window, 'tiled'])
 
   return { code: 0, out: `Dispatched ${name} to ${opened.pane}; ${worktree} on ${branch}\n` }

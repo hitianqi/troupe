@@ -265,6 +265,9 @@ test('stage validation, gate reopen/answer, timeout and usage errors', async t =
   assert.equal((await w.call('close', 'api', '--all')).code, 2)
   assert.equal((await w.call('status', '-m', '../escape')).code, 2)
   assert.equal((await w.call('status', '--remove')).code, 2)
+  w.write(join(w.root, 'm1'), 'This is not the mission plan.')
+  assert.equal((await w.call('check', '-m', 'm1')).code, 0)
+  assert.equal((await w.call('dispatch', '../other')).code, 2)
 })
 
 test('setup updates marked copies and removes only its own skill directories', async t => {
@@ -373,5 +376,47 @@ test('a failed capture does not turn an existing role into a missing pane', asyn
     : w.r.run(command, args, options)
   assert.match((await execute('dispatch', ['api'], { ...w.r, run })).out, /already open/)
   assert.match((await execute('send', ['api', 'hello'], { ...w.r, run })).out, /unknown/)
+  assert.equal(w.panes.size, 1)
+})
+
+test('foreign sessions and foreign panes in a roles window are never reused or closed', async t => {
+  const w = world(t)
+  await w.approve()
+  w.panes.set('%99', { window: '@99', owner: 'foreign', screen: 'READY', dead: false })
+  assert.match((await w.call('dispatch', 'api')).out, /cannot verify its ownership/)
+  assert.equal(w.panes.size, 1)
+  w.panes.clear()
+  assert.equal((await w.call('dispatch', 'api')).code, 0)
+  const own = [...w.panes.values()][0]
+  w.panes.set('%99', { window: own.window, owner: 'foreign', screen: 'READY', dead: false })
+  assert.match((await w.call('dispatch', 'web')).out, /pane troupe did not open/)
+  assert.equal((await w.call('close', '--all')).code, 0)
+  assert.deepEqual([...w.panes.keys()], ['%99'])
+})
+
+test('a pane is cleaned up if its dispatch cannot be logged', async t => {
+  const w = world(t)
+  await w.approve()
+  const log = join(w.root, '.git/troupe/m1/log.jsonl')
+  const run = (command, args, options) => {
+    const result = w.r.run(command, args, options)
+    if (command === 'tmux' && args.includes('select-pane')) {
+      rmSync(log)
+      mkdirSync(log)
+    }
+    return result
+  }
+  assert.equal((await execute('dispatch', ['api'], { ...w.r, run })).code, 1)
+  assert.equal(w.panes.size, 0)
+})
+
+test('changing the explicit tmux socket cannot create a duplicate or target the wrong server', async t => {
+  const w = world(t)
+  await w.approve()
+  await w.call('dispatch', 'api')
+  const other = { ...w.r, env: { TROUPE_TMUX_SOCKET: 'other-socket' } }
+  for (const [command, args] of [['dispatch', ['api']], ['send', ['api', 'hello']], ['close', ['api']]]) {
+    assert.equal((await execute(command, args, other)).code, 1)
+  }
   assert.equal(w.panes.size, 1)
 })

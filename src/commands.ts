@@ -2,7 +2,7 @@ import { existsSync, readFileSync } from 'node:fs'
 import { basename, dirname, join } from 'node:path'
 import { parseArgs } from 'node:util'
 
-import { check, findPlan } from './check.ts'
+import { check, findPlan, rootOf } from './check.ts'
 import { clean, mission, mux, NAME, Refusal, repository, runtime, Usage, workflowDirs } from './command-context.ts'
 import type { Mission, Reply, Runtime } from './command-context.ts'
 import { append, fold, logPath, PLAN_GATE, readLog } from './log.ts'
@@ -130,6 +130,7 @@ const up = (r: Runtime, want: string, orch: string): Reply => {
     panel = createPane(r, repo, 'troupe status', repo.root, [process.execPath, join(r.packageRoot, 'dist/cli.js'), 'status', '--watch', ...(want ? ['-m', want] : [])], opened, true)
     append(logPath(repo.common, name), 'cli', { ev: 'up', session: opened.session, window: opened.window, pane: opened.pane, panel: panel.pane })
   } catch (error) {
+    if (panel !== undefined && ownedPane(r, panel).alive) tmux(['kill-pane', '-t', panel.pane], r.run, r.env)
     if (ownedPane(r, opened).alive) tmux(['kill-pane', '-t', opened.pane], r.run, r.env)
     throw error
   }
@@ -157,7 +158,7 @@ export const execute = async (command: string, args: string[], overrides: Partia
     }
     if (command === 'check') {
       count(pos, 0, want ? 0 : 1, 'check [-m mission | plan file or folder]')
-      return check(r.cwd, want || pos[0] || '', r.home, r.run)
+      return check(r.cwd, want ? join(rootOf(r.cwd, r.run), 'docs/missions', want, 'plan.md') : pos[0] || '', r.home, r.run)
     }
     // Reject automated approval before reading a plan or writing any file.
     if (command === 'approve' && (!r.inputTTY || !r.outputTTY)) throw new Refusal('approve requires both stdin and stdout to be terminals')
@@ -172,6 +173,9 @@ export const execute = async (command: string, args: string[], overrides: Partia
       if ((values.role === undefined) === (values.gate === undefined)) throw new Usage('wait requires exactly one of --role and --gate')
       if (values.timeout !== undefined && (values.timeout.trim() === '' || !Number.isFinite(Number(values.timeout)) || Number(values.timeout) < 0)) throw new Usage('--timeout must be a nonnegative number of seconds')
     }
+    if (['dispatch', 'stage', 'gate', 'send'].includes(command) || (command === 'close' && !values.all)) id(pos[0], 'name')
+    if (command === 'wait') id(values.role ?? values.gate, 'wait target')
+    if (command === 'send' && pos.length === 1 && r.inputTTY) throw new Usage('send needs text arguments or text on stdin')
     if (command === 'status') return await status(r, want, !!values.json, !!values.watch)
     const m = mission(r, want)
     if (command === 'approve') return await approve(r, m)

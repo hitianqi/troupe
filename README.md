@@ -10,8 +10,8 @@ one or two orders runs in light mode. The plugin also carries the
 `ROADMAP.md` holds the decisions and the phases.
 
 > **Direction (2026-10-24).** This README describes the Claude Code mod that
-> Phases 0–3 built (v0.6.0 after the cleanup), and it stays accurate for the
-> code as it is. The project is moving away from that form (ROADMAP,
+> Phases 0–3 built (v0.6.0 after the cleanup). The CLI commands below are
+> also available while the mod remains. The project is moving away from that form (ROADMAP,
 > "Direction"): no mod, but a `troupe` CLI and the standalone
 > `troupe-panel`, so that the orchestrator and the roles can run Claude Code
 > or Codex. Going away: the mod's `/troupe` dialog and tools, the fixed
@@ -26,7 +26,7 @@ one or two orders runs in light mode. The plugin also carries the
 
 - `src/`: the mission as data and as a view, with no engine import (the plan
   reader and its checks, order states from files and git, the approval hash,
-  the graph and the lines the panel paints). The CLI will build on it.
+  the graph and the lines the panel paints), and the CLI commands.
 - `bin/troupe-panel`: the panel, a plain Node program that draws from `src/`.
 - `hooks/`: the Claude Code mod (`/troupe`, the approval dialog, the role
   window tools, metrics). It goes when the CLI replaces it.
@@ -36,6 +36,7 @@ one or two orders runs in light mode. The plugin also carries the
 
 ## Requirements
 
+- **Node 20 or later** for the compiled CLI (`npm ci`, then `npm run build`).
 - **tmux** (tested on 3.4), with Claude Code started inside it (`$TMUX`
   set). The panel splits beside the session's pane and role windows open in
   a tmux session of their own; outside tmux, `/troupe` says so and
@@ -44,6 +45,47 @@ one or two orders runs in light mode. The plugin also carries the
   `troupe_dispatch` (see below).
 - **Node 22.18 or later** on the `PATH` for `bin/troupe-panel`: it runs
   `src/`'s `.ts` files with Node's type stripping.
+
+## CLI commands (Phase 5)
+
+Run `node dist/cli.js <command>` after building, or `troupe <command>` after
+`npm link`. Commands accept `-m, --mission <name>` under `docs/missions/`,
+defaulting to the newest plan. The CLI format starts from
+`skills/troupe-mission/templates/plan.md`; the mod's older format remains
+documented below.
+
+- `setup [--remove]` installs the workflow for detected Claude Code and
+  Codex installations. Updates and removal require troupe's install marker.
+- `up [--orch claude|codex]` opens an orchestrator and status pane, split
+  half and half. Inside tmux it creates a mission window in the current
+  session; outside it creates/reuses troupe's repo session and attaches.
+  It installs the selected harness's workflow if missing. The interactive
+  CLI panel and workflow skill rewrite are later steps; the right pane
+  currently runs `status --watch`.
+- `check` validates the plan and user adapters. `approve` shows the plan's
+  role settings and hash, then asks for approval; both stdin and stdout
+  must be terminals.
+- `dispatch <role>` requires a clean, currently approved plan and done
+  dependencies. It opens the role on its brief in
+  `.troupe/worktrees/<mission>/<role>`, branch `role/<mission>/<role>`.
+- `status [--json] [--watch]` reports roles, work, results, stage and open
+  gates. `send <role> <text…>` (or text on stdin) pastes only into a verified
+  troupe pane whose screen is ready, checked again immediately before paste.
+- `gate <id> ["question"] [--no-wait]` opens a gate; `stage <id>` selects a
+  stage defined by the workflow. `wait --role <r>` or `wait --gate <id>`
+  polls for a result or answer; `--timeout <seconds>` bounds the wait.
+- `close <role>` or `close --all` closes only logged, verified role panes;
+  worktrees and branches stay. Reopening archives a previous result.
+
+Roles finish by writing `.troupe/result.md` with `status: done`, `blocked`
+or `failed` and a one-line `summary` in YAML front matter. The append-only
+log and briefs live under `<git-common-dir>/troupe/<mission>/`. Approval
+covers current plan bytes and referenced role text. The log remains
+advisory: it prevents accidental dispatch, not a model writing it by hand.
+Exit codes are 0 for success, 1 for refusal/failure, and 2 for usage errors.
+`TROUPE_TMUX_SOCKET=<name>` selects a separate tmux server for every CLI
+tmux operation, including live-state reads. Keep that setting the same for
+subsequent commands on the mission; a mismatch refuses pane operations.
 
 ## The panel
 
