@@ -189,7 +189,7 @@ flags remain the ones in the plan. See the [Codex CLI reference](https://develop
 |---|---|---|
 | the plan | `docs/missions/<mission>/plan.md` | yes |
 | the run log (approvals, gates, stages, dispatches) | `<git-common-dir>/troupe/<mission>/log.jsonl` | no |
-| the briefs | `<git-common-dir>/troupe/<mission>/brief-<role>.md` | no |
+| the role's launch brief | `<worktree>/.troupe/brief.md` (archived beside the run log as `brief-<role>.md`) | no |
 | role worktrees | `.troupe/worktrees/<mission>/<role>` (`/.troupe/` is excluded) | no |
 | a role's result | `<worktree>/.troupe/result.md` | no |
 

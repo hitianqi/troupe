@@ -92,6 +92,11 @@ paste: bracketed
   const rolesWindow = tmux(['display', '-p', '-t', manualPane, '#{window_id}'], undefined, env).out.trim()
   const dispatched = await execute('dispatch', ['api', '-m', 'm1'], r)
   assert.equal(dispatched.code, 0, dispatched.out)
+  const dispatch = readLog(m.log).events.find(e => e.ev === 'dispatch')
+  const brief = join(dispatch.worktree, '.troupe/brief.md')
+  assert.equal(dispatch.argv.at(-1), `Read the brief in ${brief} and follow it.`)
+  assert.equal(readFileSync(brief, 'utf8'), readFileSync(join(m.common, 'troupe/m1/brief-api.md'), 'utf8'))
+  assert.equal(execFileSync('git', ['status', '--porcelain', '--untracked-files=all'], { cwd: dispatch.worktree, encoding: 'utf8' }).trim(), '')
   assert.equal(readLog(m.log).events.find(e => e.ev === 'dispatch').window, rolesWindow)
   const seen = new Set()
   for (let n = 0; n < 60; n++) {

@@ -135,8 +135,10 @@ export const dispatch = async (r: Runtime, initial: Mission, name: string): Prom
   const branch = `role/${m.name}/${name}`
   const base = previous?.base ?? git(r, m.root, ['rev-parse', '--verify', '--end-of-options', `${m.plan.base || 'HEAD'}^{commit}`]).trim()
   prepareWorktree(r, m, worktree, branch, base)
-  const brief = join(dirname(m.log), `brief-${name}.md`)
+  const brief = join(worktree, '.troupe/brief.md')
+  mkdirSync(dirname(brief), { recursive: true })
   writeFileSync(brief, briefOf(m, role, worktree, branch))
+  writeFileSync(join(dirname(m.log), `brief-${name}.md`), briefOf(m, role, worktree, branch))
   const current = mission(r, m.name)
   approved(current)
   if (current.hash !== m.hash) throw new Refusal('the plan changed during dispatch; retry after approving it')
