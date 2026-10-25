@@ -31,8 +31,10 @@ const sessionOf = (r: Runtime, repo: Repository): string | undefined => {
 export const createPane = (r: Runtime, repo: Repository, name: string, cwd: string, argv: string[], split?: { pane: string }, horizontal?: number, windowName = name): Created => {
   const session = split === undefined ? sessionOf(r, repo) : undefined
   const common = ['-c', cwd, '-P', '-F', IDS, shellOf(argv)]
+  // A percentage needs an attached client on some tmux versions ("size missing"); columns always work.
+  const columns = (pane: string, percent: number) => String(Math.max(20, Math.round(Number(mux(r, ['display', '-p', '-t', pane, '#{pane_width}']).trim()) * percent / 100)))
   const opened = ids(mux(r, split !== undefined
-    ? ['split-window', '-d', ...(horizontal ? ['-h', '-p', String(horizontal)] : []), '-t', split.pane, ...common]
+    ? ['split-window', '-d', ...(horizontal ? ['-h', '-l', columns(split.pane, horizontal)] : []), '-t', split.pane, ...common]
     : session !== undefined
       ? ['new-window', '-d', '-t', `${session}:`, '-n', windowName, ...common]
       : ['new-session', '-d', '-s', sessionName(repo), '-n', windowName, ...common]))

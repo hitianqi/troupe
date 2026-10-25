@@ -115,6 +115,7 @@ const world = (t, env = { TROUPE_TMUX_SOCKET: 'unit-socket' }) => {
     }
     if (args[0] === 'display') {
       if (args.at(-1) === '#{session_id}') return yes('$1')
+      if (args.at(-1) === '#{pane_width}') return yes('200')
       const p = panes.get(target)
       return p ? yes(`${target}\t${p.dead ? 1 : 0}\t${p.owner}`) : no()
     }
@@ -302,7 +303,7 @@ test('up uses a new mission window, plain orchestrator and half-width panel, the
   const result = await w.call('up', '--orch', 'codex')
   assert.equal(result.code, 0, result.out)
   assert.ok(w.calls.some(c => c.args.includes('new-session') && c.args.at(-1) === "'codex'"))
-  assert.ok(w.calls.some(c => c.args.includes('split-window') && c.args.includes('-h') && c.args.includes('50') && c.args.at(-1).includes("'panel'")))
+  assert.ok(w.calls.some(c => c.args.includes('split-window') && c.args.includes('-h') && c.args.includes('100') && c.args.at(-1).includes("'panel'")))
   assert.ok(w.calls.some(c => c.args.includes('attach-session') && c.inherit))
   assert.equal(w.events().at(-1).ev, 'up')
   const noOp = w.calls.length
@@ -530,7 +531,7 @@ test('open splits the caller on the right, marks the panel, and passes the reque
   assert.equal(result.code, 0, result.out)
   assert.equal(result.out.trim().split('\n').length, 1)
   const split = w.calls.find(c => c.args.includes('split-window')).args.slice(2)
-  assert.deepEqual(split.slice(0, 7), ['split-window', '-d', '-h', '-p', '45', '-t', '%99'])
+  assert.deepEqual(split.slice(0, 7), ['split-window', '-d', '-h', '-l', '90', '-t', '%99'])
   assert.ok(split.at(-1).includes("'panel' '-m' 'm1'"))
   assert.ok(w.calls.some(c => c.args.includes('@troupe-panel') && c.args.at(-1) === w.root))
   assert.ok(!w.calls.some(c => c.args.includes('attach-session') || c.command === 'osascript'))
