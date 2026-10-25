@@ -6,6 +6,7 @@ import type { Mission, Runtime } from './command-context.ts'
 import { fold, readLog } from './log.ts'
 import type { Logged } from './log.ts'
 import { tmux } from './run.ts'
+import { afterMrApproval } from './gate-message.ts'
 
 type Target = { pane: string; token: string }
 type Notice = { gate: string; at: string; text: string; target: Target }
@@ -35,7 +36,7 @@ export const queueAnswer = (r: Runtime, m: Mission, answer: Logged): void => {
   if (found.length !== 1) return
   const queue = pending.get(r) ?? new Map<string, Notice>()
   queue.set(`${m.log}\0${answer.gate}`, { gate: answer.gate, at: answer.at, target: found[0]!,
-    text: (answer.answer === 'approve' ? `${answer.gate} approved in the panel. Continue the mission.` : `Change requested on ${answer.gate}: ${answer.text ?? ''}`).replace(/\s+/g, ' ').trim() })
+    text: (answer.answer === 'approve' ? `${answer.gate} approved in the panel. ${answer.gate === 'mr-ok' ? afterMrApproval(m.name) : 'Continue the mission.'}` : `Change requested on ${answer.gate}: ${answer.text ?? ''}`).replace(/\s+/g, ' ').trim() })
   pending.set(r, queue)
   flushAnswers(r, m)
 }

@@ -634,6 +634,21 @@ test('up chooses the available orchestrator, preferring claude, and an explicit 
   }
 })
 
+test('MR gate approval includes cleanup commands; a change does not', async t => {
+  const w = world(t)
+  const log = join(w.root, '.git/troupe/m1/log.jsonl')
+  const result = await execute('gate', ['mr-ok'], { ...w.r, sleep: async () => {
+    append(log, 'panel', { ev: 'gate-answer', gate: 'mr-ok', answer: 'approve' })
+  } })
+  assert.equal(result.code, 0)
+  assert.ok(result.out.startsWith('approve\n'))
+  assert.match(result.out, /troupe stage teardown -m m1/)
+  assert.match(result.out, /troupe teardown -m m1 before reporting completion/)
+  await w.call('gate', 'mr-ok', '--no-wait')
+  append(log, 'panel', { ev: 'gate-answer', gate: 'mr-ok', answer: 'change', text: 'Fix first' })
+  assert.deepEqual(await w.call('wait', '--gate', 'mr-ok'), { code: 0, out: 'change: Fix first\n' })
+})
+
 test('callerPane finds the pane through process ancestry when an agent strips the tmux variables', async () => {
   const { callerPane } = await import('../dist/panes.js')
   const parents = { 4242: 300, 300: 500, 500: 1 }

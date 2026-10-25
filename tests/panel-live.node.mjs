@@ -468,3 +468,13 @@ test('a reopened gate cancels its pending answer notification', async t => {
   flushAnswers(w.r, mission(w.r, 'm1'))
   assert.ok(!w.calls.some(c => c.args.includes('paste-buffer')))
 })
+
+test('MR gate panel notification includes the teardown reminder', async t => {
+  const w = world(t)
+  w.orch.marked = true
+  w.openGate('mr-ok')
+  await panelEffect(w.r, 'm1', { kind: 'answer', gate: gateTarget(w.read().model), answer: 'approve' })
+  const load = w.calls.find(c => c.args.includes('load-buffer'))
+  assert.ok(load.input.startsWith('mr-ok approved in the panel.'))
+  assert.match(load.input, /troupe teardown -m m1 before reporting completion/)
+})
