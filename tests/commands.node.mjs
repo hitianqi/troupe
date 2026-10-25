@@ -118,7 +118,9 @@ const world = (t, env = { TROUPE_TMUX_SOCKET: 'unit-socket' }) => {
       if (args.includes('@troupe-orchestrator')) panes.get(target).orchestrator = args.includes('-u') ? undefined : args.at(-1)
       if (args.includes('@troupe-orchestrator-token')) panes.get(target).token = args.includes('-u') ? undefined : args.at(-1)
       if (args.includes('@troupe-panel')) panes.get(target).panel = args.at(-1)
+      if (args.includes('@troupe-planning')) panes.get(target).planning = args.includes('-u') ? undefined : args.at(-1)
     }
+    if (args[0] === 'display' && args.at(-1).includes('@troupe-planning')) return yes(`${panes.get(target)?.panel ?? ''}\t${panes.get(target)?.planning ?? ''}`)
     if (args[0] === 'display') {
       if (args.at(-1) === '#{session_id}') return yes('$1')
       if (args.at(-1) === '#{pane_width}') return yes('200')
@@ -699,4 +701,25 @@ test('open from caller B replaces caller A and the next panel answer goes only t
   assert.equal(pastes.length, 1)
   assert.equal(pastes[0].args.at(-1), '%91')
   assert.ok(w.calls.filter(c => c.args.includes('send-keys')).every(c => c.args.includes('%91')))
+})
+
+
+test('only explicit planning opens show progress, then discovery restores truthful idle state', async t => {
+  const w = world(t)
+  const path = join(w.root, 'docs/missions/m1/plan.md')
+  rmSync(path)
+  assert.equal((await w.call('open')).code, 0)
+  const pane = [...w.panes].find(([, p]) => p.panel === w.root)[0]
+  const r = { ...w.r, env: { ...w.r.env, TMUX_PANE: pane } }
+  assert.deepEqual(readPanel(r, 'm1'), { missing: 'no mission yet' })
+  assert.equal((await w.call('open', '--planning')).code, 0)
+  assert.deepEqual(readPanel(r, 'm1'), { missing: 'Orch is planning…' })
+  w.write(path, plan())
+  assert.ok('model' in readPanel(r, 'm1'))
+  assert.equal(w.panes.get(pane).planning, undefined)
+  rmSync(path)
+  assert.deepEqual(readPanel(r, 'm1'), { missing: 'no mission yet' })
+  w.panes.get(pane).planning = '1'
+  w.panes.get(pane).panel = '/unrelated/repo'
+  assert.deepEqual(readPanel(r, 'm1'), { missing: 'no mission yet' })
 })

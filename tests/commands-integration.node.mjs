@@ -30,12 +30,21 @@ test('real scratch tmux: open marks one panel, keeps focus, and is a no-op the s
   assert.equal(caller.code, 0, caller.err)
   const pane = caller.out.trim()
   const r = runtime({ cwd: root, env: { ...env, TMUX: 'scratch', TMUX_PANE: pane } })
-  const first = await execute('open', [], r)
+  const first = await execute('open', ['--planning'], r)
   assert.equal(first.code, 0, first.out)
   const list = () => tmux(['list-panes', '-a', '-F', '#{pane_id}\t#{@troupe-panel}'], undefined, env).out.trim().split('\n')
   const panes = list()
   assert.equal(panes.length, 2)
   assert.equal(panes.filter(line => line.endsWith(`\t${repo}`)).length, 1)
+  const panelPane = panes.find(line => line.endsWith(`\t${repo}`)).split('\t')[0]
+  let firstFrame = ''
+  for (let i = 0; i < 100; i++) {
+    firstFrame = tmux(['capture-pane', '-p', '-t', panelPane], undefined, env).out.trim()
+    if (firstFrame) break
+    await new Promise(resolve => setTimeout(resolve, 20))
+  }
+  assert.ok(firstFrame.includes('Orch is planning…'), firstFrame)
+
   assert.equal(tmux(['display', '-p', '-t', 'agent', '#{pane_id}'], undefined, env).out.trim(), pane)
   const second = await execute('open', [], r)
   assert.equal(second.code, 0, second.out)

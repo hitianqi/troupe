@@ -7,11 +7,12 @@ import { markOrchestrator } from './orchestrator.ts'
 import { available } from './setup.ts'
 import { shellOf, tmux } from './run.ts'
 
-export const createPanel = (r: Runtime, repo: Repository, want: string, split?: { pane: string }, horizontal?: number) => {
+export const createPanel = (r: Runtime, repo: Repository, want: string, split?: { pane: string }, horizontal?: number, planning = false) => {
   const argv = [process.execPath, join(r.packageRoot, 'dist/cli.js'), 'panel', ...(want ? ['-m', want] : [])]
   const opened = createPane(r, repo, 'troupe panel', repo.root, argv, split, horizontal, 'mission')
   try {
     mux(r, ['set-option', '-p', '-t', opened.pane, '@troupe-panel', repo.root])
+    if (planning) mux(r, ['set-option', '-p', '-t', opened.pane, '@troupe-planning', '1'])
   } catch (error) {
     if (ownedPane(r, opened).alive) tmux(['kill-pane', '-t', opened.pane], r.run, r.env)
     throw error
@@ -33,7 +34,7 @@ const attachScript = (terminal: boolean): string => `on run argv
   end tell
 end run`
 
-export const openPanel = (r: Runtime, want: string): Reply => {
+export const openPanel = (r: Runtime, want: string, planning = false): Reply => {
   if (!available(r, 'tmux')) throw new Refusal('tmux is required for troupe open')
   const repo = repository(r)
   const listed = tmux(['list-panes', '-a', '-F', '#{pane_id}\t#{pane_dead}\t#{@troupe-panel}'], r.run, r.env)
@@ -42,11 +43,12 @@ export const openPanel = (r: Runtime, want: string): Reply => {
   if (existing !== undefined) {
     const caller = callerPane(r, repo.root)
     if (caller !== undefined) markOrchestrator(r, repo.root, caller)
+    if (planning) mux(r, ['set-option', '-p', '-t', existing[0]!, '@troupe-planning', '1'])
     return { code: 0, out: `Panel already open in ${existing[0]}.\n` }
   }
   const caller = callerPane(r, repo.root)
   if (caller !== undefined) markOrchestrator(r, repo.root, caller)
-  const opened = createPanel(r, repo, want, caller === undefined ? undefined : { pane: caller }, 45)
+  const opened = createPanel(r, repo, want, caller === undefined ? undefined : { pane: caller }, 45, planning)
   if (caller !== undefined) return { code: 0, out: `Opened panel in ${opened.pane} beside your agent.\n` }
   mux(r, ['select-window', '-t', opened.window])
   const name = sessionName(repo)

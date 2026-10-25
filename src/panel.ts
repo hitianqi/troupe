@@ -20,10 +20,10 @@ export type Terminal = {
 export const ENTER_PANEL = '\x1b[?1049h\x1b[?25l\x1b[?7l\x1b[?1000h\x1b[?1006h\x1b[?2004h'
 export const LEAVE_PANEL = '\x1b[?2004l\x1b[?1006l\x1b[?1000l\x1b[0m\x1b[?7h\x1b[?25h\x1b[?1049l'
 
-const usable = (width: number, height: number) => width >= 40 && height >= 8
+const usable = (width: number, height: number) => width >= 40 && height >= 10
 export const frameOf = (reading: Reading, ui: PanelUi, width: number, height: number): Drawn => {
   if ('missing' in reading || !usable(width, height)) return {
-    lines: [[{ text: fit('missing' in reading ? reading.missing : 'Panel needs at least 40 columns and 8 rows.', width).trimEnd() }]], hits: [], maxScroll: 0,
+    lines: [[{ text: fit('missing' in reading ? reading.missing : 'Panel needs 40 columns and 10 rows.', width).trimEnd() }]], hits: [], maxScroll: 0,
   }
 
   return draw(reading.model, ui, width, height)
@@ -121,7 +121,11 @@ export const panel = async (r: Runtime, options: PanelOptions, terminal: Termina
       enqueue(async () => {
         for (const action of actions) {
           if (finished) return
-          const model = 'model' in shown && usable(width, height) ? shown.model : undefined
+          if (!usable(width, height)) {
+            if (action.kind === 'key' && (action.key === 'q' || action.key === 'quit')) { finish(); return }
+            continue
+          }
+          const model = 'model' in shown ? shown.model : undefined
           const next = transition(ui, action, model, shownFrame.hits, height, shownFrame.maxScroll)
           if (next.ui.message !== ui.message && next.ui.message) messageUntil = r.now() + 4000
           ui = next.ui

@@ -17,7 +17,7 @@ import { afterMrApproval, markOrchestrator } from './orchestrator.ts'
 import { createPanel, openPanel } from './panel-open.ts'
 
 const OPTIONS: Record<string, string[]> = {
-  setup: ['remove'], open: [], up: ['orch'], check: [], approve: [], gate: ['no-wait'], stage: [],
+  setup: ['remove'], open: ['planning'], up: ['orch'], check: [], approve: [], gate: ['no-wait'], stage: [],
   dispatch: [], status: ['json', 'watch'], send: [], wait: ['role', 'gate', 'timeout', 'ready'], teardown: ['force'], close: ['all'], panel: ['once', 'plain', 'width', 'height'],
 }
 
@@ -29,6 +29,7 @@ const parsed = (command: string, args: string[]) => {
       mission: { type: 'string', short: 'm' }, remove: { type: 'boolean' }, orch: { type: 'string' },
       'no-wait': { type: 'boolean' }, json: { type: 'boolean' }, watch: { type: 'boolean' },
       ready: { type: 'boolean' }, force: { type: 'boolean' },
+      planning: { type: 'boolean' },
       role: { type: 'string' }, gate: { type: 'string' }, timeout: { type: 'string' }, all: { type: 'boolean' },
       once: { type: 'boolean' }, plain: { type: 'boolean' }, width: { type: 'string' }, height: { type: 'string' },
     } })
@@ -141,7 +142,7 @@ const up = (r: Runtime, want: string, orch: string): Reply => {
   let panel
   try {
     markOrchestrator(r, repo.root, opened.pane)
-    panel = createPanel(r, repo, want, opened, 50)
+    panel = createPanel(r, repo, want, opened, 50, true)
     append(logPath(repo.common, name), 'cli', { ev: 'up', session: opened.session, window: opened.window, pane: opened.pane, panel: panel.pane })
   } catch (error) {
     if (panel !== undefined && ownedPane(r, panel).alive) tmux(['kill-pane', '-t', panel.pane], r.run, r.env)
@@ -177,8 +178,8 @@ export const execute = async (command: string, args: string[], overrides: Partia
       return setup(r, values.remove)
     }
     if (command === 'open') {
-      count(pos, 0, 0, 'open [-m mission]')
-      return openPanel(r, want)
+      count(pos, 0, 0, 'open [-m mission] [--planning]')
+      return openPanel(r, want, !!values.planning)
     }
     if (command === 'up') {
       count(pos, 0, 0, 'up [--orch claude|codex]')
