@@ -5,6 +5,8 @@ import type { Mission, Runtime } from './command-context.ts'
 import { modelOf } from './model.ts'
 import type { PanelModel } from './model.ts'
 import { liveOf } from './role-commands.ts'
+import { rootOf } from './check.ts'
+import { finishPlanning, planningOf } from './panel-planning.ts'
 
 export type Snapshot = { mission: Mission; model: PanelModel }
 export type Reading = Snapshot | { missing: string }
@@ -13,6 +15,7 @@ export type Reading = Snapshot | { missing: string }
 export const readPanel = (r: Runtime, want: string): Reading => {
   try {
     const m = mission(r, want)
+    finishPlanning(r, m.root)
     const stages = workflowStages(r, m.plan.workflow)
     const plan = { ...m.plan, problems: [...m.problems, ...stages.problems] }
     const model = modelOf({
@@ -25,6 +28,8 @@ export const readPanel = (r: Runtime, want: string): Reading => {
   } catch (error) {
     const why = (error as Error).message
 
-    return { missing: /^no mission under|^no plan at/.test(why) ? 'no mission yet' : `panel: ${why}` }
+    return { missing: /^no mission under|^no plan at/.test(why)
+      ? planningOf(r, rootOf(r.cwd, r.run)) ? 'Orch is planning…' : 'no mission yet'
+      : `panel: ${why}` }
   }
 }

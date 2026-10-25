@@ -44,6 +44,7 @@ const world = t => {
   const pane = { owner: 'ours', screen: 'READY', dead: false, exists: true }
   const orch = { marked: false, token: 'orch-token', screen: '› Ask Codex to do anything', dead: false }
   let afterLoad
+  const planning = { active: false }
   let clock = 0
   const yes = out => ({ code: 0, out: out ?? '', err: '' })
   const run = (command, raw, options) => {
@@ -59,6 +60,8 @@ const world = t => {
     const args = raw.slice(2)
     if (args[0] === 'list-panes' && args.at(-1).includes('@troupe-orchestrator')) return yes(orch.marked ? `%9\t${orch.dead ? 1 : 0}\t${root}\t${orch.token}` : '')
     if (args[0] === 'load-buffer') afterLoad?.()
+    if (args[0] === 'display' && args.at(-1).includes('@troupe-planning')) return yes(`${root}\t${planning.active ? '1' : ''}`)
+    if (args[0] === 'set-option' && args.includes('@troupe-planning') && args.includes('-u')) planning.active = false
     if (args[0] === 'display') {
       return pane.exists ? yes(`%1\t${pane.dead ? 1 : 0}\t${pane.owner}`) : { code: 1, out: '', err: "can't find pane" }
     }
@@ -75,7 +78,7 @@ const world = t => {
     append(log, 'cli', { ev: 'dispatch', role: 'api', agent: 'fake', session: '$1', window: '@1', pane: '%1', owner: 'ours', socket: 'old-socket', server: '/old/socket', worktree, branch: 'role/m1/api', base: 'abc', argv: ['fake'] })
   }
 
-  return { root, path, log, write, pane, orch, afterLoad: fn => { afterLoad = fn }, calls, output, r, read, openGate, launch, events: () => readLog(log).events, advance: ms => { clock += ms } }
+  return { root, path, log, write, pane, planning, orch, afterLoad: fn => { afterLoad = fn }, calls, output, r, read, openGate, launch, events: () => readLog(log).events, advance: ms => { clock += ms } }
 }
 const tick = () => new Promise(resolve => setImmediate(resolve))
 const key = key => ({ kind: 'key', key })
@@ -300,18 +303,20 @@ test('terminal loop redraws input/resize, decodes split UTF-8 and restores modes
   assert.equal(w.output.at(-1), LEAVE_PANEL)
 })
 
-test('missing-plan polling discovers a plan, and abort/pane close restore the terminal', { timeout: 5000 }, async t => {
+test('planning polling discovers a plan, and abort/pane close restore the terminal', { timeout: 5000 }, async t => {
   const w = world(t)
   rmSync(w.path)
   const stop = new AbortController()
   t.after(() => stop.abort())
   const input = new InputStream()
   const output = new OutputStream()
-  const running = panel({ ...w.r, signal: stop.signal }, { mission: 'm1' }, { input, output })
-  assert.ok(w.output.some(text => text.includes('no mission yet')))
+  w.planning.active = true
+  const running = panel({ ...w.r, env: { ...w.r.env, TMUX_PANE: '%panel' }, signal: stop.signal }, { mission: 'm1' }, { input, output })
+  assert.ok(w.output.some(text => text.includes('Orch is planning…')))
   w.write(w.path, PLAN)
   await new Promise(resolve => setTimeout(resolve, 2100))
   assert.ok(w.output.at(-1).includes('Build the endpoint'))
+  assert.equal(w.planning.active, false)
   stop.abort()
   assert.equal((await running).code, 0)
   assert.equal(w.output.at(-1), LEAVE_PANEL)

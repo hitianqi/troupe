@@ -30,7 +30,7 @@ const usage = () =>
     '',
     'Options:',
     '  -m, --mission <name>  mission under docs/missions (default: newest open)',
-    '  setup [--remove] · up [--orch claude|codex]',
+    '  setup [--remove] · up [--orch claude|codex] · open [--planning]',
     '  gate <id> ["question"] [--no-wait] · stage <id>',
     '  dispatch <role> · send <role> <text…> (or stdin)',
     '  status [--json] [--watch] · close <role> | --all',

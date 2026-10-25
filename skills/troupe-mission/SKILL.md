@@ -26,8 +26,8 @@ is your judgment; the steps below are the order things happen in.
 
 ## 1. Brief
 
-Run `troupe open` first, in the foreground (harmless if already open; never
-`troupe up`, which starts a second orchestrator); pass its attach line to the
+Run `troupe open --planning` first, in the foreground (harmless if already
+open; never `troupe up`, which starts a second orchestrator); pass its attach line to the
 person when it gives one.
 
 Find out what the person wants, why, what counts as done, and what is out of
