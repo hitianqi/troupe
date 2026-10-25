@@ -19,7 +19,7 @@ const ids = (out: string): Location => {
   return { session, window, pane }
 }
 
-const sessionName = (repo: Repository): string => `troupe-${basename(repo.root).replace(/[^A-Za-z0-9_-]/g, '-')}`
+export const sessionName = (repo: Repository): string => `troupe-${basename(repo.root).replace(/[^A-Za-z0-9_-]/g, '-')}`
 const sessionOf = (r: Runtime, repo: Repository): string | undefined => {
   if (r.env.TMUX) return mux(r, ['display', '-p', ...(r.env.TMUX_PANE ? ['-t', r.env.TMUX_PANE] : []), '#{session_id}']).trim()
   const name = `=${sessionName(repo)}`
@@ -28,11 +28,11 @@ const sessionOf = (r: Runtime, repo: Repository): string | undefined => {
   return mux(r, ['display', '-p', '-t', name, '#{session_id}']).trim()
 }
 
-export const createPane = (r: Runtime, repo: Repository, name: string, cwd: string, argv: string[], split?: Location, horizontal = false, windowName = name): Created => {
-  const session = split?.session ?? sessionOf(r, repo)
+export const createPane = (r: Runtime, repo: Repository, name: string, cwd: string, argv: string[], split?: { pane: string }, horizontal?: number, windowName = name): Created => {
+  const session = split === undefined ? sessionOf(r, repo) : undefined
   const common = ['-c', cwd, '-P', '-F', IDS, shellOf(argv)]
   const opened = ids(mux(r, split !== undefined
-    ? ['split-window', '-d', ...(horizontal ? ['-h', '-p', '50'] : []), '-t', split.pane, ...common]
+    ? ['split-window', '-d', ...(horizontal ? ['-h', '-p', String(horizontal)] : []), '-t', split.pane, ...common]
     : session !== undefined
       ? ['new-window', '-d', '-t', `${session}:`, '-n', windowName, ...common]
       : ['new-session', '-d', '-s', sessionName(repo), '-n', windowName, ...common]))

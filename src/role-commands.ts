@@ -136,7 +136,7 @@ export const dispatch = async (r: Runtime, initial: Mission, name: string): Prom
   const agent = m.agents[role.agent]
   if (agent === undefined) throw new Refusal(`unknown agent: ${role.agent}`)
   const argv = argvOf(agent, role, `Read the brief in ${brief} and follow it.`)
-  const opened = createPane(r, m, name, worktree, argv, window, false, 'roles')
+  const opened = createPane(r, m, name, worktree, argv, window, undefined, 'roles')
   try {
     append(m.log, 'cli', { ev: 'dispatch', role: name, ...opened, worktree, branch, base, argv, agent: role.agent })
   } catch (error) {

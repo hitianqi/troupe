@@ -6,6 +6,7 @@ import { execute } from './commands.ts'
 
 const COMMANDS: [string, string][] = [
   ['setup', 'install the workflow skill for each harness found'],
+  ['open', 'show the panel beside your current agent'],
   ['up', 'open the orchestrator and the panel in tmux'],
   ['check', 'check the plan: [mission, folder or plan file]'],
   ['approve', 'approve the plan (from a terminal only)'],

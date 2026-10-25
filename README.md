@@ -40,6 +40,9 @@ them when run again, and never overwrites a skill folder it did not write.
 
 ## A mission
 
+You can also start from an agent you already have open: ask it to run a
+troupe mission; it runs `troupe open` to show the panel.
+
 In the repository you want to change:
 
 ```sh
@@ -121,6 +124,7 @@ on usage errors.
 | Command | What it does |
 |---|---|
 | `setup [--remove]` | install the workflow skill for each harness found |
+| `open` | show the panel beside your current agent |
 | `up [--orch claude\|codex]` | open the orchestrator and the panel |
 | `panel` | the live panel (`up` runs it; `--once --plain` prints one frame) |
 | `check` | check the plan and the user adapters |

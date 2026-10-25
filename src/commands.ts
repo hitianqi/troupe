@@ -13,9 +13,10 @@ import { available, installSkill, setup, skillTarget } from './setup.ts'
 import { readResult } from './state.ts'
 import { tmux } from './run.ts'
 import { panel } from './panel.ts'
+import { createPanel, openPanel } from './panel-open.ts'
 
 const OPTIONS: Record<string, string[]> = {
-  setup: ['remove'], up: ['orch'], check: [], approve: [], gate: ['no-wait'], stage: [],
+  setup: ['remove'], open: [], up: ['orch'], check: [], approve: [], gate: ['no-wait'], stage: [],
   dispatch: [], status: ['json', 'watch'], send: [], wait: ['role', 'gate', 'timeout', 'ready'], teardown: ['force'], close: ['all'], panel: ['once', 'plain', 'width', 'height'],
 }
 
@@ -137,7 +138,7 @@ const up = (r: Runtime, want: string, orch: string): Reply => {
   const opened = createPane(r, repo, 'mission', repo.root, [orch])
   let panel
   try {
-    panel = createPane(r, repo, 'troupe panel', repo.root, [process.execPath, join(r.packageRoot, 'dist/cli.js'), 'panel', ...(want ? ['-m', want] : [])], opened, true)
+    panel = createPanel(r, repo, want, opened, 50)
     append(logPath(repo.common, name), 'cli', { ev: 'up', session: opened.session, window: opened.window, pane: opened.pane, panel: panel.pane })
   } catch (error) {
     if (panel !== undefined && ownedPane(r, panel).alive) tmux(['kill-pane', '-t', panel.pane], r.run, r.env)
@@ -148,7 +149,7 @@ const up = (r: Runtime, want: string, orch: string): Reply => {
   mux(r, ['select-window', '-t', opened.window])
   if (!r.env.TMUX) mux(r, ['attach-session', '-t', opened.session], { inherit: true })
 
-  return { code: 0, out: `${installed}Opened mission window ${opened.window}; orchestrator ${opened.pane}, status ${panel.pane}\n` }
+  return { code: 0, out: `${installed}Opened mission window ${opened.window}; ${orch} orchestrator ${opened.pane}, status ${panel.pane}\n` }
 }
 
 export const execute = async (command: string, args: string[], overrides: Partial<Runtime> = {}): Promise<Reply> => {
@@ -172,9 +173,13 @@ export const execute = async (command: string, args: string[], overrides: Partia
       count(pos, 0, 0, 'setup [--remove]')
       return setup(r, values.remove)
     }
+    if (command === 'open') {
+      count(pos, 0, 0, 'open [-m mission]')
+      return openPanel(r, want)
+    }
     if (command === 'up') {
       count(pos, 0, 0, 'up [--orch claude|codex]')
-      const orch = values.orch ?? 'claude'
+      const orch = values.orch ?? (available(r, 'claude') ? 'claude' : available(r, 'codex') ? 'codex' : 'claude')
       if (!['claude', 'codex'].includes(orch)) throw new Usage('--orch must be claude or codex')
       return up(r, want, orch)
     }
