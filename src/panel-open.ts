@@ -3,6 +3,7 @@ import { join } from 'node:path'
 import { mux, Refusal, repository } from './command-context.ts'
 import type { Reply, Repository, Runtime } from './command-context.ts'
 import { callerPane, createPane, ownedPane, sessionName } from './panes.ts'
+import { markOrchestrator } from './orchestrator.ts'
 import { available } from './setup.ts'
 import { shellOf, tmux } from './run.ts'
 
@@ -38,8 +39,13 @@ export const openPanel = (r: Runtime, want: string): Reply => {
   const listed = tmux(['list-panes', '-a', '-F', '#{pane_id}\t#{pane_dead}\t#{@troupe-panel}'], r.run, r.env)
   const existing = listed.code === 0 ? listed.out.split('\n').map(line => line.split('\t'))
     .find(([pane, dead, root]) => /^%\d+$/.test(pane ?? '') && dead === '0' && root === repo.root) : undefined
-  if (existing !== undefined) return { code: 0, out: `Panel already open in ${existing[0]}.\n` }
+  if (existing !== undefined) {
+    const caller = callerPane(r, repo.root)
+    if (caller !== undefined) markOrchestrator(r, repo.root, caller)
+    return { code: 0, out: `Panel already open in ${existing[0]}.\n` }
+  }
   const caller = callerPane(r, repo.root)
+  if (caller !== undefined) markOrchestrator(r, repo.root, caller)
   const opened = createPanel(r, repo, want, caller === undefined ? undefined : { pane: caller }, 45)
   if (caller !== undefined) return { code: 0, out: `Opened panel in ${opened.pane} beside your agent.\n` }
   mux(r, ['select-window', '-t', opened.window])

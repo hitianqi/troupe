@@ -11,6 +11,7 @@ import { textOf } from '../dist/canvas.js'
 import { mission, runtime } from '../dist/command-context.js'
 import { draw } from '../dist/draw.js'
 import { append, readLog } from '../dist/log.js'
+import { flushAnswers } from '../dist/orchestrator.js'
 import { panelEffect } from '../dist/panel-actions.js'
 import { gateTarget, hitAt, initialUi, parseInput, transition } from '../dist/panel-input.js'
 import { readPanel } from '../dist/panel-model.js'
@@ -41,10 +42,12 @@ const world = t => {
   const calls = []
   const output = []
   const pane = { owner: 'ours', screen: 'READY', dead: false, exists: true }
+  const orch = { marked: false, token: 'orch-token', screen: '› Ask Codex to do anything', dead: false }
+  let afterLoad
   let clock = 0
   const yes = out => ({ code: 0, out: out ?? '', err: '' })
-  const run = (command, raw) => {
-    calls.push({ command, args: raw })
+  const run = (command, raw, options) => {
+    calls.push({ command, args: raw, ...options })
     if (command === 'git') {
       if (raw.includes('--show-toplevel')) return yes(root)
       if (raw.includes('--git-common-dir')) return yes('.git')
@@ -54,10 +57,12 @@ const world = t => {
     assert.equal(command, 'tmux')
     assert.deepEqual(raw.slice(0, 2), ['-L', 'panel-test'])
     const args = raw.slice(2)
+    if (args[0] === 'list-panes' && args.at(-1).includes('@troupe-orchestrator')) return yes(orch.marked ? `%9\t${orch.dead ? 1 : 0}\t${root}\t${orch.token}` : '')
+    if (args[0] === 'load-buffer') afterLoad?.()
     if (args[0] === 'display') {
       return pane.exists ? yes(`%1\t${pane.dead ? 1 : 0}\t${pane.owner}`) : { code: 1, out: '', err: "can't find pane" }
     }
-    if (args[0] === 'capture-pane') return yes(pane.screen)
+    if (args[0] === 'capture-pane') return yes(args.includes('%9') ? orch.screen : pane.screen)
     return yes()
   }
   const r = runtime({ cwd: root, home: join(root, 'home'), env: { TROUPE_TMUX_SOCKET: 'panel-test' }, run, inputTTY: true, outputTTY: true, write: text => output.push(text), now: () => clock })
@@ -70,7 +75,7 @@ const world = t => {
     append(log, 'cli', { ev: 'dispatch', role: 'api', agent: 'fake', session: '$1', window: '@1', pane: '%1', owner: 'ours', socket: 'old-socket', server: '/old/socket', worktree, branch: 'role/m1/api', base: 'abc', argv: ['fake'] })
   }
 
-  return { root, path, log, write, pane, calls, output, r, read, openGate, launch, events: () => readLog(log).events, advance: ms => { clock += ms } }
+  return { root, path, log, write, pane, orch, afterLoad: fn => { afterLoad = fn }, calls, output, r, read, openGate, launch, events: () => readLog(log).events, advance: ms => { clock += ms } }
 }
 const tick = () => new Promise(resolve => setImmediate(resolve))
 const key = key => ({ kind: 'key', key })
@@ -400,4 +405,76 @@ test('default panel polls after the last mission finishes, cancels its draft, an
   assert.ok(!w.output.at(-1).includes('Old draft'))
   stop.abort()
   await running
+})
+
+
+test('panel answers wake only the marked, ready orchestrator once with literal change text', async t => {
+  const w = world(t)
+  w.orch.marked = true
+  w.openGate()
+  const text = 'Split this first; $(literal)\nthen continue'
+  const effect = { kind: 'answer', gate: gateTarget(w.read().model), answer: 'change', text }
+  assert.equal(await panelEffect(w.r, 'm1', effect), 'Change sent for plan')
+  const load = w.calls.find(c => c.args.includes('load-buffer'))
+  assert.equal(load.input, 'Change requested on plan: Split this first; $(literal) then continue')
+  assert.equal(w.calls.filter(c => c.args.includes('paste-buffer')).length, 1)
+  assert.ok(w.calls.find(c => c.args.includes('paste-buffer')).args.includes('%9'))
+  flushAnswers(w.r, mission(w.r, 'm1'))
+  assert.equal(w.calls.filter(c => c.args.includes('paste-buffer')).length, 1)
+  assert.equal(w.events().at(-1).answer, 'change')
+})
+
+test('busy, dialog and unknown orchestrators are retried on refresh without typing', async t => {
+  const w = world(t)
+  w.orch.marked = true
+  w.orch.screen = 'esc to interrupt'
+  w.openGate()
+  await panelEffect(w.r, 'm1', { kind: 'answer', gate: gateTarget(w.read().model), answer: 'approve' })
+  for (const screen of ['Would you like to run the following command?', '❯\nWould you like to run the following command?', '› Ask Codex to do anything\nIs this a project you created or one you trust?', 'unknown', '› a draft']) {
+    w.orch.screen = screen
+    flushAnswers(w.r, mission(w.r, 'm1'))
+  }
+  assert.ok(!w.calls.some(c => c.args.includes('load-buffer')))
+  w.orch.screen = '› Ask Codex to do anything'
+  flushAnswers(w.r, mission(w.r, 'm1'))
+  assert.equal(w.calls.filter(c => c.args.includes('paste-buffer')).length, 1)
+  assert.equal(w.calls.find(c => c.args.includes('load-buffer')).input, 'plan approved in the panel. Continue the mission.')
+})
+
+test('notification rechecks readiness and pane identity just before paste', async t => {
+  for (const change of ['busy', 'owner', 'gone']) {
+    const w = world(t)
+    w.orch.marked = true
+    w.openGate()
+    w.afterLoad(() => {
+      if (change === 'busy') w.orch.screen = 'esc to interrupt'
+      if (change === 'owner') w.orch.token = 'replacement'
+      if (change === 'gone') w.orch.dead = true
+    })
+    await panelEffect(w.r, 'm1', { kind: 'answer', gate: gateTarget(w.read().model), answer: 'approve' })
+    assert.ok(!w.calls.some(c => c.args.includes('paste-buffer') || c.args.includes('send-keys')))
+    assert.equal(w.events().at(-1).answer, 'approve')
+  }
+})
+
+test('a reopened gate cancels its pending answer notification', async t => {
+  const w = world(t)
+  w.orch.marked = true
+  w.orch.screen = 'esc to interrupt'
+  w.openGate()
+  await panelEffect(w.r, 'm1', { kind: 'answer', gate: gateTarget(w.read().model), answer: 'approve' })
+  w.openGate()
+  w.orch.screen = '› Ask Codex to do anything'
+  flushAnswers(w.r, mission(w.r, 'm1'))
+  assert.ok(!w.calls.some(c => c.args.includes('paste-buffer')))
+})
+
+test('MR gate panel notification includes the teardown reminder', async t => {
+  const w = world(t)
+  w.orch.marked = true
+  w.openGate('mr-ok')
+  await panelEffect(w.r, 'm1', { kind: 'answer', gate: gateTarget(w.read().model), answer: 'approve' })
+  const load = w.calls.find(c => c.args.includes('load-buffer'))
+  assert.ok(load.input.startsWith('mr-ok approved in the panel.'))
+  assert.match(load.input, /troupe teardown -m m1 before reporting completion/)
 })

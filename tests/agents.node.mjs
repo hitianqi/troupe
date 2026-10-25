@@ -6,7 +6,7 @@ import { dirname, join } from 'node:path'
 import { test } from 'node:test'
 import { fileURLToPath } from 'node:url'
 
-import { AGENTS, argvOf, badgeOf, validBadgeGlyph, loadAgents, screenOf, unsetPermission } from '../dist/agents.js'
+import { AGENTS, argvOf, badgeOf, validBadgeGlyph, loadAgents, optionOf, screenOf, unsetPermission } from '../dist/agents.js'
 import { check } from '../dist/check.js'
 
 const capture = name => readFileSync(new URL(`./fixtures/agents/${name}.txt`, import.meta.url), 'utf8')
@@ -214,4 +214,21 @@ test('invalid badge glyphs, tones and extra fields report precise adapter diagno
   }
   write(repo('mapping'), `${adapter('custom')}badge: [C, cyan]\n`)
   assert.ok(loadAgents(root, home).problems.some(problem => problem.includes('badge must be a mapping')))
+})
+
+
+test('argvOf adds each writable Git directory as a separate flag before the prompt', () => {
+  const dirs = ['/a path/.git/worktrees/api', '/a path/.git/objects', '/a path/.git/refs/heads/role/m1', '/a path/.git/logs/refs/heads/role/m1']
+  const argv = argvOf(AGENTS.codex, { model: '', effort: '', flags: ['-a', 'on-request', '-s', 'workspace-write'] }, 'Read brief.', dirs)
+  assert.deepEqual(argv, ['codex', '-a', 'on-request', '-s', 'workspace-write', ...dirs.flatMap(dir => ['--add-dir', dir]), 'Read brief.'])
+  assert.equal(dirs.length, 4)
+})
+
+
+test('permission validation and sandbox selection share short/long equals parsing', () => {
+  for (const flags of [['-s', 'workspace-write'], ['--sandbox', 'workspace-write'], ['-s=workspace-write'], ['--sandbox=workspace-write']]) {
+    assert.deepEqual(unsetPermission(AGENTS.codex, ['-a=on-request', ...flags]), [])
+    assert.equal(optionOf(flags, ['-s', '--sandbox']).value, 'workspace-write')
+  }
+  assert.deepEqual(optionOf(['--model=a=b'], ['--model']), { value: 'a=b' })
 })

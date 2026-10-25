@@ -13,6 +13,7 @@ import { available, installSkill, setup, skillTarget } from './setup.ts'
 import { readResult } from './state.ts'
 import { tmux } from './run.ts'
 import { panel } from './panel.ts'
+import { afterMrApproval, markOrchestrator } from './orchestrator.ts'
 import { createPanel, openPanel } from './panel-open.ts'
 
 const OPTIONS: Record<string, string[]> = {
@@ -71,7 +72,8 @@ const wait = async (r: Runtime, m: Mission, target: { role?: string; gate?: stri
     const folded = fold(read.events)
     if (target.gate !== undefined) {
       const answer = folded.gates.get(target.gate)
-      if (answer?.answer !== undefined) return { code: 0, out: answer.answer === 'approve' ? 'approve\n' : `change: ${answer.text ?? ''}\n` }
+      if (answer?.answer !== undefined) return { code: 0, out: answer.answer === 'approve'
+        ? `approve\n${target.gate === 'mr-ok' ? `${afterMrApproval(m.name)}\n` : ''}` : `change: ${answer.text ?? ''}\n` }
     } else {
       const opened = folded.roles.get(target.role ?? '')
       if (opened === undefined) throw new Refusal(`role ${target.role}: not dispatched`)
@@ -138,6 +140,7 @@ const up = (r: Runtime, want: string, orch: string): Reply => {
   const opened = createPane(r, repo, 'mission', repo.root, [orch])
   let panel
   try {
+    markOrchestrator(r, repo.root, opened.pane)
     panel = createPanel(r, repo, want, opened, 50)
     append(logPath(repo.common, name), 'cli', { ev: 'up', session: opened.session, window: opened.window, pane: opened.pane, panel: panel.pane })
   } catch (error) {

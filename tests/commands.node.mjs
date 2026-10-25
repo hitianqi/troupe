@@ -10,6 +10,9 @@ import { mission, runtime } from '../dist/command-context.js'
 import { append, readLog } from '../dist/log.js'
 import { shellOf } from '../dist/run.js'
 import { INSTALL_MARKER } from '../dist/setup.js'
+import { panelEffect } from '../dist/panel-actions.js'
+import { readPanel } from '../dist/panel-model.js'
+import { gateTarget } from '../dist/panel-input.js'
 
 const adapter = `command: fake
 model: [--model, '{model}']
@@ -112,6 +115,8 @@ const world = (t, env = { TROUPE_TMUX_SOCKET: 'unit-socket' }) => {
     }
     if (args[0] === 'set-option') {
       if (args.includes('@troupe-owner')) panes.get(target).owner = args.at(-1)
+      if (args.includes('@troupe-orchestrator')) panes.get(target).orchestrator = args.includes('-u') ? undefined : args.at(-1)
+      if (args.includes('@troupe-orchestrator-token')) panes.get(target).token = args.includes('-u') ? undefined : args.at(-1)
       if (args.includes('@troupe-panel')) panes.get(target).panel = args.at(-1)
     }
     if (args[0] === 'display') {
@@ -122,6 +127,7 @@ const world = (t, env = { TROUPE_TMUX_SOCKET: 'unit-socket' }) => {
     }
     if (args[0] === 'capture-pane') return panes.has(target) ? yes(panes.get(target).screen) : no()
     if (args[0] === 'list-panes' && args.at(-1).includes('#{pane_pid}')) return yes('')
+    if (args[0] === 'list-panes' && args.at(-1).includes('@troupe-orchestrator')) return yes([...panes].map(([id, p]) => `${id}\t${p.dead ? 1 : 0}\t${p.orchestrator ?? ''}\t${p.token ?? ''}`).join('\n'))
     if (args[0] === 'list-panes' && args.at(-1).includes('@troupe-panel')) return yes([...panes].map(([id, p]) => `${id}\t${p.dead ? 1 : 0}\t${p.panel ?? ''}`).join('\n'))
     if (args[0] === 'list-panes') return yes([...panes].map(([id, p]) => `${p.windowName}\t$1 ${p.window} ${id}`).join('\n'))
     if (args[0] === 'load-buffer') afterLoad?.()
@@ -188,6 +194,9 @@ test('dispatch writes a complete brief, quoted argv and log event, refuses dupli
   assert.deepEqual(opened.argv.slice(0, 7), ['fake', '--model', 'small', '--effort', 'low', '--policy', 'ask'])
   assert.ok(w.calls.some(c => c.command === 'tmux' && c.args.at(-1) === shellOf(opened.argv)))
   const brief = readFileSync(join(w.root, '.git/troupe/m1/brief-api.md'), 'utf8')
+  const localBrief = join(opened.worktree, '.troupe/brief.md')
+  assert.equal(readFileSync(localBrief, 'utf8'), brief)
+  assert.equal(opened.argv.at(-1), `Read the brief in ${localBrief} and follow it.`)
   for (const text of ['Ship the feature', 'People need it', 'Build the endpoint.', 'Reference instructions.', 'src/', 'probe-skill', 'Commit your changes', '.troupe/result.md', 'blocked or failed']) assert.ok(brief.includes(text), text)
   assert.match((await w.call('dispatch', 'api')).out, /already open/)
   w.write(join(opened.worktree, '.troupe/result.md'), '---\nstatus: done\nsummary: built\n---\n')
@@ -308,9 +317,10 @@ test('up uses a new mission window, plain orchestrator and half-width panel, the
   assert.ok(w.calls.some(c => c.args.includes('split-window') && c.args.includes('-h') && c.args.includes('100') && c.args.at(-1).includes("'panel'")))
   assert.ok(w.calls.some(c => c.args.includes('attach-session') && c.inherit))
   assert.equal(w.events().at(-1).ev, 'up')
+  assert.ok([...w.panes.values()].some(p => p.orchestrator === w.root && p.token))
   const noOp = w.calls.length
   assert.match((await w.call('open')).out, /already open/)
-  assert.deepEqual(w.calls.slice(noOp).filter(c => c.command === 'tmux').map(c => c.args[2]), ['list-panes'])
+  assert.ok(w.calls.slice(noOp).filter(c => c.command === 'tmux').every(c => c.args[2] === 'list-panes'))
   const before = w.calls.length
   assert.equal((await execute('up', [], { ...w.r, env: { ...w.r.env, TMUX: 'unit', TMUX_PANE: '%1' } })).code, 0)
   assert.ok(!w.calls.slice(before).some(c => c.args.includes('has-session')))
@@ -523,7 +533,7 @@ test('open reuses a live repository panel without tmux writes, even without a pl
   w.panes.set('%99', { panel: w.root, dead: false })
   const result = await w.call('open')
   assert.deepEqual(result, { code: 0, out: 'Panel already open in %99.\n' })
-  assert.deepEqual(w.calls.filter(c => c.command === 'tmux').map(c => c.args[2]), ['list-panes'])
+  assert.ok(w.calls.filter(c => c.command === 'tmux').every(c => c.args[2] === 'list-panes'))
 })
 
 test('open splits the caller on the right, marks the panel, and passes the requested mission', async t => {
@@ -535,6 +545,8 @@ test('open splits the caller on the right, marks the panel, and passes the reque
   const split = w.calls.find(c => c.args.includes('split-window')).args.slice(2)
   assert.deepEqual(split.slice(0, 7), ['split-window', '-d', '-h', '-l', '90', '-t', '%99'])
   assert.ok(split.at(-1).includes("'panel' '-m' 'm1'"))
+  assert.equal(w.panes.get('%99').orchestrator, w.root)
+  assert.ok(w.panes.get('%99').token)
   assert.ok(w.calls.some(c => c.args.includes('@troupe-panel') && c.args.at(-1) === w.root))
   assert.ok(!w.calls.some(c => c.args.includes('attach-session') || c.command === 'osascript'))
 })
@@ -625,6 +637,21 @@ test('up chooses the available orchestrator, preferring claude, and an explicit 
   }
 })
 
+test('MR gate approval includes cleanup commands; a change does not', async t => {
+  const w = world(t)
+  const log = join(w.root, '.git/troupe/m1/log.jsonl')
+  const result = await execute('gate', ['mr-ok'], { ...w.r, sleep: async () => {
+    append(log, 'panel', { ev: 'gate-answer', gate: 'mr-ok', answer: 'approve' })
+  } })
+  assert.equal(result.code, 0)
+  assert.ok(result.out.startsWith('approve\n'))
+  assert.match(result.out, /troupe stage teardown -m m1/)
+  assert.match(result.out, /troupe teardown -m m1 before reporting completion/)
+  await w.call('gate', 'mr-ok', '--no-wait')
+  append(log, 'panel', { ev: 'gate-answer', gate: 'mr-ok', answer: 'change', text: 'Fix first' })
+  assert.deepEqual(await w.call('wait', '--gate', 'mr-ok'), { code: 0, out: 'change: Fix first\n' })
+})
+
 test('callerPane finds the pane through process ancestry when an agent strips the tmux variables', async () => {
   const { callerPane } = await import('../dist/panes.js')
   const parents = { 4242: 300, 300: 500, 500: 1 }
@@ -648,4 +675,28 @@ test('callerPane falls back to the one unmarked pane at the repository root', as
   assert.equal(callerPane(runtime({ env: {}, pid: 99, run: listed(`13\t%3\t${root}\t\n14\t%4\t${root}\t\n`) }), root), undefined, 'two candidates: no guess')
   assert.equal(callerPane(runtime({ env: {}, pid: 99, run: listed(`13\t%3\t${root}\t\n`) })), undefined, 'no root: no guess')
   rmSync(root, { recursive: true, force: true })
+})
+
+test('open from caller B replaces caller A and the next panel answer goes only to B', async t => {
+  const w = world(t)
+  for (const id of ['%90', '%91']) w.panes.set(id, { window: '@90', windowName: 'agent', owner: '', screen: '› Ask Codex to do anything', dead: false })
+  const open = pane => execute('open', [], { ...w.r, env: { ...w.r.env, TMUX: 'unit', TMUX_PANE: pane } })
+  assert.equal((await open('%90')).code, 0)
+  assert.equal(w.panes.get('%90').orchestrator, w.root)
+  const panels = [...w.panes.values()].filter(p => p.panel === w.root).length
+  assert.match((await open('%91')).out, /already open/)
+  assert.equal(w.panes.get('%90').orchestrator, undefined)
+  assert.equal(w.panes.get('%90').token, undefined)
+  assert.equal(w.panes.get('%91').orchestrator, w.root)
+  assert.equal([...w.panes.values()].filter(p => p.panel === w.root).length, panels)
+  const token = w.panes.get('%91').token
+  assert.equal((await open('%91')).code, 0)
+  assert.equal(w.panes.get('%91').token, token)
+  await w.call('gate', 'plan', '--no-wait')
+  const reading = readPanel(w.r, 'm1')
+  assert.equal(await panelEffect(w.r, 'm1', { kind: 'answer', gate: gateTarget(reading.model), answer: 'approve' }), 'Approved plan')
+  const pastes = w.calls.filter(c => c.args.includes('paste-buffer'))
+  assert.equal(pastes.length, 1)
+  assert.equal(pastes[0].args.at(-1), '%91')
+  assert.ok(w.calls.filter(c => c.args.includes('send-keys')).every(c => c.args.includes('%91')))
 })

@@ -56,6 +56,9 @@ you merged before it.
   permission (Claude Code: `--permission-mode acceptEdits`; Codex:
   `-a on-request -s workspace-write`). Propose; the person decides at the
   gate. Propose a bypass mode only when the person asks for one.
+  For Codex `workspace-write`, dispatch adds `--add-dir` for its Git index,
+  shared objects and the mission's refs/reflogs. This permits commits, not
+  writes to the main branch; roles still share the mission refs and objects.
 - **Each role's text** is its `## Role: <name>` section: what to do, what
   not to change, how to prove it works. Builders also take
   `text: workflow:builder`.
@@ -122,18 +125,20 @@ When every role is merged: `troupe stage mr-ok`, then
 recommendation>"`. Nothing is pushed before `approve`. A change sends you to
 the fix loop or the plan.
 
-## 7. Open the MR and teardown
+## 7. Open the MR, then teardown before finishing
 
 `troupe stage mr`; push the mission branch and open one MR against the base
-branch, per the project's conventions. A refused push: tell the person and
-stop. After opening the MR, run `troupe stage teardown`, then
-`troupe teardown -m <mission>`. It removes mission-owned role panes,
-worktrees, branches and temporary briefs/results while keeping the MR head
-and log. It closes only role panes; the orchestrator and panel panes opened
+branch, per the project's conventions. In the same step, after the MR opens,
+run `troupe stage teardown -m <mission>`, then `troupe teardown -m <mission>`;
+only then report the MR link and cleanup result. Opening the MR does not
+finish the mission. A refused push: tell the person and stop.
+
+Teardown removes mission-owned role panes, worktrees, branches and temporary
+briefs/results while keeping the MR head and log. It closes only role panes; the orchestrator and panel panes opened
 by `up` stay open. Dirty or untracked files and unmerged commits refuse cleanup;
-resolve them before retrying, or ask the person before discarding them with
-`--force`. Repeating teardown with explicit `-m` is safe. Only a person
-merges the MR.
+resolve them before retrying, or tell the person cleanup is blocked and ask
+before discarding them with `--force`. Repeating teardown with explicit
+`-m` is safe. Only a person merges the MR.
 
 ## Telling the person
 

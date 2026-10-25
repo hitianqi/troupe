@@ -9,7 +9,12 @@ import { test } from 'node:test'
 import { execute } from '../dist/commands.js'
 import { mission, runtime } from '../dist/command-context.js'
 import { append, readLog } from '../dist/log.js'
-import { tmux } from '../dist/run.js'
+import { panelEffect } from '../dist/panel-actions.js'
+import { readPanel } from '../dist/panel-model.js'
+import { gateTarget } from '../dist/panel-input.js'
+import { flushAnswers } from '../dist/orchestrator.js'
+import { shellOf, tmux } from '../dist/run.js'
+import { gitDirsOf } from '../dist/role-commands.js'
 
 test('real scratch tmux: open marks one panel, keeps focus, and is a no-op the second time', { skip: spawnSync('tmux', ['-V']).status !== 0, timeout: 15000 }, async t => {
   const root = mkdtempSync(join(tmpdir(), 'troupe-open-integration-'))
@@ -91,6 +96,11 @@ paste: bracketed
   const rolesWindow = tmux(['display', '-p', '-t', manualPane, '#{window_id}'], undefined, env).out.trim()
   const dispatched = await execute('dispatch', ['api', '-m', 'm1'], r)
   assert.equal(dispatched.code, 0, dispatched.out)
+  const dispatch = readLog(m.log).events.find(e => e.ev === 'dispatch')
+  const brief = join(dispatch.worktree, '.troupe/brief.md')
+  assert.equal(dispatch.argv.at(-1), `Read the brief in ${brief} and follow it.`)
+  assert.equal(readFileSync(brief, 'utf8'), readFileSync(join(m.common, 'troupe/m1/brief-api.md'), 'utf8'))
+  assert.equal(execFileSync('git', ['status', '--porcelain', '--untracked-files=all'], { cwd: dispatch.worktree, encoding: 'utf8' }).trim(), '')
   assert.equal(readLog(m.log).events.find(e => e.ev === 'dispatch').window, rolesWindow)
   const seen = new Set()
   for (let n = 0; n < 60; n++) {
@@ -149,6 +159,26 @@ const cleanupRepo = t => {
   const events = () => readLog(m.log).events
   return { root, git, r, m, path, call, events }
 }
+
+test('Codex Git grants stay within its index, shared objects and mission refs', t => {
+  const w = cleanupRepo(t)
+  const role = { ...w.m.plan.roles[0], agent: 'codex', flags: ['-a', 'on-request', '-s', 'workspace-write'] }
+  const dirs = gitDirsOf(w.r, w.m, role, w.path)
+  assert.deepEqual(dirs, [
+    w.git('-C', w.path, 'rev-parse', '--absolute-git-dir').trim(),
+    join(w.m.common, 'objects'), join(w.m.common, 'refs/heads/role/m1'), join(w.m.common, 'logs/refs/heads/role/m1'),
+  ])
+  assert.ok(dirs.every(existsSync))
+  assert.ok(!dirs.includes(w.m.common))
+  assert.ok(!dirs.includes(join(w.m.common, 'refs/heads')))
+  for (const flags of [['-s', 'read-only'], ['--sandbox=workspace-write', '-s', 'read-only'], ['-s=workspace-write', '--sandbox=read-only'], ['--sandbox=workspace-write', '-s=read-only'], ['-s', 'workspace-write', '--dangerously-bypass-approvals-and-sandbox']]) {
+    assert.deepEqual(gitDirsOf(w.r, w.m, { ...role, flags }, w.path), [])
+  }
+  assert.deepEqual(gitDirsOf(w.r, w.m, { ...role, agent: 'claude' }, w.path), [])
+  for (const flags of [['-s', 'workspace-write'], ['--sandbox', 'workspace-write'], ['-s=workspace-write'], ['--sandbox=workspace-write'], ['--sandbox=read-only', '-s=workspace-write']]) {
+    assert.deepEqual(gitDirsOf(w.r, w.m, { ...role, flags }, w.path), dirs)
+  }
+})
 
 test('teardown protects unmerged commits, tracked edits and untracked files; force preserves MR head and log', async t => {
   const w = cleanupRepo(t)
@@ -218,4 +248,31 @@ test('a commit made while panes close is retained and does not finish teardown',
   assert.ok(existsSync(w.path))
   assert.ok(!w.events().some(e => e.ev === 'teardown'))
   assert.match(w.git('log', '-1', '--format=%s', 'role/m1/api'), /late/)
+})
+
+
+test('real scratch tmux: a panel answer reaches the marked ready agent once', { skip: spawnSync('tmux', ['-V']).status !== 0, timeout: 15000 }, async t => {
+  const w = cleanupRepo(t)
+  const socket = `troupe-wake-${process.pid}-${randomUUID().slice(0, 8)}`
+  const env = { ...process.env, TMUX: undefined, TMUX_PANE: undefined, TROUPE_TMUX_SOCKET: socket }
+  t.after(() => tmux(['kill-server'], undefined, env))
+  const received = join(w.root, '.troupe/received.txt')
+  const script = `printf '› Ask Codex to do anything\\n'; while IFS= read -r line; do printf '%s\\n' "$line" >> ${shellOf([received])}; done`
+  const caller = tmux(['new-session', '-d', '-s', 'agent', '-P', '-F', '#{pane_id}', shellOf(['/bin/sh', '-c', script])], undefined, env)
+  assert.equal(caller.code, 0, caller.err)
+  const pane = caller.out.trim()
+  const r = runtime({ ...w.r, env: { ...env, TMUX: 'scratch', TMUX_PANE: pane } })
+  assert.equal((await execute('open', [], r)).code, 0)
+  append(w.m.log, 'orch', { ev: 'gate-open', gate: 'plan', plan: w.m.hash })
+  const reading = readPanel(r, 'm1')
+  assert.ok('model' in reading)
+  assert.equal(await panelEffect(r, 'm1', { kind: 'answer', gate: gateTarget(reading.model), answer: 'approve' }), 'Approved plan')
+  for (let i = 0; i < 50 && !existsSync(received); i++) {
+    flushAnswers(r, mission(r, 'm1'))
+    await new Promise(resolve => setTimeout(resolve, 20))
+  }
+  assert.equal(readFileSync(received, 'utf8'), 'plan approved in the panel. Continue the mission.\n')
+  flushAnswers(r, mission(r, 'm1'))
+  await new Promise(resolve => setTimeout(resolve, 30))
+  assert.equal(readFileSync(received, 'utf8').trim().split('\n').length, 1)
 })

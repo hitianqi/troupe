@@ -74,22 +74,32 @@ export const AGENTS: Record<string, Agent> = Object.assign(Object.create(null) a
 export const badgeOf = (name: string, agent: Agent | undefined = AGENTS[name]): Badge =>
   agent?.badge ?? { glyph: validBadgeGlyph([...name][0] ?? '') ? [...name][0] ?? '?' : '?', tone: 'dim' }
 
-/** Whether `flags` hold `flag`, alone or as `flag=value`. */
-const sets = (flags: string[], flag: string): boolean => flags.some(one => one === flag || one.startsWith(`${flag}=`))
+/** The last matching option, accepting a separate value or `flag=value`. */
+export const optionOf = (flags: string[], names: string[]): { value?: string } | undefined => {
+  for (let i = flags.length - 1; i >= 0; i -= 1) {
+    for (const name of names) {
+      if (flags[i] === name) return { value: flags[i + 1] }
+      if (flags[i]?.startsWith(`${name}=`)) return { value: flags[i]?.slice(name.length + 1) }
+    }
+  }
+
+  return undefined
+}
 
 /** The permission settings `flags` leave unset, each as its flags joined with " or ". */
 export const unsetPermission = (agent: Agent, flags: string[]): string[] =>
-  agent.permission.filter(setting => !setting.some(flag => sets(flags, flag))).map(setting => setting.join(' or '))
+  agent.permission.filter(setting => optionOf(flags, setting) === undefined).map(setting => setting.join(' or '))
 
 const expand = (template: string[], key: string, value: string): string[] =>
   value === '' ? [] : template.map(arg => arg.replaceAll(`{${key}}`, () => value))
 
 /** An argv array, never shell text; omitted role settings add no arguments. */
-export const argvOf = (agent: Agent, role: Pick<Role, 'model' | 'effort' | 'flags'>, prompt: string): string[] => [
+export const argvOf = (agent: Agent, role: Pick<Role, 'model' | 'effort' | 'flags'>, prompt: string, writable: string[] = []): string[] => [
   agent.command,
   ...expand(agent.model, 'model', role.model),
   ...expand(agent.effort, 'effort', role.effort),
   ...role.flags,
+  ...writable.flatMap(path => ['--add-dir', path]),
   prompt,
 ]
 

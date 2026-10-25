@@ -176,13 +176,20 @@ Add one as `~/.config/troupe/agents/<name>.yaml` or
 `<repo>/.troupe/agents/<name>.yaml` (the repository's wins); `src/agents.ts`
 holds the built-ins in the same shape.
 
+Codex roles using `workspace-write` receive `--add-dir` grants for their own
+Git worktree metadata, shared `objects`, and `refs/heads/role/<mission>` plus
+its reflogs. This allows commits without granting the whole common Git
+directory or main-branch refs. Mission refs and objects are shared, so this
+is not isolation between roles in the same mission. The approval/sandbox
+flags remain the ones in the plan. See the [Codex CLI reference](https://developers.openai.com/codex/cli/reference).
+
 ## Where things live
 
 | What | Where | In git |
 |---|---|---|
 | the plan | `docs/missions/<mission>/plan.md` | yes |
 | the run log (approvals, gates, stages, dispatches) | `<git-common-dir>/troupe/<mission>/log.jsonl` | no |
-| the briefs | `<git-common-dir>/troupe/<mission>/brief-<role>.md` | no |
+| the role's launch brief | `<worktree>/.troupe/brief.md` (archived beside the run log as `brief-<role>.md`) | no |
 | role worktrees | `.troupe/worktrees/<mission>/<role>` (`/.troupe/` is excluded) | no |
 | a role's result | `<worktree>/.troupe/result.md` | no |
 
