@@ -483,3 +483,60 @@ test('MR gate panel notification includes the teardown reminder', async t => {
   assert.ok(load.input.startsWith('mr-ok approved in the panel.'))
   assert.match(load.input, /troupe teardown -m m1 before reporting completion/)
 })
+
+test('minimum panel height leaves readable gate content with and without change input', t => {
+  const w = world(t)
+  w.openGate()
+  const reading = w.read()
+  const change = transition(initialUi(), key('c'), reading.model, [], 10, 100).ui
+  for (const ui of [initialUi(), change]) {
+    for (const height of [8, 9]) {
+      const small = frameOf(reading, ui, 73, height)
+      assert.match(textOf(small.lines[0]), /needs 40 columns and 10 rows/)
+      assert.deepEqual(small.hits, [])
+      assert.equal(small.maxScroll, 0)
+    }
+    const minimum = frameOf(reading, ui, 73, 10)
+    assert.ok(textOf(minimum.lines[5]).includes('Goal'), 'minimum height must show a content row')
+    assert.ok(minimum.maxScroll > 0)
+    if (ui.input) assert.ok(textOf(minimum.lines[8]).includes('change'))
+  }
+})
+
+test('too-small resize blocks approval and hidden change submission until content is visible again', async t => {
+  const w = world(t)
+  w.openGate()
+  const stop = new AbortController()
+  t.after(() => stop.abort())
+  const input = new InputStream()
+  const output = new OutputStream()
+  output.rows = 8
+  const running = panel({ ...w.r, signal: stop.signal }, { mission: 'm1' }, { input, output })
+  for (const height of [8, 9]) {
+    output.rows = height
+    output.emit('resize')
+    input.emit('data', 'a')
+    await tick()
+    assert.ok(w.output.at(-1).includes('needs 40 columns and 10 rows'))
+    assert.ok(!w.events().some(e => e.ev === 'gate-answer'))
+  }
+  output.rows = 10
+  output.emit('resize')
+  input.emit('data', 'cPlease revise')
+  await tick()
+  assert.ok(w.output.at(-1).includes('Please revise'))
+  output.rows = 9
+  output.emit('resize')
+  input.emit('data', '\r')
+  await tick()
+  assert.ok(!w.events().some(e => e.ev === 'gate-answer'))
+  output.rows = 10
+  output.emit('resize')
+  await tick()
+  assert.ok(w.output.at(-1).includes('Please revise'))
+  input.emit('data', '\r')
+  await tick()
+  assert.equal(w.events().at(-1).text, 'Please revise')
+  stop.abort()
+  assert.equal((await running).code, 0)
+})
