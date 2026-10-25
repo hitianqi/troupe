@@ -121,7 +121,7 @@ test('selection, tabs, detail, help, scrolling and hit-map actions are pure', t 
   assert.equal(step(ui, key('d'), model).ui.tab, 5)
   assert.equal(step(ui, key('v'), model).ui.tab, 3)
   assert.equal(step({ ...ui, tab: 2 }, key('enter'), model).ui.tab, 1)
-  assert.equal(step(ui, key('pageDown'), model).ui.scroll, 0)
+  assert.equal(step(ui, key('pageDown'), model, [], 24, 10).ui.scroll, 10, 'MISSION scrolls its right column too')
   ui = { ...ui, tab: 2 }
   assert.equal(step(ui, key('pageDown'), model, [], 24, 10).ui.scroll, 10)
   assert.equal(step({ ...ui, scroll: 10 }, { kind: 'scroll', by: -3 }, model).ui.scroll, 7)

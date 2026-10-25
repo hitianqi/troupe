@@ -502,8 +502,7 @@ export const draw = (m: PanelModel, ui: Ui, width: number, height: number): Draw
   c.put(height - 1, 0, fit(keys, width), { tone: 'dim' })
 
   let maxScroll = 0
-  if (ui.tab === 1) mission(c, m, ui, row, bottom, hit)
-  else maxScroll = other(c, m, ui, row, bottom, hit)
+  maxScroll = ui.tab === 1 ? mission(c, m, ui, row, bottom, hit) : other(c, m, ui, row, bottom, hit)
   if (ui.help) {
     const lines = ['↑↓ / j k  select role     Enter  detail', '1-5 / Tab  tabs           o  open role pane', 's  send to role           d  diff    v  plan', 'PgUp/PgDn / wheel  scroll tabs 2-5', 'a  approve gate           c  type a change', 'Enter  submit input       Esc  cancel input', '? / Esc  close help       q / Ctrl-C  quit']
     const w = Math.min(60, width - 4)
@@ -520,7 +519,7 @@ export const draw = (m: PanelModel, ui: Ui, width: number, height: number): Draw
 }
 
 /** The MISSION tab: the left column, then FLOW and the detail on the right. */
-const mission = (c: Canvas, m: PanelModel, ui: Ui, top: number, bottom: number, hit: (row: number, col: number, w: number, h: number, target: Target) => void) => {
+const mission = (c: Canvas, m: PanelModel, ui: Ui, top: number, bottom: number, hit: (row: number, col: number, w: number, h: number, target: Target) => void): number => {
   const left: { line: Line; role?: string }[] = [{ line: rule('ROLES', LEFT - 1) }]
   const groups = [...new Set(m.roles.map(role => role.group))]
   for (const group of groups) {
@@ -555,21 +554,30 @@ const mission = (c: Canvas, m: PanelModel, ui: Ui, top: number, bottom: number, 
 
   const col = LEFT + 2
   const width = c.width - col
-  c.runs(top, col, rule('FLOW', width))
   const drawn = flow(m, ui, width)
-  const flowLines = drawn.canvas.lines().slice(0, Math.max(0, bottom - top - 1))
-  flowLines.forEach((line, index) => c.runs(top + 1 + index, col, line))
-  for (const box of drawn.boxes) if (box.row + box.height <= flowLines.length) hit(top + 1 + box.row, col + box.col, box.width, box.height, { kind: 'role', name: box.name })
+  // FLOW, then the selected role's detail and live window, scrolled as one column when they do not fit.
+  const view = Math.max(0, bottom - top - 1)
+  const flowLines = drawn.canvas.lines()
   const selected = m.roles.find(role => role.name === ui.selected)
-  const start = top + 1 + flowLines.length + 1
-  if (selected === undefined || start >= bottom) return
-  const { lines, keys } = detail(selected, width, bottom - start)
-  lines.slice(0, bottom - start).forEach((line, index) => c.runs(start + index, col, line))
-  if (start + keys < bottom) {
-    hit(start + keys, col + 1, 13, 1, { kind: 'key', key: 'o' })
-    hit(start + keys, col + 18, 7, 1, { kind: 'key', key: 's' })
-    hit(start + keys, col + 29, 6, 1, { kind: 'key', key: 'd' })
+  const fits = view - flowLines.length - 1
+  const shown = selected === undefined ? undefined : detail(selected, width, fits >= 14 ? fits : view)
+  const column: Line[] = [...flowLines, ...(shown === undefined ? [] : [[], ...shown.lines])]
+  const maxScroll = Math.max(0, column.length - view)
+  const from = Math.max(0, Math.min(ui.scroll ?? 0, maxScroll))
+  c.runs(top, col, rule(from < maxScroll ? 'FLOW · scroll for more ↓' : 'FLOW', width))
+  column.slice(from, from + view).forEach((line, index) => c.runs(top + 1 + index, col, line))
+  const visible = (row: number, height = 1) => row >= from && row + height <= from + view
+  for (const box of drawn.boxes) if (visible(box.row, box.height)) hit(top + 1 + box.row - from, col + box.col, box.width, box.height, { kind: 'role', name: box.name })
+  if (shown !== undefined) {
+    const keys = flowLines.length + 1 + shown.keys
+    if (visible(keys)) {
+      hit(top + 1 + keys - from, col + 1, 13, 1, { kind: 'key', key: 'o' })
+      hit(top + 1 + keys - from, col + 18, 7, 1, { kind: 'key', key: 's' })
+      hit(top + 1 + keys - from, col + 29, 6, 1, { kind: 'key', key: 'd' })
+    }
   }
+
+  return maxScroll
 }
 
 /** The ROLES tab: each role under its own rule, one fact per line. */

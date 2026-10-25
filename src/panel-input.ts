@@ -107,7 +107,7 @@ export const transition = (ui: PanelUi, action: Input, model: PanelModel | undef
   }
   if (action.kind === 'text') return { ui }
   const by = action.kind === 'scroll' ? action.by : action.key === 'pageUp' ? -Math.max(1, height - 10) : action.key === 'pageDown' ? Math.max(1, height - 10) : 0
-  if (by !== 0) return { ui: ui.tab === 1 ? ui : { ...ui, scroll: Math.max(0, Math.min(maxScroll, (ui.scroll ?? 0) + by)) } }
+  if (by !== 0) return { ui: { ...ui, scroll: Math.max(0, Math.min(maxScroll, (ui.scroll ?? 0) + by)) } }
   if (action.kind !== 'key') return { ui }
   const { key } = action
   const selected = model.roles.find(role => role.name === ui.selected) ?? model.roles[0]

@@ -226,4 +226,10 @@ test('default selection skips historical and finished plans, honors explicit nam
   assert.equal(findPlan(root, root, '').path, fresh)
   git('add', 'docs/missions/fresh/plan.md')
   assert.equal(findPlan(root, root, '').path, fresh, 'staged plans are still uncommitted')
+  // Committed on its own mission branch, before the first gate writes a log: still open.
+  git('switch', '-qc', 'mission/fresh')
+  git('-c', 'user.name=Probe', '-c', 'user.email=probe@example.invalid', 'commit', '-qm', 'plan')
+  assert.equal(findPlan(root, root, '').path, fresh)
+  git('switch', '-q', 'main')
+  assert.ok('missing' in findPlan(root, root, ''), 'committed elsewhere: historical')
 })

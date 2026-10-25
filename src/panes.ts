@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto'
+import { realpathSync } from 'node:fs'
 import { basename } from 'node:path'
 
 import { mux, Refusal } from './command-context.ts'
@@ -20,8 +21,42 @@ const ids = (out: string): Location => {
 }
 
 export const sessionName = (repo: Repository): string => `troupe-${basename(repo.root).replace(/[^A-Za-z0-9_-]/g, '-')}`
+/**
+ * The tmux pane this command runs in: `$TMUX_PANE`, or, when an agent runs its
+ * tools without the tmux variables (Codex does for escalated commands), the
+ * pane whose shell is one of this process's ancestors.
+ */
+export const callerPane = (r: Runtime, root?: string): string | undefined => {
+  if (r.env.TMUX) return r.env.TMUX_PANE || mux(r, ['display', '-p', '#{pane_id}']).trim()
+  const listed = tmux(['list-panes', '-a', '-F', '#{pane_pid}\t#{pane_id}\t#{pane_current_path}\t#{@troupe-owner}#{@troupe-panel}'], r.run, r.env)
+  if (listed.code !== 0) return undefined
+  const panes = listed.out.split('\n').map(line => line.split('\t')).filter(([pid = '', pane = '']) => /^\d+$/.test(pid) && /^%\d+$/.test(pane))
+  const byPid = new Map(panes.map(([pid = '', pane = '']) => [pid, pane]))
+  let pid = r.pid
+  for (let hop = 0; hop < 32 && pid > 1; hop += 1) {
+    const pane = byPid.get(String(pid))
+    if (pane) return pane
+    const parent = r.run('ps', ['-o', 'ppid=', '-p', String(pid)])
+    pid = parent.code === 0 ? Number(parent.out.trim()) || 0 : 0
+  }
+  // A background shell can be detached from the agent's pane too: then the one
+  // pane troupe did not open that sits at the repository root is the agent's.
+  const atRoot = root === undefined ? [] : panes.filter(([, , path = '', mark = '']) => mark === '' && sameDir(path, root))
+
+  return atRoot.length === 1 ? atRoot[0]?.[1] : undefined
+}
+
+const sameDir = (a: string, b: string): boolean => {
+  try {
+    return realpathSync(a) === realpathSync(b)
+  } catch {
+    return false
+  }
+}
+
 const sessionOf = (r: Runtime, repo: Repository): string | undefined => {
-  if (r.env.TMUX) return mux(r, ['display', '-p', ...(r.env.TMUX_PANE ? ['-t', r.env.TMUX_PANE] : []), '#{session_id}']).trim()
+  const caller = callerPane(r, repo.root)
+  if (caller !== undefined) return mux(r, ['display', '-p', '-t', caller, '#{session_id}']).trim()
   const name = `=${sessionName(repo)}`
   if (tmux(['has-session', '-t', name], r.run, r.env).code !== 0) return undefined
 
