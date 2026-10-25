@@ -31,8 +31,16 @@ export const briefOf = (m: Mission, role: Role, worktree: string, branch: string
 ].join('\n')
 
 /** The matching dialog line from the same recent rows used by screenOf. */
-export const waitsOnOf = (agent: Agent, screen: string): string | undefined => screen.split(/\r?\n/)
-  .filter(line => line.trim() !== '').slice(-15).find(line => agent.screen.waits.some(pattern => new RegExp(pattern, 'm').test(line)))?.trim()
+/** The dialog's line, in the adapter's pattern order: a header anywhere on the visible screen beats a footer. */
+export const waitsOnOf = (agent: Agent, screen: string): string | undefined => {
+  const lines = screen.split(/\r?\n/).filter(line => line.trim() !== '')
+  for (const pattern of agent.screen.waits) {
+    const line = [...lines].reverse().find(one => new RegExp(pattern, 'm').test(one))
+    if (line !== undefined) return line.trim()
+  }
+
+  return undefined
+}
 
 export const liveOf = (r: Runtime, m: Mission, role: Role): Live & { problem?: string } => {
   const opened = m.folded.roles.get(role.name)
