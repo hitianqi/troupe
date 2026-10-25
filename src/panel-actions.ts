@@ -5,6 +5,7 @@ import { ownedPane } from './panes.ts'
 import { send } from './role-commands.ts'
 import { gateTarget } from './panel-input.ts'
 import type { Effect } from './panel-input.ts'
+import { queueAnswer } from './orchestrator.ts'
 import { modelOf } from './model.ts'
 
 /** Re-read at the effect, so a stale frame cannot approve a different plan/gate. */
@@ -31,8 +32,9 @@ export const panelEffect = async (r: Runtime, want: string, effect: Effect): Pro
       if (stages.problems.length > 0) throw new Refusal(stages.problems.join('\n'))
     }
     if (effect.answer === 'change' && !effect.text?.trim()) throw new Refusal('Enter a change first.')
-    append(m.log, 'panel', { ev: 'gate-answer', gate: gate.id, answer: effect.answer, ...(effect.text === undefined ? {} : { text: effect.text }), ...(gate.isPlan ? { plan: m.hash } : {}) })
+    const answer = append(m.log, 'panel', { ev: 'gate-answer', gate: gate.id, answer: effect.answer, ...(effect.text === undefined ? {} : { text: effect.text }), ...(gate.isPlan ? { plan: m.hash } : {}) })
 
+    queueAnswer(r, m, answer)
     return effect.answer === 'approve' ? `Approved ${gate.id}` : `Change sent for ${gate.id}`
   } catch (error) {
     return (error as Error).message

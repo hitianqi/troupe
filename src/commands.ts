@@ -13,6 +13,7 @@ import { available, installSkill, setup, skillTarget } from './setup.ts'
 import { readResult } from './state.ts'
 import { tmux } from './run.ts'
 import { panel } from './panel.ts'
+import { markOrchestrator } from './orchestrator.ts'
 import { createPanel, openPanel } from './panel-open.ts'
 
 const OPTIONS: Record<string, string[]> = {
@@ -138,6 +139,7 @@ const up = (r: Runtime, want: string, orch: string): Reply => {
   const opened = createPane(r, repo, 'mission', repo.root, [orch])
   let panel
   try {
+    markOrchestrator(r, repo.root, opened.pane)
     panel = createPanel(r, repo, want, opened, 50)
     append(logPath(repo.common, name), 'cli', { ev: 'up', session: opened.session, window: opened.window, pane: opened.pane, panel: panel.pane })
   } catch (error) {
