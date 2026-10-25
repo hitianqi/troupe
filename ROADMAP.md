@@ -81,7 +81,7 @@ Built in eleven steps, one PR each (#6–#14 and the clean-up), Codex writing
 the adapters, the commands and the panel's interaction, Claude the format,
 the state, the drawing and the skill, Sonnet the mechanical steps:
 
-- The package (`@troupe/cli`, private until Phase 7; Node 20+; CI).
+- The package (named `@troupe/cli` then, `troupe-cli` now; private until Phase 7; Node 20+; CI).
 - The plan format: one yaml block with `profiles` and `roles` (a role is a
   window), raw per-agent `flags`, `## Role:` sections; `troupe check`.
 - Adapters for Claude Code and Codex, and user adapter files.
@@ -115,8 +115,8 @@ approval is refused.
 
 ### Phase 7 — Open-source release (only if Tianqi decides to open-source)
 
-Delivers: `@troupe/cli` on npm (register the `troupe` org; else
-`troupe-cli`), a single-file binary later for machines without Node;
+Delivers: `troupe-cli` on npm (the `troupe` org and the bare name are
+taken), a single-file binary later for machines without Node;
 license; secret scan; README with a short gif. It is published as a new
 repository with one initial commit from the cleaned `main`; this repository
 and its history stay private.

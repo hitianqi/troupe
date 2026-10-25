@@ -8,10 +8,12 @@ export const INSTALL_MARKER = '.troupe-install.json'
 export const skillTarget = (r: Runtime, agent: string): string => join(r.home, agent === 'claude' ? '.claude/skills/troupe-mission' : '.agents/skills/troupe-mission')
 export const available = (r: Runtime, command: string): boolean => r.run('which', [command]).code === 0
 
+// The package was called @troupe/cli before it took the name troupe-cli; copies marked either way are ours.
+const OWNERS = ['troupe-cli', '@troupe/cli']
 const marked = (path: string): boolean => {
   if (!existsSync(path) || lstatSync(path).isSymbolicLink()) return false
   try {
-    return JSON.parse(readFileSync(join(path, INSTALL_MARKER), 'utf8')).owner === '@troupe/cli'
+    return OWNERS.includes(JSON.parse(readFileSync(join(path, INSTALL_MARKER), 'utf8')).owner)
   } catch {
     return false
   }
@@ -36,7 +38,7 @@ export const installSkill = (r: Runtime, agent: string, remove = false): string 
   const backup = `${staging}-old`
   try {
     cpSync(source, staging, { recursive: true })
-    writeFileSync(join(staging, INSTALL_MARKER), `${JSON.stringify({ owner: '@troupe/cli', source })}\n`)
+    writeFileSync(join(staging, INSTALL_MARKER), `${JSON.stringify({ owner: 'troupe-cli', source })}\n`)
     if (existsSync(target)) renameSync(target, backup)
     try {
       renameSync(staging, target)

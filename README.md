@@ -1,3 +1,5 @@
+<p align="center"><img src="assets/icon-512.png" width="128" alt="troupe icon"></p>
+
 # troupe
 
 One command calls up an agent troupe. The orchestrator writes a plan with

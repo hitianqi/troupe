@@ -1,7 +1,8 @@
 {
-  "name": "@troupe/cli",
+  "name": "troupe-cli",
   "version": "0.6.0",
   "private": true,
+  "license": "MIT",
   "type": "module",
   "description": "One command calls up an agent troupe: each role in its own tmux window and git worktree",
   "bin": {
@@ -12,7 +13,8 @@
   },
   "files": [
     "dist",
-    "skills"
+    "skills",
+    "assets"
   ],
   "scripts": {
     "build": "tsc -p tsconfig.build.json && chmod +x dist/cli.js",
