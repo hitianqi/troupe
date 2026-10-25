@@ -10,6 +10,9 @@ import { mission, runtime } from '../dist/command-context.js'
 import { append, readLog } from '../dist/log.js'
 import { shellOf } from '../dist/run.js'
 import { INSTALL_MARKER } from '../dist/setup.js'
+import { panelEffect } from '../dist/panel-actions.js'
+import { readPanel } from '../dist/panel-model.js'
+import { gateTarget } from '../dist/panel-input.js'
 
 const adapter = `command: fake
 model: [--model, '{model}']
@@ -112,8 +115,8 @@ const world = (t, env = { TROUPE_TMUX_SOCKET: 'unit-socket' }) => {
     }
     if (args[0] === 'set-option') {
       if (args.includes('@troupe-owner')) panes.get(target).owner = args.at(-1)
-      if (args.includes('@troupe-orchestrator')) panes.get(target).orchestrator = args.at(-1)
-      if (args.includes('@troupe-orchestrator-token')) panes.get(target).token = args.at(-1)
+      if (args.includes('@troupe-orchestrator')) panes.get(target).orchestrator = args.includes('-u') ? undefined : args.at(-1)
+      if (args.includes('@troupe-orchestrator-token')) panes.get(target).token = args.includes('-u') ? undefined : args.at(-1)
       if (args.includes('@troupe-panel')) panes.get(target).panel = args.at(-1)
     }
     if (args[0] === 'display') {
@@ -672,4 +675,28 @@ test('callerPane falls back to the one unmarked pane at the repository root', as
   assert.equal(callerPane(runtime({ env: {}, pid: 99, run: listed(`13\t%3\t${root}\t\n14\t%4\t${root}\t\n`) }), root), undefined, 'two candidates: no guess')
   assert.equal(callerPane(runtime({ env: {}, pid: 99, run: listed(`13\t%3\t${root}\t\n`) })), undefined, 'no root: no guess')
   rmSync(root, { recursive: true, force: true })
+})
+
+test('open from caller B replaces caller A and the next panel answer goes only to B', async t => {
+  const w = world(t)
+  for (const id of ['%90', '%91']) w.panes.set(id, { window: '@90', windowName: 'agent', owner: '', screen: '› Ask Codex to do anything', dead: false })
+  const open = pane => execute('open', [], { ...w.r, env: { ...w.r.env, TMUX: 'unit', TMUX_PANE: pane } })
+  assert.equal((await open('%90')).code, 0)
+  assert.equal(w.panes.get('%90').orchestrator, w.root)
+  const panels = [...w.panes.values()].filter(p => p.panel === w.root).length
+  assert.match((await open('%91')).out, /already open/)
+  assert.equal(w.panes.get('%90').orchestrator, undefined)
+  assert.equal(w.panes.get('%90').token, undefined)
+  assert.equal(w.panes.get('%91').orchestrator, w.root)
+  assert.equal([...w.panes.values()].filter(p => p.panel === w.root).length, panels)
+  const token = w.panes.get('%91').token
+  assert.equal((await open('%91')).code, 0)
+  assert.equal(w.panes.get('%91').token, token)
+  await w.call('gate', 'plan', '--no-wait')
+  const reading = readPanel(w.r, 'm1')
+  assert.equal(await panelEffect(w.r, 'm1', { kind: 'answer', gate: gateTarget(reading.model), answer: 'approve' }), 'Approved plan')
+  const pastes = w.calls.filter(c => c.args.includes('paste-buffer'))
+  assert.equal(pastes.length, 1)
+  assert.equal(pastes[0].args.at(-1), '%91')
+  assert.ok(w.calls.filter(c => c.args.includes('send-keys')).every(c => c.args.includes('%91')))
 })

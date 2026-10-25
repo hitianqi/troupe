@@ -13,7 +13,12 @@ type Notice = { gate: string; at: string; text: string; target: Target }
 const pending = new WeakMap<Runtime, Map<string, Notice>>()
 
 export const markOrchestrator = (r: Runtime, root: string, pane: string): void => {
-  if (targets(r, root).some(one => one.pane === pane)) return
+  const marked = targets(r, root)
+  for (const previous of marked.filter(one => one.pane !== pane)) {
+    mux(r, ['set-option', '-p', '-u', '-t', previous.pane, '@troupe-orchestrator'])
+    mux(r, ['set-option', '-p', '-u', '-t', previous.pane, '@troupe-orchestrator-token'])
+  }
+  if (marked.some(one => one.pane === pane)) return
   mux(r, ['set-option', '-p', '-t', pane, '@troupe-orchestrator', root])
   mux(r, ['set-option', '-p', '-t', pane, '@troupe-orchestrator-token', randomUUID()])
 }
