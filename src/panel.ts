@@ -125,7 +125,7 @@ export const panel = async (r: Runtime, options: PanelOptions, terminal: Termina
             if (action.kind === 'key' && (action.key === 'q' || action.key === 'quit')) { finish(); return }
             continue
           }
-          const model = 'model' in shown && usable(width, height) ? shown.model : undefined
+          const model = 'model' in shown ? shown.model : undefined
           const next = transition(ui, action, model, shownFrame.hits, height, shownFrame.maxScroll)
           if (next.ui.message !== ui.message && next.ui.message) messageUntil = r.now() + 4000
           ui = next.ui

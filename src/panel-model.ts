@@ -1,21 +1,31 @@
 import { relative } from 'node:path'
 
-import { mission, workflowStages } from './command-context.ts'
+import { mission, mux, workflowStages } from './command-context.ts'
 import type { Mission, Runtime } from './command-context.ts'
 import { modelOf } from './model.ts'
 import type { PanelModel } from './model.ts'
 import { liveOf } from './role-commands.ts'
 import { rootOf } from './check.ts'
-import { finishPlanning, planningOf } from './panel-planning.ts'
+import { tmux } from './run.ts'
 
 export type Snapshot = { mission: Mission; model: PanelModel }
 export type Reading = Snapshot | { missing: string }
+
+const planning = (r: Runtime, root: string, finish = false): boolean => {
+  const pane = r.env.TMUX_PANE
+  if (!pane) return false
+  const found = tmux(['display', '-p', '-t', pane, '#{@troupe-panel}\t#{@troupe-planning}'], r.run, r.env)
+  const active = found.code === 0 && found.out.trimEnd() === `${root}\t1`
+  if (active && finish) mux(r, ['set-option', '-p', '-u', '-t', pane, '@troupe-planning'])
+
+  return active
+}
 
 /** The commands and panel share the same bytes, hash, stages and live reads. */
 export const readPanel = (r: Runtime, want: string): Reading => {
   try {
     const m = mission(r, want)
-    finishPlanning(r, m.root)
+    planning(r, m.root, true)
     const stages = workflowStages(r, m.plan.workflow)
     const plan = { ...m.plan, problems: [...m.problems, ...stages.problems] }
     const model = modelOf({
@@ -29,7 +39,7 @@ export const readPanel = (r: Runtime, want: string): Reading => {
     const why = (error as Error).message
 
     return { missing: /^no mission under|^no plan at/.test(why)
-      ? planningOf(r, rootOf(r.cwd, r.run)) ? 'Orch is planning…' : 'no mission yet'
+      ? planning(r, rootOf(r.cwd, r.run)) ? 'Orch is planning…' : 'no mission yet'
       : `panel: ${why}` }
   }
 }
