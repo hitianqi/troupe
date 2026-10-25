@@ -1,9 +1,0 @@
- ▐▛███▛█   Claude Code v2.1.306
-▝▜██████▀  Opus 5.5 with high effort · Claude Team
- ▝▝   ▝▝   ~/scratch/troupe/p3-o1/repo
-────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-❯ Try "edit <filepath> to..."
-────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-  claude-opus-5-5 · repo
-  ⏵⏵ auto mode on (shift+tab to cycle) · ← 4 agents
-                  tmux focus-events off · add 'set -g focus-events on' to ~/.tmux.conf and reattach for focus tracking

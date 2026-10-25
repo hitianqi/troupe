@@ -1,7 +1,0 @@
-Verified after cleanup:
-- tmux -L troupe-probe list-sessions: no server (nonzero exit).
-- /private/tmp/troupe-probe/: absent.
-- No /private/tmp/troupe-probe/p5-* project entries remain in ~/.codex/config.toml.
-- Only the automatically generated p5-codex trust section was removed.
-- Config was backed up inside the scratch folder before the surgical edit; backup removed with scratch folder.
-- No personal skill directory or credentials were modified.

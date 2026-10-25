@@ -197,5 +197,3 @@ the plan (`plan.ts`, `yaml.ts`, `touches.ts`), the adapters (`agents.ts`),
 the log and the live reads (`log.ts`, `state.ts`), the commands
 (`commands.ts`, `role-commands.ts`, `command-context.ts`, `panes.ts`,
 `setup.ts`), and the panel (`model.ts`, `draw.ts`, `canvas.ts`, `panel*.ts`).
-`docs/` is the record: the feasibility probes and the missions that built
-troupe's first form, a Claude Code mod.

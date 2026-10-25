@@ -1,2 +1,0 @@
-/private/tmp/troupe-probe/p5-codex trust_level=trusted
-tui.status_line: 'not configured'

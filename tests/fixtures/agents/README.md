@@ -1,4 +1,4 @@
-These two raw captures are copied unchanged from branch `probe/p5-trust`,
-commit `76c47f91c94123c8e47e13de6449d579885e99b9`, under
-`docs/feasibility/`. They keep the adapter tests independent of PR #8.
-The tests also read Phase 4 captures directly from `docs/feasibility/`.
+Raw screen captures of Claude Code 2.1.310 and Codex 0.162.1 in a tmux pane,
+taken by the Phase 4 and Phase 5 probes: ready, working, an approval dialog,
+the trust dialog, a dialog with pasted text, and the agent exited. The adapter
+tests read them unchanged.
