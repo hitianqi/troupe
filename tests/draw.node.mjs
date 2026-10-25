@@ -504,3 +504,41 @@ test('a box with CJK keeps its right border at the right column', () => {
   assert.equal(widthOf(row), 10)
   assert.ok(row.startsWith('│') && row.endsWith('│'))
 })
+
+test('long plan approval cards scroll by keyboard/wheel and keep visible hits aligned on resize', () => {
+  const m = model(APPROVED.slice(0, 1), new Map())
+  const long = { ...m, doneWhen: Array.from({ length: 18 }, (_, i) => `CRITERION-${i} must remain readable across wrapped lines at a normal half-window width.`), decisions: Array.from({ length: 8 }, (_, i) => ({ n: String(i + 1), ask: `DECISION-${i} choose the deployment approach`, recommended: 'Keep the current behavior' })) }
+  let ui = { tab: 1, selected: 'api', scroll: 0 }
+  const seen = new Set()
+  for (const [width, height] of [[73, 48], [58, 30], [96, 40]]) {
+    ui = { ...ui, scroll: 0 }
+    let drawn = draw(long, ui, width, height)
+    assert.ok(drawn.maxScroll > 0)
+    assert.ok(plain(drawn).some(line => line.includes('PgUp/PgDn/wheel')))
+    for (let i = 0; i <= drawn.maxScroll; i++) {
+      drawn = draw(long, { ...ui, scroll: i }, width, height)
+      plain(drawn).forEach(line => { for (const word of line.match(/(?:CRITERION|DECISION)-\d+/g) ?? []) seen.add(word) })
+      for (const hit of drawn.hits.filter(one => one.target.kind === 'key' && ['a', 'c', 'v'].includes(one.target.key))) {
+        assert.ok(hit.row < height - 2, 'a card hit cannot spill into the input/footer')
+        assert.deepEqual(hitAt(drawn.hits, hit.row, hit.col), hit.target)
+        assert.ok(plain(drawn)[hit.row].includes(hit.target.key === 'a' ? 'Approve' : hit.target.key === 'c' ? 'Change' : 'Read the plan'))
+      }
+    }
+    drawn = draw(long, ui, width, height)
+    ui = transition(ui, { kind: 'key', key: 'pageDown' }, long, drawn.hits, height, drawn.maxScroll).ui
+    assert.ok(ui.scroll > 0)
+    const page = ui.scroll
+    ui = transition(ui, { kind: 'scroll', by: -3 }, long, drawn.hits, height, drawn.maxScroll).ui
+    assert.ok(ui.scroll < page)
+    const last = draw(long, { ...ui, scroll: 99999 }, width, height)
+    assert.ok(plain(last).some(line => line.includes('checks clean')))
+    const change = last.hits.find(hit => hit.target.kind === 'key' && hit.target.key === 'c')
+    assert.ok(change)
+    const editing = transition(ui, { kind: 'click', row: change.row, col: change.col }, long, last.hits, height, last.maxScroll).ui
+    assert.equal(editing.input.kind, 'change')
+    assert.ok(plain(draw(long, { ...editing, input: { ...editing.input, text: 'Please revise' } }, width, height))[height - 2].includes('Please revise'))
+    assert.ok(plain(last)[height - 1].includes('approve'))
+  }
+  for (let i = 0; i < 18; i++) assert.ok(seen.has(`CRITERION-${i}`))
+  for (let i = 0; i < 8; i++) assert.ok(seen.has(`DECISION-${i}`))
+})

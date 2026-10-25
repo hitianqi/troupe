@@ -260,7 +260,7 @@ const planSummary = (m: PanelModel, width: number): Line[] => {
 /** The plan gate: the summary, where the plan lives and its checks, the buttons. */
 const planGate = (m: PanelModel, inner: number): { lines: Line[]; buttons: number } => {
   const lines = planSummary(m, inner)
-  lines.push([], [{ text: `${m.planPath}  ·  ${m.hash.replace(/^(sha256:.{4}).*$/, '$1…')}  ·  `, tone: 'dim' }, checksOf(m)], [])
+  lines.push([], ...reflow([{ text: `${m.planPath}  ·  ${m.hash.replace(/^(sha256:.{4}).*$/, '$1…')}  ·  `, tone: 'dim' }, checksOf(m)], inner), [])
   const buttons = lines.length
   const isClean = m.problems.length === 0
   const note = !isClean ? 'fix the plan first' : m.decisions.length > 0 ? 'approving takes the recommendations' : ''
@@ -268,8 +268,10 @@ const planGate = (m: PanelModel, inner: number): { lines: Line[]; buttons: numbe
   lines.push([
     { text: ' a Approve', tone: isClean ? 'ok' : 'dim', bold: true },
     { text: '    c Change…    v Read the plan' },
-    { text: `${' '.repeat(Math.max(1, inner - left.length - note.length))}${note}`, tone: 'dim' },
+    { text: note && inner >= left.length + note.length + 1 ? `${' '.repeat(inner - left.length - note.length)}${note}` : '', tone: 'dim' },
   ])
+
+  if (note && inner < left.length + note.length + 1) lines.push(...reflow([{ text: note, tone: 'dim' }], inner))
 
   return { lines, buttons }
 }
@@ -443,7 +445,9 @@ const detail = (role: RoleView, width: number, room: number): { lines: Line[]; k
 export const draw = (m: PanelModel, ui: Ui, width: number, height: number): Drawn => {
   const c = new Canvas(width, height)
   const hits: Hit[] = []
-  const hit = (row: number, col: number, w: number, h: number, target: Target) => hits.push({ row, col, width: w, height: h, target })
+  const hit = (row: number, col: number, w: number, h: number, target: Target) => {
+    if (row >= 0 && row < height && col >= 0 && col < width) hits.push({ row, col, width: Math.min(w, width - col), height: Math.min(h, height - row), target })
+  }
   const waiting = m.roles.filter(role => role.state === 'waits')
   const needs = waiting.length + (m.gate === undefined ? 0 : 1)
 
@@ -462,19 +466,29 @@ export const draw = (m: PanelModel, ui: Ui, width: number, height: number): Draw
   c.put(2, Math.max(1, width - goal.length - 1), fit(goal, width - 2), { tone: 'dim' })
   c.put(3, 0, '─'.repeat(width), { tone: 'chrome' })
   let row = 4
+  const bottom = height - (ui.input === undefined ? 2 : 3)
+  let maxScroll = 0
 
   // Needs you: an open gate as a box, each waiting role as a line.
   if (m.gate !== undefined && ui.tab === 1) {
     const inner = width - 4
     const { lines, buttons } = m.gate.isPlan ? planGate(m, inner) : askGate(m.gate.ask, inner)
     const title = m.gate.isPlan ? ' ◆ APPROVE THE PLAN ' : ` ◆ ${m.gate.label.toUpperCase()} `
-    c.box(row, 0, width, lines.length + 2, 'warn')
-    c.put(row, 1, `─${title}`, { tone: 'warn', bold: true })
-    lines.forEach((line, index) => c.runs(row + 1 + index, 2, line))
-    hit(row + 1 + buttons, 2, 10, 1, { kind: 'key', key: 'a' })
-    hit(row + 1 + buttons, 15, 10, 1, { kind: 'key', key: 'c' })
-    if (m.gate.isPlan) hit(row + 1 + buttons, 28, 15, 1, { kind: 'key', key: 'v' })
-    row += lines.length + 2
+    const size = Math.max(2, Math.min(lines.length + 2, bottom - row))
+    const room = size - 2
+    maxScroll = Math.max(0, lines.length - room)
+    const from = Math.max(0, Math.min(ui.scroll ?? 0, maxScroll))
+    c.box(row, 0, width, size, 'warn')
+    const cue = maxScroll > 0 ? ` ${from + 1}-${Math.min(from + room, lines.length)}/${lines.length} · PgUp/PgDn/wheel ` : ''
+    c.put(row, 1, cue ? fit(`─${title}`, width - 2 - cue.length) : `─${title}`, { tone: 'warn', bold: true })
+    if (cue) c.put(row, width - cue.length - 1, cue, { tone: 'warn' })
+    lines.slice(from, from + room).forEach((line, index) => c.runs(row + 1 + index, 2, line))
+    if (buttons >= from && buttons < from + room) {
+      hit(row + 1 + buttons - from, 2, 10, 1, { kind: 'key', key: 'a' })
+      hit(row + 1 + buttons - from, 15, 10, 1, { kind: 'key', key: 'c' })
+      if (m.gate.isPlan) hit(row + 1 + buttons - from, 28, 15, 1, { kind: 'key', key: 'v' })
+    }
+    row += size
   }
   if (m.gate !== undefined && ui.tab !== 1) {
     const label = `◆ ${m.gate.label} · `
@@ -486,6 +500,7 @@ export const draw = (m: PanelModel, ui: Ui, width: number, height: number): Draw
     row++
   }
   for (const role of waiting) {
+    if (row >= bottom) break
     c.put(row, 0, spread(`▌ ◆ ${fit(role.name, 7)}waits on you${role.waitsOn ? ` · ${role.waitsOn}` : ''}`, 'o Open window', width - 1), { tone: 'warn' })
     hit(row, 0, width, 1, { kind: 'role', name: role.name })
     hit(row, width - 14, 13, 1, { kind: 'key', key: 'o', role: role.name })
@@ -494,17 +509,15 @@ export const draw = (m: PanelModel, ui: Ui, width: number, height: number): Draw
   row += 1
 
   // The key bar and the input line keep the bottom.
-  const bottom = height - (ui.input === undefined ? 2 : 3)
   if (ui.input !== undefined) c.runs(height - 2, 0, [{ text: ` ${ui.input.label} › `, tone: 'accent' }, { text: ui.input.text }, { text: '▏', tone: 'accent' }])
   else if (ui.message) c.put(height - 2, 0, fit(` ${ui.message}`, width), { tone: 'accent' })
   if (ui.input !== undefined && ui.message) c.put(height - 3, 0, fit(` ${ui.message}`, width), { tone: 'accent' })
   const keys = m.gate !== undefined ? ' a  approve   c  change   v  plan   ↑↓  role   1-5  tabs   ?  help' : ' ↑↓  role   ⏎  detail   o  open   s  send   d  diff   1-5  tabs   ?  help'
   c.put(height - 1, 0, fit(keys, width), { tone: 'dim' })
 
-  let maxScroll = 0
-  maxScroll = ui.tab === 1 ? mission(c, m, ui, row, bottom, hit) : other(c, m, ui, row, bottom, hit)
+  if (row < bottom) maxScroll = ui.tab === 1 ? mission(c, m, ui, row, bottom, hit) : other(c, m, ui, row, bottom, hit)
   if (ui.help) {
-    const lines = ['↑↓ / j k  select role     Enter  detail', '1-5 / Tab  tabs           o  open role pane', 's  send to role           d  diff    v  plan', 'PgUp/PgDn / wheel  scroll tabs 2-5', 'a  approve gate           c  type a change', 'Enter  submit input       Esc  cancel input', '? / Esc  close help       q / Ctrl-C  quit']
+    const lines = ['↑↓ / j k  select role     Enter  detail', '1-5 / Tab  tabs           o  open role pane', 's  send to role           d  diff    v  plan', 'PgUp/PgDn / wheel  scroll content', 'a  approve gate           c  type a change', 'Enter  submit input       Esc  cancel input', '? / Esc  close help       q / Ctrl-C  quit']
     const w = Math.min(60, width - 4)
     const h = Math.min(lines.length + 2, height - 2)
     const top = Math.max(0, Math.floor((height - h) / 2))
