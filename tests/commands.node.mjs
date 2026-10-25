@@ -80,6 +80,7 @@ const world = (t, env = { TROUPE_TMUX_SOCKET: 'unit-socket' }) => {
     calls.push({ command, args: [...raw], ...options })
     const args = command === 'tmux' && raw[0] === '-L' ? raw.slice(2) : raw
     if (command === 'which') return yes(`/fake/${args[0]}\n`)
+    if (command === 'ps') return no()
     if (command === 'git') {
       if (args.includes('--show-toplevel')) return yes(root)
       if (args.includes('--git-common-dir')) return yes('.git')
@@ -120,6 +121,7 @@ const world = (t, env = { TROUPE_TMUX_SOCKET: 'unit-socket' }) => {
       return p ? yes(`${target}\t${p.dead ? 1 : 0}\t${p.owner}`) : no()
     }
     if (args[0] === 'capture-pane') return panes.has(target) ? yes(panes.get(target).screen) : no()
+    if (args[0] === 'list-panes' && args.at(-1).includes('#{pane_pid}')) return yes('')
     if (args[0] === 'list-panes' && args.at(-1).includes('@troupe-panel')) return yes([...panes].map(([id, p]) => `${id}\t${p.dead ? 1 : 0}\t${p.panel ?? ''}`).join('\n'))
     if (args[0] === 'list-panes') return yes([...panes].map(([id, p]) => `${p.windowName}\t$1 ${p.window} ${id}`).join('\n'))
     if (args[0] === 'load-buffer') afterLoad?.()
@@ -621,4 +623,17 @@ test('up chooses the available orchestrator, preferring claude, and an explicit 
     assert.ok(w.calls.some(c => c.args.includes('new-session') && c.args.at(-1) === shellOf([expected])))
     assert.ok(result.out.includes(`${expected} orchestrator`))
   }
+})
+
+test('callerPane finds the pane through process ancestry when an agent strips the tmux variables', async () => {
+  const { callerPane } = await import('../dist/panes.js')
+  const parents = { 4242: 300, 300: 500, 500: 1 }
+  const run = (command, args) => {
+    if (command === 'tmux' && args.includes('list-panes')) return { code: 0, out: '900 %3\n500 %7\n', err: '' }
+    if (command === 'ps') return { code: 0, out: `${parents[args.at(-1)] ?? 1}\n`, err: '' }
+    return { code: 1, out: '', err: 'unexpected' }
+  }
+  assert.equal(callerPane(runtime({ env: {}, pid: 4242, run })), '%7')
+  assert.equal(callerPane(runtime({ env: {}, pid: 77, run })), undefined)
+  assert.equal(callerPane(runtime({ env: { TMUX: '/tmp/s,1,0', TMUX_PANE: '%9' }, pid: 4242, run })), '%9')
 })

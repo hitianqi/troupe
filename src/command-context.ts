@@ -24,6 +24,7 @@ export const PACKAGE_ROOT = fileURLToPath(new URL('../', import.meta.url))
 export type Runtime = {
   cwd: string
   platform: NodeJS.Platform
+  pid: number
   home: string
   packageRoot: string
   env: NodeJS.ProcessEnv
@@ -42,7 +43,7 @@ export const runtime = (overrides: Partial<Runtime> = {}): Runtime => {
   const env = overrides.env ?? process.env
 
   return {
-    cwd: process.cwd(), platform: process.platform, home: homedir(), packageRoot: PACKAGE_ROOT, env,
+    cwd: process.cwd(), platform: process.platform, pid: process.pid, home: homedir(), packageRoot: PACKAGE_ROOT, env,
     run: (command, args, options) => run(command, args, { ...options, env }),
     inputTTY: !!process.stdin.isTTY, outputTTY: !!process.stdout.isTTY,
     input: async () => {
