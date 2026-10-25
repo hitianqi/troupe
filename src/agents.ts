@@ -62,7 +62,8 @@ export const AGENTS: Record<string, Agent> = Object.assign(Object.create(null) a
     ],
     prompt: 'last-arg',
     screen: {
-      waits: ['Trust this folder\\?', 'Would you like to run the following command\\?'],
+      // The footer stays in view when a long command pushes the header out of the tail.
+      waits: ['Trust this folder\\?', 'Would you like to run the following command\\?', '^\\s*Press enter to confirm or esc to cancel$'],
       working: ['esc to interrupt'],
       ready: ['^› Ask Codex to do anything$'],
     },

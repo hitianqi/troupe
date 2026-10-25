@@ -47,6 +47,19 @@ test('screen matching uses the last 15 nonempty lines, preserves indentation, an
   assert.equal(screenOf(AGENTS.claude, ' ❯\u00a0'), 'unknown')
 })
 
+test('a long Codex approval reads as waits from its footer, and the dialog line is its header', async () => {
+  const { waitsOnOf } = await import('../dist/role-commands.js')
+  const command = Array.from({ length: 20 }, (_, i) => `  cat >> notes.txt <<'EOF' # line ${i}`).join('\n')
+  const dialog = `Would you like to run the following command?\n\n${command}\n\n› 1. Yes, proceed (y)\n  2. No, and tell Codex what to do differently (esc)\n\n  Press enter to confirm or esc to cancel`
+  assert.equal(screenOf(AGENTS.codex, dialog), 'waits')
+  assert.equal(waitsOnOf(AGENTS.codex, dialog), 'Would you like to run the following command?')
+  // Header scrolled off the visible screen: the footer is the summary.
+  assert.equal(waitsOnOf(AGENTS.codex, dialog.split('\n').slice(3).join('\n')), 'Press enter to confirm or esc to cancel')
+  // An old dialog in the output above a current prompt does not make it wait.
+  const filler = Array.from({ length: 15 }, (_, i) => `output ${i}`).join('\n')
+  assert.equal(screenOf(AGENTS.codex, `${dialog}\n${filler}\n› Ask Codex to do anything`), 'ready')
+})
+
 test('argvOf pins the requested model, effort and raw role flags for each harness', () => {
   const prompt = 'Read the brief in /a path/brief.md and follow it.'
   const claude = { model: 'haiku', effort: 'low', flags: ['--permission-mode', 'manual'] }
