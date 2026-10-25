@@ -171,11 +171,13 @@ test('Codex Git grants stay within its index, shared objects and mission refs', 
   assert.ok(dirs.every(existsSync))
   assert.ok(!dirs.includes(w.m.common))
   assert.ok(!dirs.includes(join(w.m.common, 'refs/heads')))
-  for (const flags of [['-s', 'read-only'], ['--sandbox=workspace-write', '-s', 'read-only'], ['-s', 'workspace-write', '--dangerously-bypass-approvals-and-sandbox']]) {
+  for (const flags of [['-s', 'read-only'], ['--sandbox=workspace-write', '-s', 'read-only'], ['-s=workspace-write', '--sandbox=read-only'], ['--sandbox=workspace-write', '-s=read-only'], ['-s', 'workspace-write', '--dangerously-bypass-approvals-and-sandbox']]) {
     assert.deepEqual(gitDirsOf(w.r, w.m, { ...role, flags }, w.path), [])
   }
   assert.deepEqual(gitDirsOf(w.r, w.m, { ...role, agent: 'claude' }, w.path), [])
-  assert.equal(gitDirsOf(w.r, w.m, { ...role, flags: ['--sandbox=workspace-write'] }, w.path).length, 4)
+  for (const flags of [['-s', 'workspace-write'], ['--sandbox', 'workspace-write'], ['-s=workspace-write'], ['--sandbox=workspace-write'], ['--sandbox=read-only', '-s=workspace-write']]) {
+    assert.deepEqual(gitDirsOf(w.r, w.m, { ...role, flags }, w.path), dirs)
+  }
 })
 
 test('teardown protects unmerged commits, tracked edits and untracked files; force preserves MR head and log', async t => {

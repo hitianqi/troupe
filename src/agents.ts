@@ -74,8 +74,14 @@ export const AGENTS: Record<string, Agent> = Object.assign(Object.create(null) a
 export const badgeOf = (name: string, agent: Agent | undefined = AGENTS[name]): Badge =>
   agent?.badge ?? { glyph: validBadgeGlyph([...name][0] ?? '') ? [...name][0] ?? '?' : '?', tone: 'dim' }
 
-/** Whether `flags` hold `flag`, alone or as `flag=value`. */
-const sets = (flags: string[], flag: string): boolean => flags.some(one => one === flag || one.startsWith(`${flag}=`))
+/** Both short and long options accept a separate value or `flag=value`. */
+export const flagsOf = (flags: string[]): { name: string; value: string | undefined }[] => flags.map((flag, i) => {
+  const equals = flag.indexOf('=')
+
+  return equals < 0 ? { name: flag, value: flags[i + 1] } : { name: flag.slice(0, equals), value: flag.slice(equals + 1) }
+})
+
+const sets = (flags: string[], flag: string): boolean => flagsOf(flags).some(one => one.name === flag)
 
 /** The permission settings `flags` leave unset, each as its flags joined with " or ". */
 export const unsetPermission = (agent: Agent, flags: string[]): string[] =>
