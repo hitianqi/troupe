@@ -6,19 +6,23 @@ import type { Mission, Runtime } from './command-context.ts'
 import { fold, readLog } from './log.ts'
 import type { Logged } from './log.ts'
 import { tmux } from './run.ts'
-import { afterMrApproval } from './gate-message.ts'
+
+export const afterMrApproval = (mission: string): string => `Open the PR, then run troupe stage teardown -m ${mission} and troupe teardown -m ${mission} before reporting completion.`
 
 type Target = { pane: string; token: string }
 type Notice = { gate: string; at: string; text: string; target: Target }
 const pending = new WeakMap<Runtime, Map<string, Notice>>()
 
 export const markOrchestrator = (r: Runtime, root: string, pane: string): void => {
-  const marked = targets(r, root)
-  for (const previous of marked.filter(one => one.pane !== pane)) {
-    mux(r, ['set-option', '-p', '-u', '-t', previous.pane, '@troupe-orchestrator'])
-    mux(r, ['set-option', '-p', '-u', '-t', previous.pane, '@troupe-orchestrator-token'])
+  let current = false
+  for (const marked of targets(r, root)) {
+    if (marked.pane === pane) current = true
+    else {
+      mux(r, ['set-option', '-p', '-u', '-t', marked.pane, '@troupe-orchestrator'])
+      mux(r, ['set-option', '-p', '-u', '-t', marked.pane, '@troupe-orchestrator-token'])
+    }
   }
-  if (marked.some(one => one.pane === pane)) return
+  if (current) return
   mux(r, ['set-option', '-p', '-t', pane, '@troupe-orchestrator', root])
   mux(r, ['set-option', '-p', '-t', pane, '@troupe-orchestrator-token', randomUUID()])
 }

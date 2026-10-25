@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { appendFileSync, existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, rmdirSync, writeFileSync } from 'node:fs'
 import { basename, dirname, join, resolve } from 'node:path'
 
-import { argvOf, flagsOf, screenOf } from './agents.ts'
+import { argvOf, optionOf, screenOf } from './agents.ts'
 import type { Agent } from './agents.ts'
 import { clean, git, mission, mux, Refusal, within } from './command-context.ts'
 import type { Mission, Reply, Runtime } from './command-context.ts'
@@ -109,7 +109,7 @@ const prepareWorktree = (r: Runtime, m: Mission, worktree: string, branch: strin
 /** Git needs its own index plus shared objects and this mission's loose refs/reflogs. */
 export const gitDirsOf = (r: Runtime, m: Mission, role: Role, worktree: string): string[] => {
   const agent = m.agents[role.agent]
-  const mode = flagsOf(role.flags).filter(flag => flag.name === '-s' || flag.name === '--sandbox').at(-1)?.value
+  const mode = optionOf(role.flags, ['-s', '--sandbox'])?.value
   if (agent === undefined || basename(agent.command) !== 'codex' || mode !== 'workspace-write' || role.flags.includes('--dangerously-bypass-approvals-and-sandbox')) return []
   const dirs = [git(r, worktree, ['rev-parse', '--absolute-git-dir']).trim(), join(m.common, 'objects'),
     join(m.common, 'refs/heads/role', m.name), join(m.common, 'logs/refs/heads/role', m.name)]
@@ -136,9 +136,10 @@ export const dispatch = async (r: Runtime, initial: Mission, name: string): Prom
   const base = previous?.base ?? git(r, m.root, ['rev-parse', '--verify', '--end-of-options', `${m.plan.base || 'HEAD'}^{commit}`]).trim()
   prepareWorktree(r, m, worktree, branch, base)
   const brief = join(worktree, '.troupe/brief.md')
+  const briefText = briefOf(m, role, worktree, branch)
   mkdirSync(dirname(brief), { recursive: true })
-  writeFileSync(brief, briefOf(m, role, worktree, branch))
-  writeFileSync(join(dirname(m.log), `brief-${name}.md`), briefOf(m, role, worktree, branch))
+  writeFileSync(brief, briefText)
+  writeFileSync(join(dirname(m.log), `brief-${name}.md`), briefText)
   const current = mission(r, m.name)
   approved(current)
   if (current.hash !== m.hash) throw new Refusal('the plan changed during dispatch; retry after approving it')

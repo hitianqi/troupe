@@ -74,18 +74,21 @@ export const AGENTS: Record<string, Agent> = Object.assign(Object.create(null) a
 export const badgeOf = (name: string, agent: Agent | undefined = AGENTS[name]): Badge =>
   agent?.badge ?? { glyph: validBadgeGlyph([...name][0] ?? '') ? [...name][0] ?? '?' : '?', tone: 'dim' }
 
-/** Both short and long options accept a separate value or `flag=value`. */
-export const flagsOf = (flags: string[]): { name: string; value: string | undefined }[] => flags.map((flag, i) => {
-  const equals = flag.indexOf('=')
+/** The last matching option, accepting a separate value or `flag=value`. */
+export const optionOf = (flags: string[], names: string[]): { value?: string } | undefined => {
+  for (let i = flags.length - 1; i >= 0; i -= 1) {
+    for (const name of names) {
+      if (flags[i] === name) return { value: flags[i + 1] }
+      if (flags[i]?.startsWith(`${name}=`)) return { value: flags[i]?.slice(name.length + 1) }
+    }
+  }
 
-  return equals < 0 ? { name: flag, value: flags[i + 1] } : { name: flag.slice(0, equals), value: flag.slice(equals + 1) }
-})
-
-const sets = (flags: string[], flag: string): boolean => flagsOf(flags).some(one => one.name === flag)
+  return undefined
+}
 
 /** The permission settings `flags` leave unset, each as its flags joined with " or ". */
 export const unsetPermission = (agent: Agent, flags: string[]): string[] =>
-  agent.permission.filter(setting => !setting.some(flag => sets(flags, flag))).map(setting => setting.join(' or '))
+  agent.permission.filter(setting => optionOf(flags, setting) === undefined).map(setting => setting.join(' or '))
 
 const expand = (template: string[], key: string, value: string): string[] =>
   value === '' ? [] : template.map(arg => arg.replaceAll(`{${key}}`, () => value))

@@ -13,8 +13,7 @@ import { available, installSkill, setup, skillTarget } from './setup.ts'
 import { readResult } from './state.ts'
 import { tmux } from './run.ts'
 import { panel } from './panel.ts'
-import { markOrchestrator } from './orchestrator.ts'
-import { afterMrApproval } from './gate-message.ts'
+import { afterMrApproval, markOrchestrator } from './orchestrator.ts'
 import { createPanel, openPanel } from './panel-open.ts'
 
 const OPTIONS: Record<string, string[]> = {

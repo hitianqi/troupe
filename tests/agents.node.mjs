@@ -6,7 +6,7 @@ import { dirname, join } from 'node:path'
 import { test } from 'node:test'
 import { fileURLToPath } from 'node:url'
 
-import { AGENTS, argvOf, flagsOf, badgeOf, validBadgeGlyph, loadAgents, screenOf, unsetPermission } from '../dist/agents.js'
+import { AGENTS, argvOf, badgeOf, validBadgeGlyph, loadAgents, optionOf, screenOf, unsetPermission } from '../dist/agents.js'
 import { check } from '../dist/check.js'
 
 const capture = name => readFileSync(new URL(`./fixtures/agents/${name}.txt`, import.meta.url), 'utf8')
@@ -228,7 +228,7 @@ test('argvOf adds each writable Git directory as a separate flag before the prom
 test('permission validation and sandbox selection share short/long equals parsing', () => {
   for (const flags of [['-s', 'workspace-write'], ['--sandbox', 'workspace-write'], ['-s=workspace-write'], ['--sandbox=workspace-write']]) {
     assert.deepEqual(unsetPermission(AGENTS.codex, ['-a=on-request', ...flags]), [])
-    assert.equal(flagsOf(flags).filter(flag => ['-s', '--sandbox'].includes(flag.name)).at(-1).value, 'workspace-write')
+    assert.equal(optionOf(flags, ['-s', '--sandbox']).value, 'workspace-write')
   }
-  assert.deepEqual(flagsOf(['--model=a=b']), [{ name: '--model', value: 'a=b' }])
+  assert.deepEqual(optionOf(['--model=a=b'], ['--model']), { value: 'a=b' })
 })
