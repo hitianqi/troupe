@@ -56,6 +56,9 @@ you merged before it.
   permission (Claude Code: `--permission-mode acceptEdits`; Codex:
   `-a on-request -s workspace-write`). Propose; the person decides at the
   gate. Propose a bypass mode only when the person asks for one.
+  For Codex `workspace-write`, dispatch adds `--add-dir` for its Git index,
+  shared objects and the mission's refs/reflogs. This permits commits, not
+  writes to the main branch; roles still share the mission refs and objects.
 - **Each role's text** is its `## Role: <name>` section: what to do, what
   not to change, how to prove it works. Builders also take
   `text: workflow:builder`.

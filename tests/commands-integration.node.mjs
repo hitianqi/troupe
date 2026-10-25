@@ -10,6 +10,7 @@ import { execute } from '../dist/commands.js'
 import { mission, runtime } from '../dist/command-context.js'
 import { append, readLog } from '../dist/log.js'
 import { tmux } from '../dist/run.js'
+import { gitDirsOf } from '../dist/role-commands.js'
 
 test('real scratch tmux: open marks one panel, keeps focus, and is a no-op the second time', { skip: spawnSync('tmux', ['-V']).status !== 0, timeout: 15000 }, async t => {
   const root = mkdtempSync(join(tmpdir(), 'troupe-open-integration-'))
@@ -149,6 +150,24 @@ const cleanupRepo = t => {
   const events = () => readLog(m.log).events
   return { root, git, r, m, path, call, events }
 }
+
+test('Codex Git grants stay within its index, shared objects and mission refs', t => {
+  const w = cleanupRepo(t)
+  const role = { ...w.m.plan.roles[0], agent: 'codex', flags: ['-a', 'on-request', '-s', 'workspace-write'] }
+  const dirs = gitDirsOf(w.r, w.m, role, w.path)
+  assert.deepEqual(dirs, [
+    w.git('-C', w.path, 'rev-parse', '--absolute-git-dir').trim(),
+    join(w.m.common, 'objects'), join(w.m.common, 'refs/heads/role/m1'), join(w.m.common, 'logs/refs/heads/role/m1'),
+  ])
+  assert.ok(dirs.every(existsSync))
+  assert.ok(!dirs.includes(w.m.common))
+  assert.ok(!dirs.includes(join(w.m.common, 'refs/heads')))
+  for (const flags of [['-s', 'read-only'], ['--sandbox=workspace-write', '-s', 'read-only'], ['-s', 'workspace-write', '--dangerously-bypass-approvals-and-sandbox']]) {
+    assert.deepEqual(gitDirsOf(w.r, w.m, { ...role, flags }, w.path), [])
+  }
+  assert.deepEqual(gitDirsOf(w.r, w.m, { ...role, agent: 'claude' }, w.path), [])
+  assert.equal(gitDirsOf(w.r, w.m, { ...role, flags: ['--sandbox=workspace-write'] }, w.path).length, 4)
+})
 
 test('teardown protects unmerged commits, tracked edits and untracked files; force preserves MR head and log', async t => {
   const w = cleanupRepo(t)

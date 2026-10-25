@@ -85,11 +85,12 @@ const expand = (template: string[], key: string, value: string): string[] =>
   value === '' ? [] : template.map(arg => arg.replaceAll(`{${key}}`, () => value))
 
 /** An argv array, never shell text; omitted role settings add no arguments. */
-export const argvOf = (agent: Agent, role: Pick<Role, 'model' | 'effort' | 'flags'>, prompt: string): string[] => [
+export const argvOf = (agent: Agent, role: Pick<Role, 'model' | 'effort' | 'flags'>, prompt: string, writable: string[] = []): string[] => [
   agent.command,
   ...expand(agent.model, 'model', role.model),
   ...expand(agent.effort, 'effort', role.effort),
   ...role.flags,
+  ...writable.flatMap(path => ['--add-dir', path]),
   prompt,
 ]
 
