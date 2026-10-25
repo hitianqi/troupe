@@ -42,31 +42,26 @@ reviewer.
 
 Do not mention effort in the ask. The skill's template profiles say
 `effort: high`, so the first plan comes out high (it did in both earlier
-runs). At the plan gate, press `c` and type:
+runs). While the plan gate is open, tell the orchestrator in its own window:
 
 > It's a tiny page. Medium effort for every role is plenty.
 
-The plan comes back with five `■■□□□ medium`; press `a`. If the
-orchestrator happens to pick medium already, change something else that
+It edits the plan and opens the gate again; the panel's approval card
+refreshes with five `■■□□□ medium`; press `a` in the panel. This shows that
+talking to the orchestrator is all it takes, and the panel follows. If the
+orchestrator happens to pick medium already, ask for something else that
 reads well: "Put review on gpt-6.1-sol."
 
-## Fix before shooting (or the take shows workarounds)
+## Fixed before shooting
 
-- **#27** panel answers must wake the orchestrator; otherwise the person has
-  to type "Approved. Go." after every gate, and a cut hides a real gap.
-- **#29** brief inside the worktree, so the Claude role does not stop to
-  read it.
-- **#28** Codex roles' git writes (or launch the roles with full-access
-  flags, below).
-- **#30** teardown after the PR (or keep "Tear it down." on camera; it reads
-  as natural).
+#27 (panel answers wake the orchestrator), #28 (Codex roles' git writes),
+#29 (brief inside the worktree), #30 (teardown after the PR) and #32 (panel
+planning state, long approval cards) are merged (#31, #33).
 
 Keep exactly one "waits on you" moment: the Claude `style` role's first-run
 trust dialog in the new repo. Everything else should not prompt, so: the
 orchestrator in full access (Codex `/permissions` → Full Access before the
-take, or start it with `--dangerously-bypass-approvals-and-sandbox`), and
-roles with bypass flags requested in the ask if #28 is not fixed ("roles run
-with full permissions").
+take, or start it with `--dangerously-bypass-approvals-and-sandbox`).
 
 ## How to record
 
@@ -85,15 +80,20 @@ The panel is half a laptop terminal (about 73×48 cells, roughly 3:4), and
 most beats are about the panel, not the orchestrator. Three ways out, used
 together:
 
-1. **Record a second, wide panel.** The panel only reads the log and tmux, so
-   during take A open a second Terminal at a 16:9 size (about 190×54) running
-   `troupe panel -m <mission>`, and record it as its own `.cast`. At that
+1. **Record a second, wide panel.** The panel only reads the log and tmux,
+   and it waits for a mission before one exists. So before take A starts,
+   open a second Terminal at a 16:9 size (about 190×54) in the demo repo,
+   run `troupe panel` (no `-m`: it follows the newest open mission and shows
+   the plan as soon as the orchestrator writes it), and record it as its own
+   `.cast` for the whole take. Nobody needs to touch it: it is a second
+   camera on the same state as the half-width panel beside the
+   orchestrator. At that
    width the MISSION tab lays out landscape: the left column, FLOW with the
    reviewer in its side lane, and the selected role's live window beside it.
-   Press the panel keys (`c`, `a`, clicking roles) in this wide panel; they
-   write the same log. `o` switches the tmux client that shows the roles, so
-   film `o` in the orchestrator's terminal, not here. This is the main source
-   for 15–46 s.
+   For clicking through roles, either click in this wide panel (selection
+   is per panel) or in the half-width one; `o` switches the tmux client that
+   shows the roles, so film `o` in the orchestrator's terminal. This is the
+   main source for 15–46 s.
 2. **Pair the panel with what it points at.** Where a beat is "the panel
    shows X", put the half-width panel on one side and the thing on the other:
    the plan gate beside the orchestrator writing the plan, the yellow
@@ -112,7 +112,7 @@ The orchestrator appears only where it acts: typing the ask, the PR link.
 | 0–4 s | pain | several terminals each running an agent, one stuck on a permission dialog nobody sees (staged, or text on the dark stage) | "Five agents. Five terminals. Who's stuck?" |
 | 4–6 s | brand | icon (Signal, faded navy, level 2) + TROUPE wordmark | — |
 | 6–15 s | three ways to start | one frame, three rows playing at once: a plain terminal typing `troupe up`, Claude Code typing `/troupe-mission …`, Codex typing `$troupe-mission …`, each as a typewriter; then each row's panel slides in | "Start from the CLI, or from the agent you already have open." |
-| 15–22 s | plan first | plan gate in the panel, zoom on the effort cells (high) → `c` "Medium is plenty" → revised gate (medium) → `a` | "A plan first. Change it, then approve." |
+| 15–22 s | plan first | approval card in the panel, zoom on the effort cells (high) → the person tells the orchestrator "Medium is plenty" → the card refreshes (medium) → `a` | "A plan first. Just tell it what to change." |
 | 22–34 s | real windows | in the MISSION panel, click each role in FLOW; the right column scrolls to its live window; pick one and press `o` → the `roles` window, tiled panes, Claude and Codex side by side | "Every role in its own window, worktree and branch." |
 | 34–40 s | who's waiting | `style` turns yellow (trust dialog) → `o` → answer → back | "It tells you who's waiting on you." |
 | 40–46 s | the whole picture | ROLES tab (ctx bars, tokens, effort cells), FLOW edges to the reviewer turning green | "Context, tokens, reviews, live." |
@@ -121,8 +121,9 @@ The orchestrator appears only where it acts: typing the ask, the PR link.
 
 ## Takes
 
-- **A, full run** (Codex orchestrator, full access): ask → plan gate (high)
-  → change → approve → dispatch → click through roles + `o` → trust dialog →
+- **A, full run** (Codex orchestrator, full access; the wide panel recording
+  from the start): ask → plan gate (high) → change by talking to the
+  orchestrator → approve → dispatch → click through roles + `o` → trust dialog →
   ROLES tab, PLAN tab → review → MR → PR → teardown. Covers 15–54 s.
 - **B, C, D, the three starts**: a plain terminal with `troupe up`, Claude
   Code with `/troupe-mission <ask>`, Codex with `$troupe-mission <ask>`; each
