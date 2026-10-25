@@ -104,7 +104,9 @@ A small real mission on this Mac: one Claude Code orchestrator, one Codex
 role and one Claude Code role, from `troupe up` to the MR gate; then the same
 with a Codex orchestrator. Fix what it finds.
 
-Done: slimmed the commands' guards to pane-id/owner matching; removed session bookkeeping and command locks.
+Then slim the commands' guards. Done: a pane is troupe's when its id and its
+`@troupe-owner` marker match the log; `session.json` and the command lock
+are gone.
 
 Done when: both runs reach the MR gate with the person only approving,
 answering dialogs and talking to roles, and `troupe dispatch` before
