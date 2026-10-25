@@ -55,8 +55,7 @@ const world = t => {
     assert.deepEqual(raw.slice(0, 2), ['-L', 'panel-test'])
     const args = raw.slice(2)
     if (args[0] === 'display') {
-      if (args.at(-1) === '#{socket_path}') return yes('/unit/socket')
-      return pane.exists ? yes(`%1\t${pane.dead ? 1 : 0}\t$1\t@1\t${pane.owner}`) : { code: 1, out: '', err: "can't find pane" }
+      return pane.exists ? yes(`%1\t${pane.dead ? 1 : 0}\t${pane.owner}`) : { code: 1, out: '', err: "can't find pane" }
     }
     if (args[0] === 'capture-pane') return yes(pane.screen)
     return yes()
@@ -68,7 +67,7 @@ const world = t => {
   const launch = () => {
     const worktree = join(root, '.troupe/worktrees/m1/api')
     mkdirSync(worktree, { recursive: true })
-    append(log, 'cli', { ev: 'dispatch', role: 'api', agent: 'fake', session: '$1', window: '@1', pane: '%1', owner: 'ours', socket: 'panel-test', server: '/unit/socket', worktree, branch: 'role/m1/api', base: 'abc', argv: ['fake'] })
+    append(log, 'cli', { ev: 'dispatch', role: 'api', agent: 'fake', session: '$1', window: '@1', pane: '%1', owner: 'ours', socket: 'old-socket', server: '/old/socket', worktree, branch: 'role/m1/api', base: 'abc', argv: ['fake'] })
   }
 
   return { root, path, log, write, pane, calls, output, r, read, openGate, launch, events: () => readLog(log).events, advance: ms => { clock += ms } }
@@ -225,8 +224,8 @@ test('send dead key and effects use command refusals; open selects only a logged
     assert.match(await panelEffect(w.r, 'm1', { kind: 'send', role: 'api', text: 'hello' }), /nothing was typed/)
   }
   assert.ok(!w.calls.some(c => c.args.includes('paste-buffer')))
-  w.pane.owner = 'foreign'
-  assert.match(await panelEffect(w.r, 'm1', { kind: 'open', role: 'api' }), /ownership/)
+  w.pane.owner = 'other'
+  assert.match(await panelEffect(w.r, 'm1', { kind: 'open', role: 'api' }), /pane is gone/)
   assert.ok(!w.calls.some(c => c.args.includes('select-pane')))
   w.pane.owner = 'ours'
   assert.equal(await panelEffect(w.r, 'm1', { kind: 'open', role: 'api' }), 'Opened api')

@@ -4,7 +4,7 @@ import { dirname, join, resolve } from 'node:path'
 
 import { argvOf, screenOf } from './agents.ts'
 import type { Agent } from './agents.ts'
-import { clean, git, locked, mission, mux, Refusal, within } from './command-context.ts'
+import { clean, git, mission, mux, Refusal, within } from './command-context.ts'
 import type { Mission, Reply, Runtime } from './command-context.ts'
 import { append, isApproved } from './log.ts'
 import type { Live } from './model.ts'
@@ -50,7 +50,6 @@ export const liveOf = (r: Runtime, m: Mission, role: Role): Live & { problem?: s
       problem = (error as Error).message
     }
   }
-  if (pane?.foreign) problem = 'recorded pane ownership cannot be verified'
   const lines = (pane?.screen ?? '').split(/\r?\n/)
   while (lines.at(-1)?.trim() === '') lines.pop()
   const waitsOn = pane === undefined || agent === undefined ? undefined : waitsOnOf(agent, pane.screen)
@@ -99,7 +98,7 @@ const prepareWorktree = (r: Runtime, m: Mission, worktree: string, branch: strin
   git(r, m.root, ['worktree', 'add', ...(hasBranch ? [] : ['-b', branch]), worktree, hasBranch ? branch : base])
 }
 
-export const dispatch = async (r: Runtime, initial: Mission, name: string): Promise<Reply> => locked(initial, () => {
+export const dispatch = async (r: Runtime, initial: Mission, name: string): Promise<Reply> => {
   const m = mission(r, initial.name)
   approved(m)
   const role = m.plan.roles.find(role => role.name === name)
@@ -107,7 +106,6 @@ export const dispatch = async (r: Runtime, initial: Mission, name: string): Prom
   const previous = m.folded.roles.get(name)
   if (previous !== undefined && !previous.closed) {
     const pane = ownedPane(r, previous)
-    if (pane.foreign) throw new Refusal(`role ${name}: recorded pane ownership cannot be verified`)
     if (pane.alive && !pane.dead) throw new Refusal(`role ${name} is already open in ${previous.pane}`)
   }
   const states = new Map(statusOf(r, m).roles.map(role => [role.name, role.state]))
@@ -126,13 +124,13 @@ export const dispatch = async (r: Runtime, initial: Mission, name: string): Prom
   if (existsSync(oldResult)) renameSync(oldResult, join(dirname(m.log), `result-${name}-${randomUUID()}.md`))
   // A retained dead pane is still troupe's; remove it before a replacement.
   if (previous !== undefined && !previous.closed && ownedPane(r, previous).alive) mux(r, ['kill-pane', '-t', previous.pane])
-  const window = rolesWindow(r, { ...m, folded: { ...m.folded, roles: new Map([...m.folded.roles].filter(([key]) => key !== name)) } })
+  const window = rolesWindow(r, m)
   const agent = m.agents[role.agent]
   if (agent === undefined) throw new Refusal(`unknown agent: ${role.agent}`)
   const argv = argvOf(agent, role, `Read the brief in ${brief} and follow it.`)
   const opened = createPane(r, m, name, worktree, argv, window, false, 'roles')
   try {
-    append(m.log, 'cli', { ev: 'dispatch', role: name, ...opened, worktree, branch, base, argv, agent: role.agent, socket: r.env.TROUPE_TMUX_SOCKET ?? '' })
+    append(m.log, 'cli', { ev: 'dispatch', role: name, ...opened, worktree, branch, base, argv, agent: role.agent })
   } catch (error) {
     if (ownedPane(r, opened).alive) tmux(['kill-pane', '-t', opened.pane], r.run, r.env)
     throw error
@@ -140,9 +138,9 @@ export const dispatch = async (r: Runtime, initial: Mission, name: string): Prom
   mux(r, ['select-layout', '-t', opened.window, 'tiled'])
 
   return { code: 0, out: `Dispatched ${name} to ${opened.pane}; ${worktree} on ${branch}\n` }
-})
+}
 
-export const send = async (r: Runtime, initial: Mission, name: string, text: string): Promise<Reply> => locked(initial, () => {
+export const send = async (r: Runtime, initial: Mission, name: string, text: string): Promise<Reply> => {
   const m = mission(r, initial.name)
   const opened = m.folded.roles.get(name)
   if (opened === undefined || opened.closed) throw new Refusal(`role ${name}: no open pane recorded by troupe`)
@@ -151,7 +149,6 @@ export const send = async (r: Runtime, initial: Mission, name: string, text: str
   if (agent === undefined || agent.command !== opened.argv[0]) throw new Refusal(`role ${name}: its launched adapter cannot be resolved`)
   const ready = () => {
     const pane = ownedPane(r, opened)
-    if (pane.foreign) throw new Refusal(`role ${name}: pane was not opened by troupe (ownership mismatch)`)
     if (!pane.alive || pane.dead) throw new Refusal(`role ${name}: pane is gone or its agent exited`)
     const state = screenOf(agent, pane.screen)
     if (state !== 'ready') throw new Refusal(`role ${name}: pane is ${state}; nothing was typed${state === 'unknown' || state === 'working' ? `; run troupe wait -m ${m.name} --role ${name} --ready [--timeout s]` : ''}`)
@@ -172,33 +169,27 @@ export const send = async (r: Runtime, initial: Mission, name: string, text: str
   append(m.log, 'cli', { ev: 'send', role: name, text })
 
   return { code: 0, out: `Sent to ${name} (${opened.pane})\n` }
-})
+}
 
-export const close = async (r: Runtime, initial: Mission, name?: string): Promise<Reply> => locked(initial, () => {
+export const close = async (r: Runtime, initial: Mission, name?: string): Promise<Reply> => {
   const m = mission(r, initial.name)
   const names = name === undefined ? [...m.folded.roles.keys()] : [name]
   const lines: string[] = []
   for (const role of names) {
     const opened = m.folded.roles.get(role)
     if (opened === undefined) throw new Refusal(`role ${role}: troupe never opened a pane`)
-    if (!opened.closed && ownedPane(r, opened).foreign) throw new Refusal(`role ${role}: pane ownership cannot be verified; not closed`)
-  }
-  for (const role of names) {
-    const opened = m.folded.roles.get(role)
-    if (opened === undefined) throw new Refusal(`role ${role}: troupe never opened a pane`)
     if (opened.closed) continue
     const pane = ownedPane(r, opened)
-    if (pane.foreign) throw new Refusal(`role ${role}: pane ownership cannot be verified; not closed`)
     if (pane.alive) mux(r, ['kill-pane', '-t', opened.pane])
     append(m.log, 'cli', { ev: 'close', role })
     lines.push(`Closed ${role}; kept ${opened.worktree} on ${opened.branch}`)
   }
 
   return { code: 0, out: `${lines.join('\n') || 'No open roles.'}\n` }
-})
+}
 
 /** Preflight every resource before cleanup; a refused or interrupted run stays open. */
-export const teardown = async (r: Runtime, initial: Mission, force: boolean): Promise<Reply> => locked(initial, () => {
+export const teardown = async (r: Runtime, initial: Mission, force: boolean): Promise<Reply> => {
   const m = mission(r, initial.name)
   if (m.problems.some(problem => problem.includes('unread log'))) throw new Refusal('unread log lines; cannot establish teardown ownership')
   const parent = within(m.root, `.troupe/worktrees/${m.name}`)
@@ -222,9 +213,6 @@ export const teardown = async (r: Runtime, initial: Mission, force: boolean): Pr
       if (merged.code !== 0) reasons.push(`${branch}: unmerged into ${target}${merged.err.trim() ? ` (${merged.err.trim()})` : ''}`)
     }
   }
-  for (const opened of m.folded.roles.values()) {
-    if (!opened.closed && ownedPane(r, opened).foreign) reasons.push(`${opened.role}: pane ownership cannot be verified`)
-  }
   // Unknown files are never recursively swept up, even with --force.
   if (existsSync(parent)) for (const name of readdirSync(parent)) {
     if (!trees.some(tree => resolve(tree.path) === join(parent, name))) reasons.push(`${join(parent, name)}: not a registered role worktree; remove manually`)
@@ -234,7 +222,6 @@ export const teardown = async (r: Runtime, initial: Mission, force: boolean): Pr
   for (const opened of m.folded.roles.values()) {
     if (opened.closed) continue
     const pane = ownedPane(r, opened)
-    if (pane.foreign) throw new Refusal(`${opened.role}: pane ownership cannot be verified`)
     if (pane.alive) { mux(r, ['kill-pane', '-t', opened.pane]); removed++ }
     append(m.log, 'cli', { ev: 'close', role: opened.role })
   }
@@ -263,4 +250,4 @@ export const teardown = async (r: Runtime, initial: Mission, force: boolean): Pr
   }
   if (!m.folded.finished) append(m.log, 'cli', { ev: 'teardown' })
   return { code: 0, out: removed ? `Tore down ${m.name}; kept mission branch ${target} and ${m.log}\n` : `Nothing left to tear down for ${m.name}.\n` }
-})
+}
