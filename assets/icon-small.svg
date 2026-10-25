@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 100 100">
+  <title>troupe</title>
+  <rect width="100" height="100" rx="23" fill="#1F3550"/>
+  <rect x="20" y="22" width="60" height="18" fill="#F4EEE0"/>
+  <rect x="41" y="22" width="18" height="58" fill="#F4EEE0"/>
+  <circle cx="78" cy="66" r="7" fill="#F29B7A"/>
+</svg>
