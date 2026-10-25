@@ -53,7 +53,9 @@ export const flushAnswers = (r: Runtime, m: Mission): void => {
       if (!targets(r, m.root).some(one => one.pane === notice.target.pane && one.token === notice.target.token)) return false
       const screen = tmux(['capture-pane', '-p', '-t', notice.target.pane], r.run, r.env)
 
-      return screen.code === 0 && Object.values(AGENTS).some(agent => screenOf(agent, screen.out) === 'ready')
+      const states = Object.values(AGENTS).map(agent => screenOf(agent, screen.out))
+
+      return screen.code === 0 && states.includes('ready') && !states.some(state => state === 'waits' || state === 'working')
     }
     const buffer = `troupe-answer-${randomUUID()}`
     let loaded = false

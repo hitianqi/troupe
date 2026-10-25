@@ -430,7 +430,7 @@ test('busy, dialog and unknown orchestrators are retried on refresh without typi
   w.orch.screen = 'esc to interrupt'
   w.openGate()
   await panelEffect(w.r, 'm1', { kind: 'answer', gate: gateTarget(w.read().model), answer: 'approve' })
-  for (const screen of ['Would you like to run the following command?', 'unknown', '› a draft']) {
+  for (const screen of ['Would you like to run the following command?', '❯\nWould you like to run the following command?', '› Ask Codex to do anything\nIs this a project you created or one you trust?', 'unknown', '› a draft']) {
     w.orch.screen = screen
     flushAnswers(w.r, mission(w.r, 'm1'))
   }

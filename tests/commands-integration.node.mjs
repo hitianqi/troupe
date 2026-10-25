@@ -9,7 +9,11 @@ import { test } from 'node:test'
 import { execute } from '../dist/commands.js'
 import { mission, runtime } from '../dist/command-context.js'
 import { append, readLog } from '../dist/log.js'
-import { tmux } from '../dist/run.js'
+import { panelEffect } from '../dist/panel-actions.js'
+import { readPanel } from '../dist/panel-model.js'
+import { gateTarget } from '../dist/panel-input.js'
+import { flushAnswers } from '../dist/orchestrator.js'
+import { shellOf, tmux } from '../dist/run.js'
 import { gitDirsOf } from '../dist/role-commands.js'
 
 test('real scratch tmux: open marks one panel, keeps focus, and is a no-op the second time', { skip: spawnSync('tmux', ['-V']).status !== 0, timeout: 15000 }, async t => {
@@ -242,4 +246,31 @@ test('a commit made while panes close is retained and does not finish teardown',
   assert.ok(existsSync(w.path))
   assert.ok(!w.events().some(e => e.ev === 'teardown'))
   assert.match(w.git('log', '-1', '--format=%s', 'role/m1/api'), /late/)
+})
+
+
+test('real scratch tmux: a panel answer reaches the marked ready agent once', { skip: spawnSync('tmux', ['-V']).status !== 0, timeout: 15000 }, async t => {
+  const w = cleanupRepo(t)
+  const socket = `troupe-wake-${process.pid}-${randomUUID().slice(0, 8)}`
+  const env = { ...process.env, TMUX: undefined, TMUX_PANE: undefined, TROUPE_TMUX_SOCKET: socket }
+  t.after(() => tmux(['kill-server'], undefined, env))
+  const received = join(w.root, '.troupe/received.txt')
+  const script = `printf '› Ask Codex to do anything\\n'; while IFS= read -r line; do printf '%s\\n' "$line" >> ${shellOf([received])}; done`
+  const caller = tmux(['new-session', '-d', '-s', 'agent', '-P', '-F', '#{pane_id}', shellOf(['/bin/sh', '-c', script])], undefined, env)
+  assert.equal(caller.code, 0, caller.err)
+  const pane = caller.out.trim()
+  const r = runtime({ ...w.r, env: { ...env, TMUX: 'scratch', TMUX_PANE: pane } })
+  assert.equal((await execute('open', [], r)).code, 0)
+  append(w.m.log, 'orch', { ev: 'gate-open', gate: 'plan', plan: w.m.hash })
+  const reading = readPanel(r, 'm1')
+  assert.ok('model' in reading)
+  assert.equal(await panelEffect(r, 'm1', { kind: 'answer', gate: gateTarget(reading.model), answer: 'approve' }), 'Approved plan')
+  for (let i = 0; i < 50 && !existsSync(received); i++) {
+    flushAnswers(r, mission(r, 'm1'))
+    await new Promise(resolve => setTimeout(resolve, 20))
+  }
+  assert.equal(readFileSync(received, 'utf8'), 'plan approved in the panel. Continue the mission.\n')
+  flushAnswers(r, mission(r, 'm1'))
+  await new Promise(resolve => setTimeout(resolve, 30))
+  assert.equal(readFileSync(received, 'utf8').trim().split('\n').length, 1)
 })
