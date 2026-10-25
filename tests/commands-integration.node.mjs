@@ -3,7 +3,7 @@ import { execFileSync, spawnSync } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { basename, join } from 'node:path'
 import { test } from 'node:test'
 
 import { execute } from '../dist/commands.js'
@@ -57,8 +57,14 @@ paste: bracketed
   const r = runtime({ cwd: root, home, env, inputTTY: false, outputTTY: false })
   const m = mission(r, 'm1')
   append(m.log, 'panel', { ev: 'gate-answer', gate: 'plan', answer: 'approve', plan: m.hash })
+  const session = `troupe-${basename(root).replace(/[^A-Za-z0-9_-]/g, '-')}`
+  const manual = tmux(['new-session', '-d', '-s', session, '-n', 'roles', '-P', '-F', '#{pane_id}', 'sleep 30'], undefined, env)
+  assert.equal(manual.code, 0, manual.err)
+  const manualPane = manual.out.trim()
+  const rolesWindow = tmux(['display', '-p', '-t', manualPane, '#{window_id}'], undefined, env).out.trim()
   const dispatched = await execute('dispatch', ['api', '-m', 'm1'], r)
   assert.equal(dispatched.code, 0, dispatched.out)
+  assert.equal(readLog(m.log).events.find(e => e.ev === 'dispatch').window, rolesWindow)
   const seen = new Set()
   for (let n = 0; n < 60; n++) {
     const status = await execute('status', ['--json', '-m', 'm1'], r)
@@ -89,8 +95,9 @@ paste: bracketed
   const reopened = readLog(m.log).events.filter(e => e.ev === 'dispatch').at(-1)
   const torn = await execute('teardown', ['-m', 'm1'], r)
   assert.equal(torn.code, 0, torn.out)
-  assert.equal(tmux(['display', '-p', '-t', reopened.pane, '#{pane_id}'], undefined, env).code, 1)
+  assert.notEqual(tmux(['display', '-p', '-t', reopened.pane, '#{pane_id}'], undefined, env).out.trim(), reopened.pane)
   assert.equal(existsSync(reopened.worktree), false)
+  assert.equal(tmux(['display', '-p', '-t', manualPane, '#{pane_id}'], undefined, env).out.trim(), manualPane)
   assert.equal(readLog(m.log).events.at(-1).ev, 'teardown')
 })
 

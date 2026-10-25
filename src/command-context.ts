@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, readFileSync, realpathSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -149,57 +149,4 @@ export const mission = (r: Runtime, want = ''): Mission => {
 
 export const clean = (m: Mission): void => {
   if (m.problems.length > 0) throw new Refusal(m.problems.join('\n'))
-}
-
-export const locked = async <T>(m: Mission, action: () => Promise<T> | T): Promise<T> => {
-  const dir = join(dirname(m.log), 'command.lock')
-  mkdirSync(dirname(dir), { recursive: true })
-  try {
-    mkdirSync(dir)
-  } catch (error) {
-    const refused = () => new Refusal(`another command holds ${dir}; retry when it finishes`)
-    if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw refused()
-    let pid: number
-    try {
-      const text = readFileSync(join(dir, 'pid'), 'utf8').trim()
-      pid = Number(text)
-      if (!/^\d+$/.test(text) || !Number.isSafeInteger(pid) || pid <= 0) throw refused()
-    } catch {
-      throw new Refusal(`another command holds ${dir}; remove ${dir} by hand once no troupe command is running`)
-    }
-    let dead = false
-    try {
-      process.kill(pid, 0)
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== 'ESRCH') throw refused()
-      dead = true
-    }
-    if (!dead) throw refused()
-    const reclaim = join(dir, 'reclaim')
-    try {
-      mkdirSync(reclaim)
-    } catch {
-      throw new Refusal(`another command holds ${dir}; remove ${dir} by hand once no troupe command is running (reclaim directory exists)`)
-    }
-    try {
-      // Another command may have reclaimed the directory since our first read.
-      if (Number(readFileSync(join(dir, 'pid'), 'utf8').trim()) !== pid) throw refused()
-    } catch {
-      rmSync(reclaim, { recursive: true, force: true })
-      throw refused()
-    }
-    try {
-      rmSync(dir, { recursive: true })
-      process.stdout.write(`Cleared stale command lock ${dir} (process ${pid} has exited).\n`)
-      mkdirSync(dir)
-    } catch {
-      throw refused()
-    }
-  }
-  try {
-    writeFileSync(join(dir, 'pid'), String(process.pid))
-    return await action()
-  } finally {
-    rmSync(dir, { recursive: true })
-  }
 }

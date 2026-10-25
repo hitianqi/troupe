@@ -77,7 +77,7 @@ const wait = async (r: Runtime, m: Mission, target: { role?: string; gate?: stri
       const result = target.ready ? undefined : readResult(opened.worktree)
       if (!target.ready && result?.status) return { code: result.status === 'done' ? 0 : 1, out: `${result.status}: ${result.summary}\n` }
       const pane = ownedPane(r, opened)
-      if (opened.closed || !pane.alive || pane.dead) return { code: 1, out: `${target.role}: ${pane.foreign ? 'pane ownership mismatch' : 'pane gone without a result'}\n` }
+      if (opened.closed || !pane.alive || pane.dead) return { code: 1, out: `${target.role}: pane gone without a result\n` }
       if (target.ready) {
         const role = m.plan.roles.find(role => role.name === target.role)
         const agent = m.agents[opened.agent ?? role?.agent ?? '']

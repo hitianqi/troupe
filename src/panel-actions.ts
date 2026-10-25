@@ -16,7 +16,6 @@ export const panelEffect = async (r: Runtime, want: string, effect: Effect): Pro
       const opened = m.folded.roles.get(effect.role)
       if (opened === undefined || opened.closed) throw new Refusal(`role ${effect.role}: no open pane recorded by troupe`)
       const pane = ownedPane(r, opened)
-      if (pane.foreign) throw new Refusal(`role ${effect.role}: pane ownership cannot be verified`)
       if (!pane.alive || pane.dead) throw new Refusal(`role ${effect.role}: pane is gone or its agent exited`)
       mux(r, ['select-window', '-t', opened.window])
       mux(r, ['select-pane', '-t', opened.pane])

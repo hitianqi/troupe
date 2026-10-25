@@ -140,9 +140,9 @@ the panel waits for a new plan.
 After opening the MR, run `troupe teardown -m <mission>`. It closes only
 role panes; the orchestrator and panel panes opened by `up` stay open.
 It refuses dirty or untracked work and commits unmerged into the plan’s
-`base` mission branch
-unless `--force`; ownership checks still apply. Repeating it with explicit
-`-m` reports nothing left. The MR head and log stay available.
+`base` mission branch unless `--force`. Panes with a different owner marker
+are skipped. Repeating it with explicit `-m` reports nothing left. The MR
+head and log stay available.
 
 Use `troupe wait --role <r> --ready --timeout 60` after dispatch or before
 sending new work. It succeeds on ready, stops with the dialog on waits, and
@@ -188,10 +188,6 @@ holds the built-ins in the same shape.
   English; a screen troupe does not recognise is `unknown` and is never
   typed into. Context use is on neither harness's default screen, so the
   panel shows `—`.
-- A command killed with SIGKILL leaves
-  `<git-common-dir>/troupe/<mission>/command.lock`; the next command sees
-  that its recorded pid has exited, clears it and says so. A lock with no
-  readable pid still needs a hand removal, once no troupe command runs.
 
 ## Development
 
