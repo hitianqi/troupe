@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url'
 import { AGENTS, argvOf, badgeOf, validBadgeGlyph, loadAgents, screenOf, unsetPermission } from '../dist/agents.js'
 import { check } from '../dist/check.js'
 
-const capture = name => readFileSync(new URL(`../docs/feasibility/${name}.txt`, import.meta.url), 'utf8')
+const capture = name => readFileSync(new URL(`./fixtures/agents/${name}.txt`, import.meta.url), 'utf8')
 const fixture = name => readFileSync(new URL(`./fixtures/agents/${name}.txt`, import.meta.url), 'utf8')
 
 for (const harness of ['claude', 'codex']) {

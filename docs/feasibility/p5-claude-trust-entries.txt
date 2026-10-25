@@ -1,2 +1,0 @@
-/private/tmp/troupe-probe/p5-claude hasTrustDialogAccepted=True
-User statusLine configured: False
