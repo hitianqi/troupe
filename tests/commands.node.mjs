@@ -629,11 +629,23 @@ test('callerPane finds the pane through process ancestry when an agent strips th
   const { callerPane } = await import('../dist/panes.js')
   const parents = { 4242: 300, 300: 500, 500: 1 }
   const run = (command, args) => {
-    if (command === 'tmux' && args.includes('list-panes')) return { code: 0, out: '900 %3\n500 %7\n', err: '' }
+    if (command === 'tmux' && args.includes('list-panes')) return { code: 0, out: '900\t%3\t/x\t\n500\t%7\t/y\t\n', err: '' }
     if (command === 'ps') return { code: 0, out: `${parents[args.at(-1)] ?? 1}\n`, err: '' }
     return { code: 1, out: '', err: 'unexpected' }
   }
   assert.equal(callerPane(runtime({ env: {}, pid: 4242, run })), '%7')
   assert.equal(callerPane(runtime({ env: {}, pid: 77, run })), undefined)
   assert.equal(callerPane(runtime({ env: { TMUX: '/tmp/s,1,0', TMUX_PANE: '%9' }, pid: 4242, run })), '%9')
+})
+
+test('callerPane falls back to the one unmarked pane at the repository root', async () => {
+  const { callerPane } = await import('../dist/panes.js')
+  const root = mkdtempSync(join(tmpdir(), 'troupe-caller-'))
+  const listed = out => (command, args) => command === 'tmux' && args.includes('list-panes') ? { code: 0, out, err: '' } : { code: 1, out: '', err: '' }
+  const panel = `11\t%1\t${root}\tPANEL\n`
+  const role = `12\t%2\t${root}/wt\tOWNER\n`
+  assert.equal(callerPane(runtime({ env: {}, pid: 99, run: listed(`${panel}${role}13\t%3\t${root}\t\n`) }), root), '%3')
+  assert.equal(callerPane(runtime({ env: {}, pid: 99, run: listed(`13\t%3\t${root}\t\n14\t%4\t${root}\t\n`) }), root), undefined, 'two candidates: no guess')
+  assert.equal(callerPane(runtime({ env: {}, pid: 99, run: listed(`13\t%3\t${root}\t\n`) })), undefined, 'no root: no guess')
+  rmSync(root, { recursive: true, force: true })
 })

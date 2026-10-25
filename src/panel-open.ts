@@ -39,7 +39,7 @@ export const openPanel = (r: Runtime, want: string): Reply => {
   const existing = listed.code === 0 ? listed.out.split('\n').map(line => line.split('\t'))
     .find(([pane, dead, root]) => /^%\d+$/.test(pane ?? '') && dead === '0' && root === repo.root) : undefined
   if (existing !== undefined) return { code: 0, out: `Panel already open in ${existing[0]}.\n` }
-  const caller = callerPane(r)
+  const caller = callerPane(r, repo.root)
   const opened = createPanel(r, repo, want, caller === undefined ? undefined : { pane: caller }, 45)
   if (caller !== undefined) return { code: 0, out: `Opened panel in ${opened.pane} beside your agent.\n` }
   mux(r, ['select-window', '-t', opened.window])

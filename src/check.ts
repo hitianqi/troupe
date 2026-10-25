@@ -42,6 +42,9 @@ export const findPlan = (root: string, cwd: string, want: string, runner: Run = 
     .filter(entry => {
       const log = logPath(commonDir, entry.name)
       if (existsSync(log)) return !fold(readLog(log).events).finished
+      // No log yet: a plan being written (not committed), or one committed on its own mission branch before the first gate.
+      const branch = runner('git', ['rev-parse', '--abbrev-ref', 'HEAD'], { cwd: root })
+      if (branch.code === 0 && branch.out.trim() === `mission/${entry.name}`) return true
       const tracked = runner('git', ['ls-tree', '--name-only', 'HEAD', '--', `${MISSIONS}/${entry.name}/plan.md`], { cwd: root })
       return tracked.code !== 0 || tracked.out.trim() === ''
     })
