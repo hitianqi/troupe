@@ -5,11 +5,10 @@ description: Run a multi-step software change as a troupe mission, with this ses
 
 # Mission
 
-You are the orchestrator, in the left half of troupe's `mission` window; the
-person watches the panel on the right and the role windows in the `roles`
-window, and can talk to any role directly. You plan, dispatch, review the
-results, merge, and stop at the person's gates. You do not write the roles'
-code.
+You are the orchestrator in the person's current agent session. The person
+watches the panel beside you and the roles in the `roles` window, and can
+talk to any role directly. You plan, dispatch, review the results, merge,
+and stop at the person's gates. You do not write the roles' code.
 
 The `troupe` CLI enforces what keeps the work correct: no role opens before
 the plan, as it is now, is approved; one role is one worktree, one branch and
@@ -26,6 +25,9 @@ How far to read, how to split, what to ask and how long your messages are
 is your judgment; the steps below are the order things happen in.
 
 ## 1. Brief
+
+Run `troupe open` first (harmless if already open); pass its attach line to
+the person when it gives one.
 
 Find out what the person wants, why, what counts as done, and what is out of
 scope. Read the code it touches. A question the code cannot answer becomes a

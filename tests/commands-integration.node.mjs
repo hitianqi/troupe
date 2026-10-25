@@ -11,6 +11,33 @@ import { mission, runtime } from '../dist/command-context.js'
 import { append, readLog } from '../dist/log.js'
 import { tmux } from '../dist/run.js'
 
+test('real scratch tmux: open marks one panel, keeps focus, and is a no-op the second time', { skip: spawnSync('tmux', ['-V']).status !== 0, timeout: 15000 }, async t => {
+  const root = mkdtempSync(join(tmpdir(), 'troupe-open-integration-'))
+  const socket = `troupe-open-${process.pid}-${randomUUID().slice(0, 8)}`
+  const env = { ...process.env, TMUX: undefined, TMUX_PANE: undefined, TROUPE_TMUX_SOCKET: socket }
+  t.after(() => {
+    tmux(['kill-server'], undefined, env)
+    rmSync(root, { recursive: true, force: true })
+  })
+  execFileSync('git', ['init', '-q', '-b', 'main'], { cwd: root })
+  const repo = execFileSync('git', ['rev-parse', '--show-toplevel'], { cwd: root, encoding: 'utf8' }).trim()
+  const caller = tmux(['new-session', '-d', '-s', 'agent', '-P', '-F', '#{pane_id}', 'sleep 30'], undefined, env)
+  assert.equal(caller.code, 0, caller.err)
+  const pane = caller.out.trim()
+  const r = runtime({ cwd: root, env: { ...env, TMUX: 'scratch', TMUX_PANE: pane } })
+  const first = await execute('open', [], r)
+  assert.equal(first.code, 0, first.out)
+  const list = () => tmux(['list-panes', '-a', '-F', '#{pane_id}\t#{@troupe-panel}'], undefined, env).out.trim().split('\n')
+  const panes = list()
+  assert.equal(panes.length, 2)
+  assert.equal(panes.filter(line => line.endsWith(`\t${repo}`)).length, 1)
+  assert.equal(tmux(['display', '-p', '-t', 'agent', '#{pane_id}'], undefined, env).out.trim(), pane)
+  const second = await execute('open', [], r)
+  assert.equal(second.code, 0, second.out)
+  assert.match(second.out, /already open/)
+  assert.deepEqual(list(), panes)
+})
+
 test('real scratch tmux: dispatch, live status, bracketed send, result wait and close', { skip: spawnSync('tmux', ['-V']).status !== 0, timeout: 20000 }, async t => {
   const base = mkdtempSync(join(tmpdir(), 'troupe-command-integration-'))
   const root = join(base, "repo with 'quotes'")

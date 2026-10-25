@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { execFileSync } from 'node:child_process'
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { dirname, join } from 'node:path'
+import { basename, dirname, join } from 'node:path'
 import { test } from 'node:test'
 
 import { execute } from '../dist/commands.js'
@@ -54,7 +54,7 @@ Build the endpoint.
 Build the page.
 `
 
-const world = t => {
+const world = (t, env = { TROUPE_TMUX_SOCKET: 'unit-socket' }) => {
   const base = mkdtempSync(join(tmpdir(), 'troupe-command-'))
   t.after(() => rmSync(base, { recursive: true, force: true }))
   const root = join(base, "repo with 'quotes'")
@@ -78,7 +78,7 @@ const world = t => {
   const no = () => ({ code: 1, out: '', err: 'not found' })
   const run = (command, raw, options = {}) => {
     calls.push({ command, args: [...raw], ...options })
-    const args = command === 'tmux' ? raw.slice(2) : raw
+    const args = command === 'tmux' && raw[0] === '-L' ? raw.slice(2) : raw
     if (command === 'which') return yes(`/fake/${args[0]}\n`)
     if (command === 'git') {
       if (args.includes('--show-toplevel')) return yes(root)
@@ -99,7 +99,7 @@ const world = t => {
       return yes()
     }
     assert.equal(command, 'tmux')
-    assert.deepEqual(raw.slice(0, 2), ['-L', 'unit-socket'])
+    if (env.TROUPE_TMUX_SOCKET) assert.deepEqual(raw.slice(0, 2), ['-L', env.TROUPE_TMUX_SOCKET])
     const target = args[args.indexOf('-t') + 1]
     if (args[0] === 'has-session') return panes.size ? yes() : no()
     if (['new-session', 'new-window', 'split-window'].includes(args[0])) {
@@ -111,20 +111,23 @@ const world = t => {
     }
     if (args[0] === 'set-option') {
       if (args.includes('@troupe-owner')) panes.get(target).owner = args.at(-1)
+      if (args.includes('@troupe-panel')) panes.get(target).panel = args.at(-1)
     }
     if (args[0] === 'display') {
       if (args.at(-1) === '#{session_id}') return yes('$1')
+      if (args.at(-1) === '#{pane_width}') return yes('200')
       const p = panes.get(target)
       return p ? yes(`${target}\t${p.dead ? 1 : 0}\t${p.owner}`) : no()
     }
     if (args[0] === 'capture-pane') return panes.has(target) ? yes(panes.get(target).screen) : no()
+    if (args[0] === 'list-panes' && args.at(-1).includes('@troupe-panel')) return yes([...panes].map(([id, p]) => `${id}\t${p.dead ? 1 : 0}\t${p.panel ?? ''}`).join('\n'))
     if (args[0] === 'list-panes') return yes([...panes].map(([id, p]) => `${p.windowName}\t$1 ${p.window} ${id}`).join('\n'))
     if (args[0] === 'load-buffer') afterLoad?.()
     if (args[0] === 'kill-pane') panes.delete(target)
     return yes()
   }
   const output = []
-  const r = runtime({ cwd: root, home, packageRoot: pkg, env: { TROUPE_TMUX_SOCKET: 'unit-socket' }, run, inputTTY: true, outputTTY: true,
+  const r = runtime({ cwd: root, home, packageRoot: pkg, env, run, inputTTY: true, outputTTY: true,
     ask: async () => 'y', input: async () => 'stdin line\nsecond line', write: text => output.push(text),
     now: () => clock, sleep: async ms => { clock += ms } })
   const call = (command, ...args) => execute(command, args, r)
@@ -300,9 +303,12 @@ test('up uses a new mission window, plain orchestrator and half-width panel, the
   const result = await w.call('up', '--orch', 'codex')
   assert.equal(result.code, 0, result.out)
   assert.ok(w.calls.some(c => c.args.includes('new-session') && c.args.at(-1) === "'codex'"))
-  assert.ok(w.calls.some(c => c.args.includes('split-window') && c.args.includes('-h') && c.args.includes('50') && c.args.at(-1).includes("'panel'")))
+  assert.ok(w.calls.some(c => c.args.includes('split-window') && c.args.includes('-h') && c.args.includes('100') && c.args.at(-1).includes("'panel'")))
   assert.ok(w.calls.some(c => c.args.includes('attach-session') && c.inherit))
   assert.equal(w.events().at(-1).ev, 'up')
+  const noOp = w.calls.length
+  assert.match((await w.call('open')).out, /already open/)
+  assert.deepEqual(w.calls.slice(noOp).filter(c => c.command === 'tmux').map(c => c.args[2]), ['list-panes'])
   const before = w.calls.length
   assert.equal((await execute('up', [], { ...w.r, env: { ...w.r.env, TMUX: 'unit', TMUX_PANE: '%1' } })).code, 0)
   assert.ok(!w.calls.slice(before).some(c => c.args.includes('has-session')))
@@ -507,4 +513,112 @@ test('teardown still refuses unread log lines, including with force', async t =>
   }
   assert.ok(!w.calls.slice(count).some(c => c.args.includes('kill-pane') || c.args.includes('remove') || c.args.includes('-D')))
   assert.equal(w.panes.size, 1)
+})
+
+test('open reuses a live repository panel without tmux writes, even without a plan', async t => {
+  const w = world(t)
+  rmSync(join(w.root, 'docs/missions/m1/plan.md'))
+  w.panes.set('%99', { panel: w.root, dead: false })
+  const result = await w.call('open')
+  assert.deepEqual(result, { code: 0, out: 'Panel already open in %99.\n' })
+  assert.deepEqual(w.calls.filter(c => c.command === 'tmux').map(c => c.args[2]), ['list-panes'])
+})
+
+test('open splits the caller on the right, marks the panel, and passes the requested mission', async t => {
+  const w = world(t)
+  w.panes.set('%99', { window: '@99', windowName: 'agent', screen: 'READY', owner: 'person' })
+  const result = await execute('open', ['-m', 'm1'], { ...w.r, env: { ...w.r.env, TMUX: 'unit', TMUX_PANE: '%99' } })
+  assert.equal(result.code, 0, result.out)
+  assert.equal(result.out.trim().split('\n').length, 1)
+  const split = w.calls.find(c => c.args.includes('split-window')).args.slice(2)
+  assert.deepEqual(split.slice(0, 7), ['split-window', '-d', '-h', '-l', '90', '-t', '%99'])
+  assert.ok(split.at(-1).includes("'panel' '-m' 'm1'"))
+  assert.ok(w.calls.some(c => c.args.includes('@troupe-panel') && c.args.at(-1) === w.root))
+  assert.ok(!w.calls.some(c => c.args.includes('attach-session') || c.command === 'osascript'))
+})
+
+test('open ignores dead panels and panels marked for another repository', async t => {
+  const w = world(t)
+  w.panes.set('%98', { panel: w.root, dead: true })
+  w.panes.set('%99', { panel: '/another/repo', dead: false })
+  assert.equal((await w.call('open')).code, 0)
+  assert.equal([...w.panes.values()].filter(p => p.panel === w.root && !p.dead).length, 1)
+})
+
+for (const terminal of ['Apple_Terminal', 'iTerm.app']) {
+  test(`open launches ${terminal} with the session as an AppleScript argument`, async t => {
+    const w = world(t)
+    const scripts = []
+    const result = await execute('open', [], { ...w.r, platform: 'darwin', env: { ...w.r.env, TERM_PROGRAM: terminal }, run: (command, args, options) => {
+      if (command !== 'osascript') return w.r.run(command, args, options)
+      scripts.push(args)
+      return { code: 0, out: '', err: '' }
+    } })
+    assert.equal(result.code, 0, result.out)
+    assert.equal(scripts.length, 1)
+    const [flag, source, name, socket] = scripts[0]
+    assert.equal(flag, '-e')
+    assert.equal(name, `troupe-${basename(w.root).replace(/[^A-Za-z0-9_-]/g, '-')}`)
+    assert.equal(socket, 'unit-socket')
+    assert.ok(!source.includes(name))
+    assert.ok(source.includes('quoted form of (item 1 of argv)'))
+    assert.ok(source.includes('quoted form of (item 2 of argv)'))
+    assert.ok(source.includes(terminal === 'Apple_Terminal' ? 'tell application "Terminal"' : 'tell application "iTerm2"'))
+    assert.ok(w.calls.some(c => c.args.includes('new-session') && c.args.includes('mission')))
+    assert.ok(w.calls.some(c => c.args.includes('select-window')))
+    assert.equal(result.out.trim().split('\n').length, 1)
+  })
+}
+
+test('open prints the attach command on other terminals/platforms without running AppleScript', async t => {
+  for (const [platform, terminal] of [['darwin', 'other'], ['linux', 'Apple_Terminal']]) {
+    const w = world(t, {})
+    const result = await execute('open', [], { ...w.r, platform, env: { TERM_PROGRAM: terminal } })
+    assert.equal(result.code, 0, result.out)
+    const name = `troupe-${basename(w.root).replace(/[^A-Za-z0-9_-]/g, '-')}`
+    assert.ok(result.out.includes(`tmux attach -t ${name}`))
+    assert.match(result.out, /role windows will appear in that session/)
+    assert.ok(!w.calls.some(c => c.command === 'osascript'))
+  }
+})
+
+test('failed or unavailable AppleScript falls back to attach instructions and keeps the panel', async t => {
+  for (const throwing of [false, true]) {
+    const w = world(t)
+    const result = await execute('open', [], { ...w.r, platform: 'darwin', env: { ...w.r.env, TERM_PROGRAM: 'Apple_Terminal' }, run: (command, args, options) => {
+      if (command !== 'osascript') return w.r.run(command, args, options)
+      if (throwing) throw new Error('not installed')
+      return { code: 1, out: '', err: 'automation denied' }
+    } })
+    assert.equal(result.code, 0)
+    assert.match(result.out, /tmux -L 'unit-socket' attach -t troupe-/)
+    assert.match(result.out, /role windows will appear/)
+    assert.equal(w.panes.size, 1)
+  }
+})
+
+test('open requires tmux and rejects options/positionals other than the global mission', async t => {
+  const w = world(t)
+  const missing = await execute('open', [], { ...w.r, run: (command, args, options) => command === 'which' && args[0] === 'tmux'
+    ? { code: 1, out: '', err: '' } : w.r.run(command, args, options) })
+  assert.equal(missing.code, 1)
+  assert.match(missing.out, /tmux is required/)
+  for (const args of [['extra'], ['--orch', 'codex'], ['--once']]) assert.equal((await w.call('open', ...args)).code, 2)
+  assert.equal(w.panes.size, 0)
+})
+
+test('up chooses the available orchestrator, preferring claude, and an explicit --orch wins', async t => {
+  for (const [found, args, expected] of [
+    [['codex'], [], 'codex'],
+    [['claude'], [], 'claude'],
+    [['claude', 'codex'], [], 'claude'],
+    [['claude', 'codex'], ['--orch', 'codex'], 'codex'],
+  ]) {
+    const w = world(t)
+    const result = await execute('up', args, { ...w.r, run: (command, argv, options) => command === 'which' && ['claude', 'codex'].includes(argv[0]) && !found.includes(argv[0])
+      ? { code: 1, out: '', err: '' } : w.r.run(command, argv, options) })
+    assert.equal(result.code, 0, result.out)
+    assert.ok(w.calls.some(c => c.args.includes('new-session') && c.args.at(-1) === shellOf([expected])))
+    assert.ok(result.out.includes(`${expected} orchestrator`))
+  }
 })
