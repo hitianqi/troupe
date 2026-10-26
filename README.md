@@ -193,6 +193,15 @@ Add one as `~/.config/troupe/agents/<name>.yaml` or
 `<repo>/.troupe/agents/<name>.yaml` (the repository's wins); `src/agents.ts`
 holds the built-ins in the same shape.
 
+A built-in role's turn comes from its agent, not its screen. Claude roles
+start with lifecycle hooks in `--settings` (`UserPromptSubmit`,
+`PermissionRequest`, `Stop`, and the idle notice after an interrupt) that
+write `.troupe/activity.json`; Codex roles are read from their own session
+log (`task_started`, `task_complete`, `turn_aborted`). Only that report makes
+a role ready for `send`. While a turn runs, the screen patterns tell waiting
+on an approval from working; before the first report they stand in, but
+never as ready. An adapter with `usage` unset is read from its screen alone.
+
 Codex roles using `workspace-write` receive `--add-dir` grants for their own
 Git worktree metadata, shared `objects`, and `refs/heads/role/<mission>` plus
 its reflogs. This allows commits without granting the whole common Git
@@ -216,8 +225,11 @@ flags remain the ones in the plan. See the [Codex CLI reference](https://develop
 - The log is advisory, as any file is: it stops a forgetful dispatch, not a
   model set on writing it by hand.
 - Screen patterns come from Claude Code 2.1.310 and Codex 0.162.1 in
-  English; a screen troupe does not recognise is `unknown` and is never
-  typed into.
+  English. They no longer decide when a built-in role is ready, only whether
+  a running turn waits on you; a screen troupe does not recognise is
+  `unknown` and is never typed into.
+- Codex logs no approval request, so a Codex role waiting on one shows as
+  waits only while its screen pattern matches; either way it is not ready.
 - Context use comes from each role's transcript. Codex logs its window; for
   Claude, troupe launches the role with a status line (`--settings`) that
   saves the window Claude Code reports to `.troupe/context.json`, then runs
