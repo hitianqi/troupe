@@ -91,8 +91,7 @@ Viewers watch on an ordinary screen, so the frame is a normal laptop window,
 not a strip. tmux runs in WSL; Windows Terminal is only the window.
 
 - The size is set by eye before the rehearsal: the driving session opens the
-  terminal, Tianqi resizes it until the split and the zoomed panel both read
-  well, and that size (cols×rows, read with `tmux display -p
+  terminal, Tianqi resizes it until the split reads well, and that size (cols×rows, read with `tmux display -p
   '#{client_width}x#{client_height}'`) is kept for every take. A cell is
   about 0.47 as wide as it is tall, so about 160×45 is 16:9. Do not resize
   during a take.
@@ -100,18 +99,22 @@ not a strip. tmux runs in WSL; Windows Terminal is only the window.
 
 ## The panel is portrait, the video is landscape
 
-Beside the orchestrator the panel is a portrait half. That is the right shot
-where both halves matter (the ask, the change-plan moment, the PR link).
-Where the beat is the panel itself, **zoom the panel pane** with tmux
-`prefix z`: it fills the window, redraws at that width (the panel
-redraws on resize), and the MISSION tab lays out landscape: the left column,
-FLOW with the reviewer in its side lane, the selected role's live window
-beside it. `prefix z` again goes back to the split. The zoom can stay in the
-cut as a push-in, or be cut on.
+The terminal stays split for the whole take: the orchestrator on the left,
+the panel on the right, as a person uses it. Zoomed to the full window the
+panel left its right side empty, so it is not zoomed; the framing is done in
+the edit with camera moves on the rendered take:
+
+- Render each cast with agg at about twice the output size (3840 wide), so a
+  2× push-in on one half stays sharp.
+- Where both halves matter (the ask, the change-plan moment, the PR link,
+  the cleanup report): the full frame.
+- Where the beat is the panel: push in on the right half and pan along it
+  (the approval card, FLOW, a role's live window); the portrait crop sits on
+  the dark stage with the caption in the space beside it.
+- A slow drift or a slight tilt between beats keeps it moving, in the
+  `tianqi-launch-film` style.
 
 The `roles` window (`o`) is a full window already: the four panes tiled.
-
-Check the zoomed MISSION and ROLES tabs while setting the size.
 
 ## Several missions
 
@@ -138,9 +141,9 @@ Captions are drafts; they are polished after the footage is in.
 | 4–6 s | brand | icon (Signal, faded navy, level 2) + TROUPE wordmark | — |
 | 6–16 s | three ways to start | three columns, each only its input line cropped from its take, typing at once: a shell `troupe up`, Claude Code `/troupe-mission …`, Codex `$troupe-mission …`; Enter; the Claude column grows into the full window and its panel slides in | "Start from the CLI, or from the agent you already have open." |
 | 16–25 s | plan first | split: approval card (high) beside the orchestrator → "Medium is plenty" typed on the left → the card refreshes (medium) → click Approve | "A plan first. Just tell it what to change." |
-| 25–38 s | real windows | `prefix z` on the panel; click each role in FLOW, the right column follows its live window; `o` → the `roles` window, tiled panes, Claude and Codex side by side | "Every role in its own window, worktree and branch." |
+| 25–38 s | real windows | push in on the panel; click each role in FLOW, the right column follows its live window; `o` → the `roles` window, tiled panes, Claude and Codex side by side | "Every role in its own window, worktree and branch." |
 | 38–45 s | who's waiting | `review` turns yellow (Codex trust dialog) → `o` → answer → back | "It tells you who's waiting on you." |
-| 45–52 s | the whole picture | zoomed ROLES tab (ctx bars, tokens, effort cells), FLOW edges to the reviewer turning green | "Context, tokens, reviews, live." |
+| 45–52 s | the whole picture | push in on the ROLES tab (ctx bars, tokens, effort cells), FLOW edges to the reviewer turning green | "Context, tokens, reviews, live." |
 | 52–63 s | land it | split: MR gate approved → PR link in the orchestrator → (cut: the PR merged on GitHub) → merged gate approved → the roles window closes → the orchestrator's cleanup report (worktrees, branches, panes removed) | "Approve, merge, and it cleans up." |
 | 63–67 s | several missions | the tilted card splits into three | "Run several missions at once." |
 | 67–75 s | CTA | icon, TROUPE, `npm i -g troupe-cli`, GitHub link | "One command, a whole troupe." |
@@ -149,7 +152,7 @@ Captions are drafts; they are polished after the footage is in.
 
 - **A, full run** (Claude Code orchestrator, `/troupe-mission`, skipping
   permissions): ask → plan gate (high) → change by talking to the
-  orchestrator → approve → dispatch → zoom, click through roles + `o` →
+  orchestrator → approve → dispatch → click through roles + `o` →
   trust dialog → ROLES tab, PLAN tab → review → MR → merge on GitHub →
   merged gate → teardown and the orchestrator's cleanup report. Covers
   16–63 s.
