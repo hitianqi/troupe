@@ -34,12 +34,13 @@ Mission ask (typed on camera, English):
 > page renders them as a list, and it gets a clean look with a dark mode. One
 > role for the data, one for the page (after the data), one for the style,
 > and a Codex reviewer on gpt-5.6-sol. Page on opus, data and style on
-> sonnet. Every role runs with full access.
+> sonnet. The builders run with full access.
 
-"Full access" makes the plan pin `--dangerously-skip-permissions` on the
-Claude roles and `--dangerously-bypass-approvals-and-sandbox` on Codex, both
-of which `troupe check` takes as pinned; anything less and Codex asks for
-approval at every step. Check on the approval card before approving.
+The builders' plan flags are then `--dangerously-skip-permissions`, so they
+never stop. The reviewer keeps the skill's Codex default (`-a on-request -s
+workspace-write`), so it stops for approvals: the first stop is the filmed
+"waits on you" beat, and the driver answers every later one at once (cut in
+the edit). Check the flags on the approval card before approving.
 
 Expected plan:
 
@@ -74,10 +75,9 @@ on the right, both in frame.
 
 The orchestrator is Claude Code started in the demo repo, so the repo is
 trusted for Claude and its role worktrees do not ask. Codex has never run
-there, so the `review` role may open on Codex's "Trust this folder?"
-dialog: the panel turns it yellow, `o`, answer, back. Whether it still asks
-under full access is found in the rehearsal; if it does not, the beat is
-dropped rather than staged.
+there, and the reviewer keeps Codex's approvals, so it is certain to stop
+(the trust dialog, then approvals): the panel turns it yellow, `o`, answer,
+back.
 
 Everything else must not prompt: start the orchestrator with
 `claude --dangerously-skip-permissions`.
