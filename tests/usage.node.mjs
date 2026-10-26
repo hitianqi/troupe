@@ -6,7 +6,9 @@ import { dirname, join } from 'node:path'
 import { test } from 'node:test'
 
 import { AGENTS, loadAgents } from '../dist/agents.js'
-import { liveOf, statusOf } from '../dist/role-commands.js'
+import { contextArgs, liveOf, statusOf } from '../dist/role-commands.js'
+import { shellOf } from '../dist/run.js'
+import { statusLine, statusLineCommand } from '../dist/statusline.js'
 import { tokensOf } from '../dist/usage.js'
 
 const cwd = '/repo/.troupe/worktrees/m1/api'
@@ -185,4 +187,50 @@ test('built-in and YAML adapters opt into a validated usage reader', t => {
     assert.ok(loaded.problems.some(problem => problem.includes('usage') && problem.includes(path)))
     assert.equal(loaded.agents.custom, undefined)
   }
+})
+
+test('claude takes the window its status line reported for the same session', t => {
+  const { home, write } = temporary(t)
+  const dir = join(home, 'worktree')
+  write(join(home, '.claude/projects', dir.replace(/[/.]/g, '-'), 'abc.jsonl'), fixture('claude').replaceAll(cwd, dir))
+  const window = () => tokensOf('claude', dir, undefined, home).window
+  assert.equal(window(), 200000)
+  write(join(dir, '.troupe/context.json'), JSON.stringify({ session: 'other', window: 1000000 }))
+  assert.equal(window(), 200000)
+  write(join(dir, '.troupe/context.json'), JSON.stringify({ session: 'abc', window: 1000000 }))
+  assert.equal(window(), 1000000)
+  write(join(dir, '.troupe/context.json'), 'not json')
+  assert.equal(window(), 200000)
+})
+
+test('the role status line saves the reported window and still shows the configured one', t => {
+  const { home, write } = temporary(t)
+  const file = join(home, 'context.json')
+  const payload = JSON.stringify({ session_id: 'abc', context_window: { context_window_size: 1000000 } })
+  assert.equal(statusLine(payload, file, 'printf shown; cat >/dev/null'), 'shown')
+  assert.deepEqual(JSON.parse(readFileSync(file, 'utf8')), { session: 'abc', window: 1000000 })
+  assert.equal(statusLine(payload, file), '')
+  assert.equal(statusLine('not json', join(home, 'none.json'), 'cat'), 'not json')
+  assert.equal(fs.existsSync(join(home, 'none.json')), false)
+  const root = join(home, 'repo')
+  assert.equal(statusLineCommand(root, home), undefined)
+  write(join(home, '.claude/settings.json'), JSON.stringify({ statusLine: { type: 'command', command: 'user-line' } }))
+  assert.equal(statusLineCommand(root, home), 'user-line')
+  write(join(root, '.claude/settings.json'), JSON.stringify({ model: 'opus' }))
+  assert.equal(statusLineCommand(root, home), 'user-line')
+  write(join(root, '.claude/settings.local.json'), JSON.stringify({ statusLine: { type: 'command', command: 'local-line' } }))
+  assert.equal(statusLineCommand(root, home), 'local-line')
+})
+
+test('only Claude roles get the context status line, forwarding the configured one', t => {
+  const { home, write } = temporary(t)
+  const r = { home, packageRoot: '/pkg' }
+  const m = { root: join(home, 'repo') }
+  assert.deepEqual(contextArgs(r, m, AGENTS.codex, '/wt'), [])
+  write(join(home, '.claude/settings.json'), JSON.stringify({ statusLine: { type: 'command', command: "mine 'x'" } }))
+  const [flag, settings] = contextArgs(r, m, AGENTS.claude, '/wt')
+  assert.equal(flag, '--settings')
+  const { type, command } = JSON.parse(settings).statusLine
+  assert.equal(type, 'command')
+  assert.equal(command, shellOf([process.execPath, '/pkg/dist/cli.js', 'statusline', '/wt/.troupe/context.json', "mine 'x'"]))
 })
