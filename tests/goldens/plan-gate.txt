@@ -12,19 +12,19 @@
 │   3  The web app signs out on 401 reuse, and nowhere else                                    │
 │                                                                                              │
 │ ─ ROLES ──────────────────────────────────────────────────────────────────────────────────── │
-│  ⬢ api        codex gpt-6.1-sol   ■■■□□ high    starts at once                               │
+│  ⬢ api        codex gpt-6.1-sol   ◼◼◼◻◻ high    starts at once                               │
 │    Rotate the token on refresh; refuse a reused one with 401 reuse                           │
 │    src/api/refresh.ts  src/api/errors.ts                                                     │
 │                                                                                              │
-│  ✻ store      claude opus         ■■■□□ high    starts at once                               │
+│  ✻ store      claude opus         ◼◼◼◻◻ high    starts at once                               │
 │    Keep a token family and a used flag per token                                             │
 │    src/store/  migrations/                                                                   │
 │                                                                                              │
-│  ✻ web        claude sonnet       ■■□□□ medium  after api                                    │
+│  ✻ web        claude sonnet       ◼◼◻◻◻ medium  after api                                    │
 │    Sign the user out when a refresh is refused                                               │
 │    web/src/session/                                                                          │
 │                                                                                              │
-│  ✻ review     claude sonnet       ■■■□□ high    as each lands                                │
+│  ✻ review     claude sonnet       ◼◼◼◻◻ high    as each lands                                │
 │    Review each branch as it lands                                                            │
 │    changes nothing                                                                           │
 │                                                                                              │
@@ -47,7 +47,7 @@
  review                    │   │  ╔════════════════════════╗
     ○ review      ✻    —   │   │  ║ ○ api          planned ║
                            │   ├─▶║ ⬢ codex gpt-6.1-sol    ║──┐
-─ STAGES ───────────────── │   │  ║ ■■■□□ high             ║  │
+─ STAGES ───────────────── │   │  ║ ◼◼◼◻◻ high             ║  │
   ✓ Plan                   │   │  ╚════════════════════════╝  │
   ◆ Plan OK?               │   │                              │
   ○ Build             0/3  │   │                              │

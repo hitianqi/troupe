@@ -89,12 +89,12 @@ const badge = (role: RoleView): Run => {
 
 const LEVELS: Record<string, number> = { minimal: 1, low: 1, medium: 2, high: 3, xhigh: 4, max: 5 }
 
-/** Effort as five square cells and its word: `■■■□□ high`; unset is `default`, an unknown word stays as written. */
+/** Effort as five square cells and its word: `◼◼◼◻◻ high`; unset is `default`, an unknown word stays as written. */
 export const effortOf = (effort: string): Line => {
   const level = Object.hasOwn(LEVELS, effort) ? LEVELS[effort] : undefined
   if (level === undefined) return [{ text: effort || 'default', tone: 'dim' }]
 
-  return [{ text: '■'.repeat(level), tone: 'accent' }, { text: '□'.repeat(5 - level), tone: 'chrome' }, { text: ` ${effort}`, tone: 'dim' }]
+  return [{ text: '◼'.repeat(level), tone: 'accent' }, { text: '◻'.repeat(5 - level), tone: 'chrome' }, { text: ` ${effort}`, tone: 'dim' }]
 }
 const EFFORT = 12
 
