@@ -106,8 +106,9 @@ const world = (t, env = { TROUPE_TMUX_SOCKET: 'unit-socket' }) => {
         worktrees.delete(args.at(-1))
       }
       if (args[0] === 'worktree' && args[1] === 'add') {
-        const path = args.at(-2)
         const branch = args[args.indexOf('-b') + 1]
+        const path = args[args.indexOf('-b') + 2]
+        if ([...worktrees.values()].includes(branch)) return { code: 128, out: '', err: `fatal: a branch named '${branch}' already exists` }
         mkdirSync(path, { recursive: true })
         worktrees.set(path, branch)
       }

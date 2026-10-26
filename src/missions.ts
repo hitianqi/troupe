@@ -175,24 +175,20 @@ export const mission = (r: Runtime, want = ''): Mission => {
 
 /**
  * Creates the mission's worktree on a new `mission/<m>` branch, cut from the
- * main checkout's current branch (or `base`), with the skill's plan template.
- * The main checkout's branch never changes.
+ * main checkout's HEAD (or `base`), with the skill's plan template. git
+ * refuses a branch or worktree that already exists. The main checkout's
+ * branch never changes.
  */
 export const newMission = (r: Runtime, repo: Repository, name: string, base: string): string => {
   if (!NAME.test(name)) throw new Refusal(`invalid mission name: ${name}`)
   const branch = `mission/${name}`
   const worktree = within(repo.root, `.troupe/missions/${name}`)
   if (existsSync(logPath(repo.common, name))) throw new Refusal(`mission ${name} already has a log: ${logPath(repo.common, name)}`)
-  if (r.run('git', ['show-ref', '--verify', '--quiet', `refs/heads/${branch}`], { cwd: repo.root }).code === 0) throw new Refusal(`branch ${branch} already exists`)
-  if (missionTrees(r, repo).has(name) || existsSync(worktree)) throw new Refusal(`mission ${name} already has a worktree`)
   const template = workflowDirs(r, 'troupe-mission').map(dir => join(dir, 'templates/plan.md')).find(path => existsSync(path))
   if (template === undefined) throw new Refusal('the troupe-mission plan template is missing; run troupe setup')
-  const current = r.run('git', ['symbolic-ref', '-q', '--short', 'HEAD'], { cwd: repo.root })
-  const from = base || (current.code === 0 && current.out.trim()) || 'HEAD'
-  const commit = git(r, repo.root, ['rev-parse', '--verify', '--end-of-options', `${from}^{commit}`]).trim()
   excludeTroupe(repo.common)
   mkdirSync(dirname(worktree), { recursive: true })
-  git(r, repo.root, ['worktree', 'add', '-b', branch, worktree, commit])
+  git(r, repo.root, ['worktree', 'add', '-b', branch, worktree, ...(base ? [base] : [])])
   const plan = join(worktree, MISSIONS, name, 'plan.md')
   mkdirSync(dirname(plan), { recursive: true })
   writeFileSync(plan, readFileSync(template, 'utf8').replace(/^base: *\S*/m, `base: ${branch}`))

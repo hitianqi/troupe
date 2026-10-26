@@ -1,6 +1,6 @@
 import { relative } from 'node:path'
 
-import { mux, repository, workflowStages } from './command-context.ts'
+import { mux, workflowStages } from './command-context.ts'
 import type { Mission, Runtime } from './command-context.ts'
 import { modelOf } from './model.ts'
 import type { PanelModel } from './model.ts'
@@ -38,10 +38,8 @@ export const readPanel = (r: Runtime, want: string): Reading => {
     return { mission: m, model }
   } catch (error) {
     const why = (error as Error).message
-    let root = rootOf(r.cwd, r.run)
-    try { root = repository(r).root } catch { /* Outside a repository the panel has no mission anyway. */ }
     const waiting = error instanceof Unresolved || /^no plan for/.test(why)
-    if (waiting && planning(r, root)) return { missing: 'Orch is planning…' }
+    if (waiting && planning(r, rootOf(r.cwd, r.run))) return { missing: 'Orch is planning…' }
     // With missions open, an unbound panel names them instead of looking idle.
     if (error instanceof Unresolved && error.open.length > 0) return { missing: `panel: ${why}` }
 
