@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto'
 import { AGENTS, screenOf } from './agents.ts'
 import { mux } from './command-context.ts'
 import type { Mission, Repository, Runtime } from './command-context.ts'
-import { fold, readLog } from './log.ts'
+import { fold, orchestratorOf, readLog } from './log.ts'
 import type { Logged } from './log.ts'
 import { markedPanes, markMission, orchestratorsOf, unbind } from './missions.ts'
 import { tmux } from './run.ts'
@@ -44,10 +44,17 @@ export const queueAnswer = (r: Runtime, m: Mission, answer: Logged): void => {
   flushAnswers(r, m)
 }
 
+/**
+ * The fallback for a mission with no recorded orchestrator session (an adapter that reports none): gate answers
+ * made in this panel process, typed when the pane's screen looks ready. A recorded orchestrator gets notices
+ * instead (notices.ts), from the log and its own transcript.
+ */
 export const flushAnswers = (r: Runtime, m: Mission): void => {
   const queue = pending.get(r)
   if (queue === undefined || queue.size === 0) return
-  const gates = fold(readLog(m.log).events).gates
+  const events = readLog(m.log).events
+  if (orchestratorOf(events) !== undefined) { for (const key of [...queue.keys()]) if (key.startsWith(`${m.log}\0`)) queue.delete(key); return }
+  const gates = fold(events).gates
   for (const [key, notice] of queue) {
     if (!key.startsWith(`${m.log}\0`)) continue
     const gate = gates.get(notice.gate)

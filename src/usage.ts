@@ -249,33 +249,102 @@ const claudeTokens = ({ path, stat }: Session): Tokens | undefined => {
   return state.tokens
 }
 
-const turnCache = new Map<string, { key: string; turn?: Turn }>()
+/** A turn and when the row that decided it was written. */
+export type TurnAt = { turn: Turn; at: number }
+const turnCache = new Map<string, { key: string; turn?: TurnAt }>()
 /**
  * Codex logs each turn: `task_started`, then `task_complete` or `turn_aborted` with the same turn id. Read back to
  * the latest top-level start (a sub-agent's turn has a parent) and see whether it has ended.
  */
-const codexTurnOf = ({ path, stat }: Session): Turn | undefined => {
+const codexTurnAt = ({ path, stat }: Pick<Session, 'path' | 'stat'>): TurnAt | undefined => {
   const key = stamp(stat)
   const cached = turnCache.get(path)
   if (cached?.key === key) return cached.turn
-  const ended = new Set<string>()
-  let turn: Turn | undefined
+  const ended = new Map<string, number>()
+  let turn: TurnAt | undefined
   for (const bytes of reverseLines(path, stat.size)) {
     if (!bytes.includes('"task_') && !bytes.includes('"turn_aborted"')) continue
     const row = json(bytes)
     const payload = row?.payload
     if (row?.type !== 'event_msg' || !object(payload)) continue
-    if ((payload.type === 'task_complete' || payload.type === 'turn_aborted') && typeof payload.turn_id === 'string') ended.add(payload.turn_id)
+    const at = time(row.timestamp) ?? 0
+    if ((payload.type === 'task_complete' || payload.type === 'turn_aborted') && typeof payload.turn_id === 'string' && !ended.has(payload.turn_id)) ended.set(payload.turn_id, at)
     if (payload.type !== 'task_started') continue
     const attribution = object(payload.turn_attribution) ? payload.turn_attribution : {}
     const id = typeof payload.turn_id === 'string' ? payload.turn_id : attribution.turn_id
     if (typeof attribution.parent_turn_id === 'string' || typeof id !== 'string') continue
-    turn = ended.has(id) ? 'ready' : 'busy'
+    turn = ended.has(id) ? { turn: 'ready', at: ended.get(id) ?? at } : { turn: 'busy', at }
     break
   }
   turnCache.set(path, { key, turn })
 
   return turn
+}
+const codexTurnOf = (session: Session): Turn | undefined => codexTurnAt(session)?.turn
+
+/** The turn of the Codex session with this thread id (`CODEX_THREAD_ID`), from its own log. */
+export const codexThreadTurn = (thread: string, home: string): TurnAt | undefined => {
+  try {
+    const path = codexPaths(join(home, '.codex/sessions')).find(one => one.endsWith(`-${thread}.jsonl`))
+
+    return path === undefined ? undefined : codexTurnAt({ path, stat: statSync(path) })
+  } catch {
+    return undefined
+  }
+}
+
+const transcripts = new Map<string, string>()
+const claudeTurnCache = new Map<string, { key: string; turn?: TurnAt }>()
+/** The prompt-like text of a user row: its string content, or its text blocks; a tool result is mid-turn. */
+const userText = (row: Object): { text: string } | 'tool' | undefined => {
+  if (!object(row.message)) return undefined
+  const content = row.message.content
+  if (typeof content === 'string') return { text: content }
+  if (!Array.isArray(content)) return undefined
+  if (content.some(block => object(block) && block.type === 'tool_result')) return 'tool'
+  const text = content.flatMap(block => object(block) && block.type === 'text' && typeof block.text === 'string' ? [block.text] : []).join('\n')
+
+  return text === '' ? undefined : { text }
+}
+
+/**
+ * The turn of the Claude Code session with this id (`CLAUDE_CODE_SESSION_ID`), from its transcript: a turn ends
+ * with a `turn_duration` row, or with the interrupt row Claude Code writes when the person stops it; any other
+ * prompt (a person's, a task notification) or a tool result is a turn running. Local slash commands start none.
+ */
+export const claudeSessionTurn = (session: string, home: string): TurnAt | undefined => {
+  try {
+    let path = transcripts.get(session)
+    if (path === undefined) {
+      const base = join(home, '.claude/projects')
+      path = entries(base).filter(one => one.isDirectory()).map(one => join(base, one.name, `${session}.jsonl`)).find(one => { try { return statSync(one).isFile() } catch { return false } })
+      if (path === undefined) return undefined
+      transcripts.set(session, path)
+    }
+    const stat = statSync(path)
+    const key = stamp(stat)
+    const cached = claudeTurnCache.get(path)
+    if (cached?.key === key) return cached.turn
+    let turn: TurnAt | undefined
+    for (const bytes of reverseLines(path, stat.size)) {
+      const row = json(bytes)
+      if (row === undefined || row.isSidechain === true || row.isMeta === true) continue
+      const at = time(row.timestamp) ?? 0
+      if (row.type === 'system' && row.subtype === 'turn_duration') { turn = { turn: 'ready', at }; break }
+      if (row.type === 'assistant') { turn = { turn: 'busy', at }; break }
+      if (row.type !== 'user') continue
+      const said = userText(row)
+      if (said === 'tool') { turn = { turn: 'busy', at }; break }
+      if (said === undefined || /^\s*<(command-|local-command)/.test(said.text)) continue
+      turn = { turn: said.text.includes('[Request interrupted by user') ? 'ready' : 'busy', at }
+      break
+    }
+    claudeTurnCache.set(path, { key, turn })
+
+    return turn
+  } catch {
+    return undefined
+  }
 }
 
 /** The turn a Codex role's own session log reports, for the newest session started in `cwd` since `since`. */

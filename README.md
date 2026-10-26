@@ -205,6 +205,18 @@ a role ready for `send`. While a turn runs, the screen patterns tell waiting
 on an approval from working; before the first report they stand in, but
 never as ready. An adapter with `usage` unset is read from its screen alone.
 
+The orchestrator is told, not polled. Every troupe command it runs records
+its agent session in the run log: Claude Code's `CLAUDE_CODE_SESSION_ID` or
+Codex's `CODEX_THREAD_ID`, accepted only when that agent is an ancestor of
+the command, and the pane to type to (tmux, or herdr's `HERDR_PANE_ID`).
+When a role's agent reports its turn over with a result written, or the
+person answers a gate in the panel, the panel types one line into the
+orchestrator after the orchestrator's own turn has ended, read from its
+transcript (Claude's `turn_duration` or interrupt row) or session log
+(Codex). Each line is logged as a `notice`, so none repeats or is lost
+across panel restarts. A mission with no recorded session falls back to
+the old screen-checked gate answers.
+
 Codex roles using `workspace-write` receive `--add-dir` grants for their own
 Git worktree metadata, shared `objects`, and `refs/heads/role/<mission>` plus
 its reflogs. This allows commits without granting the whole common Git

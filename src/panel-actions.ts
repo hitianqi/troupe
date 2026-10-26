@@ -6,6 +6,7 @@ import { ownedPane } from './panes.ts'
 import { send } from './role-commands.ts'
 import { gateTarget } from './panel-input.ts'
 import type { Effect } from './panel-input.ts'
+import { deliverNotices } from './notices.ts'
 import { queueAnswer } from './orchestrator.ts'
 import { modelOf } from './model.ts'
 
@@ -36,6 +37,7 @@ export const panelEffect = async (r: Runtime, want: string, effect: Effect): Pro
     const answer = append(m.log, 'panel', { ev: 'gate-answer', gate: gate.id, answer: effect.answer, ...(effect.text === undefined ? {} : { text: effect.text }), ...(gate.isPlan ? { plan: m.hash } : {}) })
 
     queueAnswer(r, m, answer)
+    deliverNotices(r, m)
     return effect.answer === 'approve' ? `Approved ${gate.id}` : `Change sent for ${gate.id}`
   } catch (error) {
     return (error as Error).message

@@ -13,6 +13,7 @@ import { available, installSkill, setup, skillTarget } from './setup.ts'
 import { readResult } from './state.ts'
 import { tmux } from './run.ts'
 import { panel } from './panel.ts'
+import { recordOrchestrator } from './notices.ts'
 import { afterApproval, markOrchestrator } from './orchestrator.ts'
 import { createPanel, openPanel } from './panel-open.ts'
 
@@ -257,6 +258,7 @@ export const execute = async (command: string, args: string[], overrides: Partia
       if (finished(repo, want) && planOf(r, repo, want) === undefined) return { code: 0, out: `Nothing left to tear down for ${want}.\n` }
     }
     const m = mission(r, want)
+    recordOrchestrator(r, m, m.name)
     if (command === 'teardown') return await teardown(r, m, !!values.force)
     if (command === 'approve') return await approve(r, m)
     if (command === 'dispatch') return await dispatch(r, m, id(pos[0], 'role'))
