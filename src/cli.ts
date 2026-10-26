@@ -54,7 +54,7 @@ if (arg === '--version' || arg === '-v') {
 } else if (arg === undefined || arg === '--help' || arg === '-h') {
   process.stdout.write(usage())
 } else if (arg === 'statusline' && rest[0] !== undefined) {
-  // Internal: the status line troupe gives a Claude role (see contextArgs in role-commands.ts).
+  // Internal: the status line troupe gives a Claude role (see roleSettings in role-commands.ts).
   let input = ''
   for await (const chunk of process.stdin) input += chunk
   process.stdout.write(statusLine(input, rest[0], rest[1]))
