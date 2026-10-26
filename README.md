@@ -1,4 +1,4 @@
-<p align="center"><img src="assets/icon-512.png" width="128" alt="troupe icon"></p>
+<p align="center"><img src="assets/icon.svg" width="128" alt="troupe icon"></p>
 
 # troupe
 
