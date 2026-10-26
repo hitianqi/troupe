@@ -101,9 +101,9 @@ not a strip. tmux runs in WSL; Windows Terminal is only the window.
   '#{client_width}x#{client_height}'`) is kept for every take. A cell is
   about 0.47 as wide as it is tall, so about 160×45 is 16:9. Do not resize
   during a take.
-- **Set (2026-10-26): 156×45**, the orchestrator 66 columns, the panel 89.
+- **Set (2026-10-26): 156×45**, the orchestrator 65 columns, the panel 90.
   troupe opens the panel at 45% of the orchestrator's pane, so right after
-  it opens the driver sets it back: `tmux resize-pane -t <panel> -x 89`.
+  it opens the driver sets it back: `tmux resize-pane -t <panel> -x 90`.
 - Start the orchestrator in a pane already at its final size; a Claude Code
   resized after it started can leave its screen half redrawn.
 
@@ -140,6 +140,36 @@ recorded once roles are working and FLOW moves; no need to finish them.
 The 3D cards are beyond ffmpeg: render the casts to video with agg, then
 build the shot with the `tianqi-launch-film` approach (real UI on tilted
 planes, a gliding camera, depth of field).
+
+## Take A, second run (after the first, 2026-10-26)
+
+The first full run worked end to end; it is redone for these:
+
+- **FLOW joined up.** FLOW draws an arrow only to a role right below the one
+  it depends on, and puts the reviewer in its side lane only when FLOW is at
+  least 61 columns, which needs the panel at 90 (89 gave 60). So: two
+  builders in a chain and the panel at 90.
+- **The ask stays short**; the shape is given at the change-plan moment:
+  > Make it two builders in a chain: a data role for links.json first, then
+  > the page with its styles, which waits on data. Codex reviews each as it
+  > lands. Builders run with full access, and medium effort is plenty.
+- **The live window beat**, while the reviewer works and every role window is
+  still open: click each card in FLOW (orchestrator, data, page, review) and
+  hold each for about 8 s; the detail and the live window under FLOW follow
+  the card. With two builders FLOW is 17 rows and the live window about 9,
+  both on screen at once; a selection resets the column's scroll, so a
+  taller FLOW pushes the live window off screen. Zoomed in the edit.
+- **The tour**, late, when the panel holds the most (the MR gate open,
+  before approving): every tab in turn, MISSION, ROLES, PLAN (and `f` for the
+  full text), LOG, DIFF, scrolling where there is more, about 5 s each.
+- The orchestrator is not woken when a waiting role is answered (#53) or
+  when the reviewer finishes a later branch (#54); nudge it in a line if it
+  sits idle.
+- Merging the PR on GitHub is the person's step.
+
+Reset before it: the first run's merge reverted on main (PR #2),
+`mission/*` branches, `.git/troupe`, `.troupe`, and the repo's entry in
+`~/.codex/config.toml` removed so Codex asks to trust it again.
 
 ## Storyboard (at most 75 s, 1920×1080, bilingual captions)
 
