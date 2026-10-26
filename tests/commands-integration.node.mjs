@@ -240,6 +240,41 @@ test('teardown protects unmerged commits, tracked edits and untracked files; for
   assert.equal((await execute('teardown', [], w.r)).code, 1, 'finished missions need explicit -m')
 })
 
+test('teardown takes a squash-merged role as merged by its content, and refuses a missing or later change (#49)', async t => {
+  const w = cleanupRepo(t)
+  const gitRole = (...args) => execFileSync('git', args, { cwd: w.path, encoding: 'utf8' })
+  mkdirSync(join(w.path, 'src'), { recursive: true })
+  writeFileSync(join(w.path, 'src/a'), 'a1')
+  writeFileSync(join(w.path, 'src/b'), 'b1')
+  gitRole('add', '.')
+  gitRole('commit', '-qm', 'one')
+  gitRole('mv', 'tracked', 'moved')
+  gitRole('commit', '-qm', 'two')
+  // Only part of the role reached the mission branch.
+  w.git('checkout', 'role/m1/api', '--', 'src/a')
+  w.git('commit', '-qm', 'api: part')
+  let reply = await w.call()
+  assert.equal(reply.code, 1, reply.out)
+  assert.match(reply.out, /role\/m1\/api: unmerged into mission\/m1 \(its changes differ from the target\)/)
+  // The whole role as one commit, a rename included: merged, though not an ancestor.
+  w.git('rm', '-q', 'tracked')
+  w.git('checkout', 'role/m1/api', '--', 'src', 'moved')
+  w.git('commit', '-qm', 'api: all')
+  assert.notEqual(spawnSync('git', ['merge-base', '--is-ancestor', 'role/m1/api', 'mission/m1'], { cwd: w.root }).status, 0)
+  // A commit on the role branch after the squash is missing again.
+  writeFileSync(join(w.path, 'src/a'), 'a2')
+  gitRole('commit', '-qam', 'three')
+  reply = await w.call()
+  assert.equal(reply.code, 1, reply.out)
+  assert.match(reply.out, /unmerged into mission\/m1/)
+  w.git('checkout', 'role/m1/api', '--', 'src/a')
+  w.git('commit', '-qm', 'api: three')
+  reply = await w.call()
+  assert.equal(reply.code, 0, reply.out)
+  assert.equal(w.git('branch', '--list', 'role/m1/*').trim(), '')
+  assert.equal(existsSync(w.path), false)
+})
+
 test('clean teardown works without force and partial failure stays open for a retry', async t => {
   const w = cleanupRepo(t)
   const failed = await execute('teardown', ['-m', 'm1'], { ...w.r, run: (command, args, options) => command === 'git' && args[0] === 'branch' && args[1] === '-D'
