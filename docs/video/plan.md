@@ -33,7 +33,8 @@ Mission ask (typed on camera, English):
 > Turn this into a small link page: the links live in a links.json file, the
 > page renders them as a list, and it gets a clean look with a dark mode. One
 > role for the data, one for the page (after the data), one for the style,
-> and a Codex reviewer. Page on opus, data and style on sonnet.
+> and a Codex reviewer on gpt-5.6-sol. Page on opus, data and style on
+> sonnet.
 
 Expected plan:
 
