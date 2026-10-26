@@ -28,6 +28,11 @@ for (const harness of ['claude', 'codex']) {
       assert.equal(screenOf(agent, capture(file)), want, file)
     }
     assert.equal(screenOf(agent, fixture(`p5-${harness}-main-ready`)), 'ready')
+    if (harness === 'claude') {
+      assert.equal(screenOf(agent, fixture('p6-claude-working-agents')), 'working')
+      for (const spinner of ['✢ Wandering…', '· Recombobulating… (6m 39s · ↓ 41.0k tokens)', '✻ Sautéing… (2s)']) assert.equal(screenOf(agent, `${spinner}\n❯\u00a0`), 'working', spinner)
+      for (const line of ['✻ Sautéed for 1m 7s · done 9:52 AM', '  ⎿  Waiting…', '     … 3 more lines (ctrl+o to expand)', '● Bash(git log …)']) assert.equal(screenOf(agent, `${line}\n❯\u00a0`), 'ready', line)
+    }
     const idle = harness === 'codex' ? '› Ask Codex to do anything' : '❯\u00a0'
     const trust = harness === 'codex' ? 'Trust this folder?' : 'Is this a project you created or one you trust?'
     assert.equal(screenOf(agent, `${trust}\nesc to interrupt\n${idle}`), 'waits')

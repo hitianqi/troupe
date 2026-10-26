@@ -574,6 +574,7 @@ test('open splits the caller on the right, binds the caller and marks the panel 
   assert.equal(panel.mission, 'm1')
   assert.ok(w.calls.some(c => c.args.includes('@troupe-panel') && c.args.at(-1) === w.root))
   assert.ok(!w.calls.some(c => c.args.includes('attach-session') || c.command === 'osascript'))
+  assert.ok(!w.calls.some(c => c.args.includes('mouse')))
 })
 
 test('open ignores dead panels and panels marked for another repository', async t => {
@@ -643,6 +644,9 @@ test('open prints the attach command on other terminals/platforms without runnin
     const name = `troupe-${basename(w.root).replace(/[^A-Za-z0-9_-]/g, '-')}`
     assert.ok(result.out.includes(`tmux attach -t ${name}`))
     assert.match(result.out, /role windows will appear in that session/)
+    const [set, flag, target, ...option] = w.calls.find(c => c.args.includes('mouse')).args.slice(-5)
+    assert.deepEqual([set, flag, ...option], ['set-option', '-t', 'mouse', 'on'])
+    assert.match(target, /^\$\d+$/)
     assert.ok(!w.calls.some(c => c.command === 'osascript'))
   }
 })

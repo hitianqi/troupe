@@ -79,6 +79,8 @@ export const createPane = (r: Runtime, repo: Repository, name: string, cwd: stri
     mux(r, ['set-option', '-p', '-t', opened.pane, 'remain-on-exit', 'on'])
     mux(r, ['set-option', '-p', '-t', opened.pane, '@troupe-owner', owner])
     mux(r, ['select-pane', '-t', opened.pane, '-T', name])
+    // A session troupe starts is troupe's: clicks switch its windows whatever the person's tmux.conf says.
+    if (split === undefined && session === undefined) mux(r, ['set-option', '-t', opened.session, 'mouse', 'on'])
   } catch (error) {
     tmux(['kill-pane', '-t', opened.pane], r.run, r.env)
     throw error

@@ -6,7 +6,7 @@
 
  ─ ⬢ panel · ◆ waits on you ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
    agent    codex gpt-6.1-sol
-   effort   ■■■□□ high
+   effort   ◼◼◼◻◻ high
    ctx      —
    tokens   —
    work     1 commit · 2 files ✗ 1 outside touches
@@ -28,7 +28,7 @@
 
  ─ ✻ review · ○ planned ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
    agent    claude gpt-6.1-sol
-   effort   ■■■□□ high
+   effort   ◼◼◼◻◻ high
    ctx      —
    tokens   —
    work     —

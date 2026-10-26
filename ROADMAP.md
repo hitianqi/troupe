@@ -38,6 +38,18 @@ Enforced in code:
   opened.
 - The persistent panel.
 
+**State is read, not guessed.** Everything troupe acts on comes from a
+signal the source system reports: the run log, git, tmux, the result file,
+and each agent's own hooks, status line payload and transcript. A role's
+state, its context window and its turn ending are facts those systems
+publish; troupe does not infer them from how a screen renders or from a
+model name. Where no such signal exists yet, the fallback is labelled as one,
+is never the only path for a decision that types, merges or deletes, and
+gets an issue to replace it. A bug fixed by adding a pattern, a model list
+or a timing guess is a symptom: find the signal that would have made it
+impossible, and fix that. The same holds for waiting: troupe pushes an event
+to whoever waits on it; nobody polls on a timer.
+
 In the default skill (`troupe-mission`), replaceable: brief → plan → plan
 gate → build → review per branch as it lands, one fix round sent to the same
 window → merge onto the mission branch → MR gate. A stricter recipe

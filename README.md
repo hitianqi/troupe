@@ -217,8 +217,12 @@ flags remain the ones in the plan. See the [Codex CLI reference](https://develop
   model set on writing it by hand.
 - Screen patterns come from Claude Code 2.1.310 and Codex 0.162.1 in
   English; a screen troupe does not recognise is `unknown` and is never
-  typed into. Context use is on neither harness's default screen, so the
-  panel shows `—`.
+  typed into.
+- Context use comes from each role's transcript. Codex logs its window; for
+  Claude, troupe launches the role with a status line (`--settings`) that
+  saves the window Claude Code reports to `.troupe/context.json`, then runs
+  the status line you configured, so yours still shows. Until it first runs,
+  the panel assumes 200k, or 1M once the context passes 200k.
 
 ## Development
 

@@ -11,20 +11,20 @@
                            │   │  ┌────────────────────────┐
 ─ STAGES ───────────────── │   │  │ ✓ lock            done │
   ✓ Plan                   │   └─▶│ ⬢ codex gpt-6.1-sol    │──┐
-  ✓ Plan OK?        10:42  │      │ ■■■□□ high             │  │
+  ✓ Plan OK?        10:42  │      │ ◼◼◼◻◻ high             │  │
   ● Build             0/3  │      └────────────────────────┘  │   ┌──────────────────────┐
   ○ Review            0/1  │                   │              │   │ ○ review     planned │
   ◇ MR OK?                 │                   ▼              ├──▶│ ✻ claude opus        │
-  ○ Open MR                │      ╔════════════════════════╗  │   │ ■■■□□ high           │
+  ○ Open MR                │      ╔════════════════════════╗  │   │ ◼◼◼◻◻ high           │
   ○ Teardown               │      ║ ○ build        planned ║  │   └──────────────────────┘
                            │      ║ ⬢ codex gpt-6.1-sol    ║──┘
-─ ACTIVITY ─────────────── │      ║ ■■■□□ high             ║
+─ ACTIVITY ─────────────── │      ║ ◼◼◼◻◻ high             ║
  12:07 dispatched store    │      ╚════════════════════════╝
  12:07 dispatched api      │
  10:42 stage: build        │
  10:42 plan approved       │ ─ ○ build · planned ─────────────────────────────────────────────────────────────────────────────────────────────────────
  10:41 plan gate opened    │  goal     Rotate the token on refresh; refuse a reused one with 401 reuse
-                           │  agent    ⬢ codex gpt-6.1-sol   ■■■□□ high
+                           │  agent    ⬢ codex gpt-6.1-sol   ◼◼◼◻◻ high
                            │           -a on-request -s workspace-write
                            │  branch   role/demo/build
                            │  touches  src/build.ts

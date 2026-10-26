@@ -45,7 +45,8 @@ export const AGENTS: Record<string, Agent> = Object.assign(Object.create(null) a
     prompt: 'last-arg',
     screen: {
       waits: ['Is this a project you created or one you trust\\?', 'Do you want to proceed\\?'],
-      working: ['esc to interrupt'],
+      // The footer hint gives way to "← N agents" while background agents run; the spinner line stays.
+      working: ['esc to interrupt', '^\\s*[^\\s\\w]\\s[A-Z][^\\s…]*…(\\s+\\(.*\\))?$'],
       ready: ['^❯[\\s\\u00a0]*$'],
     },
     paste: 'bracketed',
@@ -93,11 +94,12 @@ export const unsetPermission = (agent: Agent, flags: string[]): string[] =>
 const expand = (template: string[], key: string, value: string): string[] =>
   value === '' ? [] : template.map(arg => arg.replaceAll(`{${key}}`, () => value))
 
-/** An argv array, never shell text; omitted role settings add no arguments. */
-export const argvOf = (agent: Agent, role: Pick<Role, 'model' | 'effort' | 'flags'>, prompt: string, writable: string[] = []): string[] => [
+/** An argv array, never shell text; omitted role settings add no arguments; `extra` comes before the role's flags. */
+export const argvOf = (agent: Agent, role: Pick<Role, 'model' | 'effort' | 'flags'>, prompt: string, writable: string[] = [], extra: string[] = []): string[] => [
   agent.command,
   ...expand(agent.model, 'model', role.model),
   ...expand(agent.effort, 'effort', role.effort),
+  ...extra,
   ...role.flags,
   ...writable.flatMap(path => ['--add-dir', path]),
   prompt,

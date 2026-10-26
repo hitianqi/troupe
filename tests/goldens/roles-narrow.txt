@@ -6,7 +6,7 @@
 
  ─ ✻ review · ○ planned ───────────────────────────────
    agent    claude gpt-6.1-sol
-   effort   ■■■□□ high
+   effort   ◼◼◼◻◻ high
    ctx      —
    tokens   —
    work     —
