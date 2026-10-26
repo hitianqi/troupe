@@ -1,14 +1,15 @@
 #!/usr/bin/env bash
-# Record a tmux session as a cast with a hidden recorder at 156×45.
+# Record a tmux session as a cast with a hidden recorder (156×45 unless COLS/ROWS say otherwise).
 #   rec.sh start <session> <cast>    attach a recorder to <session>
 #   rec.sh stop <session>            detach it, which ends the cast
 set -euo pipefail
 verb=$1 session=$2
 sock="rec-$session"
+cols=${COLS:-156} rows=${ROWS:-45}
 case $verb in
   start)
     tmux -L "$sock" kill-server 2>/dev/null || true
-    tmux -L "$sock" new-session -d -s rec -x 156 -y 45 "env -u TMUX asciinema rec -q --cols 156 --rows 45 '$3' -c 'tmux attach -t $session'"
+    tmux -L "$sock" new-session -d -s rec -x $cols -y $rows "env -u TMUX asciinema rec -q --cols $cols --rows $rows '$3' -c 'tmux attach -t $session'"
     tmux -L "$sock" set -t rec status off >/dev/null
     ;;
   stop)
