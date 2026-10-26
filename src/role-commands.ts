@@ -224,6 +224,23 @@ export const close = async (r: Runtime, initial: Mission, name?: string): Promis
 }
 
 /** Preflight every resource before cleanup; a refused or interrupted run stays open. */
+/**
+ * Whether everything a role branch changed is on the target branch, judged by content: the skill squashes each role
+ * into one commit, which never makes the role branch an ancestor (#49). Every path the branch changed since its base
+ * (the dispatch base, or where it forked) must read the same on the target; ancestry is only a fast path.
+ */
+const mergedInto = (r: Runtime, root: string, branch: string, target: string, base?: string): { merged: boolean; why?: string } => {
+  const ancestor = r.run('git', ['merge-base', '--is-ancestor', `refs/heads/${branch}`, target], { cwd: root })
+  if (ancestor.code === 0) return { merged: true }
+  const from = base ?? r.run('git', ['merge-base', `refs/heads/${branch}`, target], { cwd: root }).out.trim()
+  if (from === '') return { merged: false, why: ancestor.err.trim() || 'no common history' }
+  const changed = git(r, root, ['diff', '--no-renames', '--name-only', '-z', from, `refs/heads/${branch}`, '--']).split('\0').filter(Boolean)
+  if (changed.length === 0) return { merged: true }
+  const differs = r.run('git', ['diff', '--quiet', '--no-renames', target, `refs/heads/${branch}`, '--', ...changed], { cwd: root })
+
+  return differs.code === 0 ? { merged: true } : { merged: false, why: 'its changes differ from the target' }
+}
+
 export const teardown = async (r: Runtime, initial: Mission, force: boolean): Promise<Reply> => {
   const m = mission(r, initial.name)
   if (m.problems.some(problem => problem.includes('unread log'))) throw new Refusal('unread log lines; cannot establish teardown ownership')
@@ -238,6 +255,7 @@ export const teardown = async (r: Runtime, initial: Mission, force: boolean): Pr
     return { path: fields.find(field => field.startsWith('worktree '))?.slice(9) ?? '', branch: fields.find(field => field.startsWith('branch refs/heads/'))?.slice(18) ?? '' }
   })
   const branches = git(r, m.root, ['for-each-ref', '--format=%(refname:short)', `refs/heads/${prefix}`]).trim().split('\n').filter(branch => branch.startsWith(prefix))
+  const baseOf = (branch: string): string | undefined => m.folded.roles.get(branch.slice(prefix.length))?.base
   const trees = entries.filter(entry => entry.branch.startsWith(prefix) || resolve(dirname(entry.path)) === parent)
   const reasons: string[] = []
   for (const tree of trees) {
@@ -247,8 +265,8 @@ export const teardown = async (r: Runtime, initial: Mission, force: boolean): Pr
   for (const branch of branches) {
     if (branch === target) reasons.push(`${branch}: is the mission branch; cannot remove`)
     else if (!force) {
-      const merged = r.run('git', ['merge-base', '--is-ancestor', `refs/heads/${branch}`, target], { cwd: m.root })
-      if (merged.code !== 0) reasons.push(`${branch}: unmerged into ${target}${merged.err.trim() ? ` (${merged.err.trim()})` : ''}`)
+      const merged = mergedInto(r, m.root, branch, target, baseOf(branch))
+      if (!merged.merged) reasons.push(`${branch}: unmerged into ${target}${merged.why ? ` (${merged.why})` : ''}`)
     }
   }
   if (missionWorktree !== undefined && !force) {
@@ -274,7 +292,7 @@ export const teardown = async (r: Runtime, initial: Mission, force: boolean): Pr
       if (existsSync(tree.path) && git(r, tree.path, ['status', '--porcelain', '--untracked-files=all']).trim()) throw new Refusal(`${tree.branch}: dirty or untracked changes appeared during teardown`)
     }
     for (const branch of branches) {
-      if (r.run('git', ['merge-base', '--is-ancestor', `refs/heads/${branch}`, target], { cwd: m.root }).code !== 0) throw new Refusal(`${branch}: unmerged into ${target}; teardown remains incomplete`)
+      if (!mergedInto(r, m.root, branch, target, baseOf(branch)).merged) throw new Refusal(`${branch}: unmerged into ${target}; teardown remains incomplete`)
     }
   }
   for (const tree of trees) {
@@ -282,7 +300,7 @@ export const teardown = async (r: Runtime, initial: Mission, force: boolean): Pr
     removed++
   }
   for (const branch of branches) {
-    // Ancestry was checked against the mission branch, rather than HEAD.
+    // Merged content was checked against the mission branch, rather than HEAD.
     git(r, m.root, ['branch', '-D', branch])
     removed++
   }
