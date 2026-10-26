@@ -1,0 +1,66 @@
+      11 -import { mission } from './missions.ts'
+      11 +import { boundTo, markedPanes, mission, missionTree, missionTrees, orchestratorsOf, unbind }
+         +from './missions.ts'
+      12  import { createPane, ownedPane, rolesName, rolesWindow } from './panes.ts'
+      13  import type { Role } from './plan.ts'
+      14  import { readResult, RESULT_FILE, roleState, waitingOn, workOf } from './state.ts'
+     ...
+      217    const parent = within(m.root, `.troupe/worktrees/${m.name}`)
+      218    const prefix = `role/${m.name}/`
+      219    const target = m.plan.base || `mission/${m.name}`
+      220 +  // The mission's own worktree goes too, once its branch is pushed; a checkout elsewhere on
+          + the branch is left alone.
+      221 +  const missionBranch = `mission/${m.name}`
+      222 +  const own = missionTrees(r, m).get(m.name)
+      223 +  const missionWorktree = own !== undefined && resolve(own) === missionTree(m, m.name) ? own
+          + : undefined
+      224    const entries = git(r, m.root, ['worktree', 'list', '--porcelain', '-z']).split('\0\0').fi
+           lter(Boolean).map(entry => {
+      225      const fields = entry.split('\0')
+      226      return { path: fields.find(field => field.startsWith('worktree '))?.slice(9) ?? '', bran
+           ch: fields.find(field => field.startsWith('branch refs/heads/'))?.slice(18) ?? '' }
+     ...
+      239        if (merged.code !== 0) reasons.push(`${branch}: unmerged into ${target}${merged.err.tr
+           im() ? ` (${merged.err.trim()})` : ''}`)
+      240      }
+      241    }
+      242 +  if (missionWorktree !== undefined && !force) {
+      243 +    if (existsSync(missionWorktree) && git(r, missionWorktree, ['status', '--porcelain', '--
+          +untracked-files=all']).trim()) reasons.push(`${missionBranch}: dirty or untracked changes in
+          + ${missionWorktree}`)
+      244 +    if (git(r, m.root, ['branch', '-r', '--contains', `refs/heads/${missionBranch}`]).trim()
+          + === '') reasons.push(`${missionBranch}: not pushed; push it before removing ${missionWorktr
+          +ee}`)
+      245 +  }
+      246    // Unknown files are never recursively swept up, even with --force.
+      247    if (existsSync(parent)) for (const name of readdirSync(parent)) {
+      248      if (!trees.some(tree => resolve(tree.path) === join(parent, name))) reasons.push(`${join
+           (parent, name)}: not a registered role worktree; remove manually`)
+     ...
+      275      removed++
+      276    }
+      277    if (existsSync(parent)) { rmdirSync(parent); removed++ }
+      278 +  if (missionWorktree !== undefined) {
+      279 +    if (!force && existsSync(missionWorktree) && git(r, missionWorktree, ['status', '--porce
+          +lain', '--untracked-files=all']).trim()) throw new Refusal(`${missionBranch}: dirty or untra
+          +cked changes appeared during teardown`)
+      280 +    git(r, m.root, ['worktree', 'remove', ...(force ? ['--force'] : []), missionWorktree])
+      281 +    removed++
+      282 +  }
+      283 +  // The orchestrator stays open, unbound; its panel closes.
+      284 +  const panes = markedPanes(r)
+      285 +  for (const panel of panes.filter(one => one.panel === m.root && boundTo(panes, m, one.pane
+          +) === m.name)) { mux(r, ['kill-pane', '-t', panel.pane]); removed++ }
+      286 +  for (const orchestrator of orchestratorsOf(panes, m, m.name)) unbind(r, orchestrator.pane)
+     … 3 more lines (ctrl+o to expand)
+  ⎿  Allowed by auto mode classifier
+
+● Now commands.ts: the mission new command, up -m, check, status listing and the teardown no-op.
+
+✻ Recombobulating… (7m 10s · ↓ 44.4k tokens · thought for 3s)
+
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ 
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  ⏵⏵ auto mode on (shift+tab to cycle) · ← 4 agents
+

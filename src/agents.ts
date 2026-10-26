@@ -45,7 +45,8 @@ export const AGENTS: Record<string, Agent> = Object.assign(Object.create(null) a
     prompt: 'last-arg',
     screen: {
       waits: ['Is this a project you created or one you trust\\?', 'Do you want to proceed\\?'],
-      working: ['esc to interrupt'],
+      // The footer hint gives way to "← N agents" while background agents run; the spinner line stays.
+      working: ['esc to interrupt', '^\\s*[^\\s\\w]\\s[A-Z][^\\s…]*…(\\s+\\(.*\\))?$'],
       ready: ['^❯[\\s\\u00a0]*$'],
     },
     paste: 'bracketed',
