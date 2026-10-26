@@ -46,7 +46,17 @@ if (verb === 'type') {
   log({ verb, row, col })
   // SGR mouse, 1-based: press then release. The panel reads it as a real click.
   tmux('send-keys', '-t', pane, '-l', `\x1b[<0;${col + 1};${row + 1}M\x1b[<0;${col + 1};${row + 1}m`)
+} else if (verb === 'wheel') {
+  // drive.mjs wheel <pane> <row> <col> <up|down> [n]
+  const [row, col] = rest.slice(0, 2).map(Number)
+  const button = rest[2] === 'up' ? 64 : 65
+  const n = Number(rest[3] ?? 1)
+  log({ verb, row, col, dir: rest[2], n })
+  for (let i = 0; i < n; i++) {
+    tmux('send-keys', '-t', pane, '-l', `\x1b[<${button};${col + 1};${row + 1}M`)
+    await sleep(90)
+  }
 } else {
-  process.stderr.write('usage: drive.mjs type|enter|key|click <pane> ...\n')
+  process.stderr.write('usage: drive.mjs type|enter|key|click|wheel <pane> ...\n')
   process.exit(2)
 }
