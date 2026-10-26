@@ -1,9 +1,10 @@
 import { relative } from 'node:path'
 
-import { mission, mux, workflowStages } from './command-context.ts'
+import { mux, workflowStages } from './command-context.ts'
 import type { Mission, Runtime } from './command-context.ts'
 import { modelOf } from './model.ts'
 import type { PanelModel } from './model.ts'
+import { mission, Unresolved } from './missions.ts'
 import { liveOf } from './role-commands.ts'
 import { rootOf } from './check.ts'
 import { tmux } from './run.ts'
@@ -29,7 +30,7 @@ export const readPanel = (r: Runtime, want: string): Reading => {
     const stages = workflowStages(r, m.plan.workflow)
     const plan = { ...m.plan, problems: [...m.problems, ...stages.problems] }
     const model = modelOf({
-      mission: m.name, planPath: relative(m.root, m.path), planText: m.source, plan,
+      mission: m.name, planPath: relative(m.worktree, m.path), planText: m.source, plan,
       agents: m.agents, hash: m.hash, folded: m.folded, log: m.events, stages: stages.stages,
       live: new Map(m.plan.roles.map(role => [role.name, liveOf(r, m, role)])), now: new Date(r.now()),
     })
@@ -37,9 +38,11 @@ export const readPanel = (r: Runtime, want: string): Reading => {
     return { mission: m, model }
   } catch (error) {
     const why = (error as Error).message
+    const waiting = error instanceof Unresolved || /^no plan for/.test(why)
+    if (waiting && planning(r, rootOf(r.cwd, r.run))) return { missing: 'Orch is planning…' }
+    // With missions open, an unbound panel names them instead of looking idle.
+    if (error instanceof Unresolved && error.open.length > 0) return { missing: `panel: ${why}` }
 
-    return { missing: /^no mission under|^no plan at/.test(why)
-      ? planning(r, rootOf(r.cwd, r.run)) ? 'Orch is planning…' : 'no mission yet'
-      : `panel: ${why}` }
+    return { missing: waiting ? 'no mission yet' : `panel: ${why}` }
   }
 }

@@ -1,14 +1,13 @@
 // The plan format (dist/plan.js, built by npm test) and `troupe check`.
 import assert from 'node:assert/strict'
 import { execFileSync, spawnSync } from 'node:child_process'
-import { mkdtempSync, mkdirSync, readFileSync, rmSync, utimesSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
 import { fileURLToPath } from 'node:url'
 
 import { findPlan } from '../dist/check.js'
-import { append, logPath } from '../dist/log.js'
 import { layersOf, readPlan, sectionsOf } from '../dist/plan.js'
 
 const TEMPLATE = fileURLToPath(new URL('../skills/troupe-mission/templates/plan.md', import.meta.url))
@@ -178,10 +177,15 @@ test('headings inside fenced code do not cut a section', () => {
 
 test('troupe check: clean, problems, and no plan', () => {
   const repo = mkdtempSync(join(tmpdir(), 'troupe-check-'))
+  execFileSync('git', ['init', '-q', '-b', 'main'], { cwd: repo })
   const run = (...args) => spawnSync(process.execPath, [cli, 'check', ...args], { cwd: repo, encoding: 'utf8' })
   assert.equal(run().status, 2)
   mkdirSync(join(repo, 'docs/missions/m1'), { recursive: true })
   writeFileSync(join(repo, 'docs/missions/m1/plan.md'), readFileSync(TEMPLATE, 'utf8'))
+  const unresolved = run()
+  assert.equal(unresolved.status, 2, 'no newest-plan fallback')
+  assert.match(unresolved.stderr, /no mission for this pane/)
+  execFileSync('git', ['switch', '-qc', 'mission/m1'], { cwd: repo })
   const clean = run()
   assert.equal(clean.status, 0, clean.stdout)
   assert.match(clean.stdout, /clean \(3 roles: api, web, review\)/)
@@ -194,42 +198,15 @@ test('troupe check: clean, problems, and no plan', () => {
   assert.equal(run('nowhere').status, 2)
 })
 
-test('default selection skips historical and finished plans, honors explicit names and uses linked common dir', t => {
+test('findPlan takes only explicit names: a plan file, a folder, or a mission under docs/missions', t => {
   const root = mkdtempSync(join(tmpdir(), 'troupe-selection-'))
   t.after(() => rmSync(root, { recursive: true, force: true }))
-  const git = (...args) => execFileSync('git', args, { cwd: root, encoding: 'utf8' })
-  git('init', '-q', '-b', 'main')
-  const write = (name, seconds) => {
-    const path = join(root, 'docs/missions', name, 'plan.md')
-    mkdirSync(join(root, 'docs/missions', name), { recursive: true })
-    writeFileSync(path, '# Plan')
-    utimesSync(path, seconds, seconds)
-    return path
-  }
-  const historical = write('history', 50)
-  const open = write('open', 10)
-  const finished = write('finished', 40)
-  git('add', '.')
-  git('-c', 'user.name=Probe', '-c', 'user.email=probe@example.invalid', 'commit', '-qm', 'plans')
-  assert.ok('missing' in findPlan(root, root, ''), 'committed plans alone are historical')
-  append(logPath(join(root, '.git'), 'open'), 'cli', { ev: 'stage', stage: 'build' })
-  append(logPath(join(root, '.git'), 'finished'), 'cli', { ev: 'teardown' })
-  assert.equal(findPlan(root, root, '').path, open)
-  assert.equal(findPlan(root, root, 'history').path, historical)
-  assert.equal(findPlan(root, root, 'finished').path, finished)
-  const linked = join(root, 'linked')
-  git('worktree', 'add', '-qb', 'linked', linked)
-  assert.equal(findPlan(linked, linked, '').path, join(linked, 'docs/missions/open/plan.md'))
-  append(logPath(join(root, '.git'), 'open'), 'cli', { ev: 'teardown' })
-  assert.ok('missing' in findPlan(linked, linked, ''))
-  const fresh = write('fresh', 60)
-  assert.equal(findPlan(root, root, '').path, fresh)
-  git('add', 'docs/missions/fresh/plan.md')
-  assert.equal(findPlan(root, root, '').path, fresh, 'staged plans are still uncommitted')
-  // Committed on its own mission branch, before the first gate writes a log: still open.
-  git('switch', '-qc', 'mission/fresh')
-  git('-c', 'user.name=Probe', '-c', 'user.email=probe@example.invalid', 'commit', '-qm', 'plan')
-  assert.equal(findPlan(root, root, '').path, fresh)
-  git('switch', '-q', 'main')
-  assert.ok('missing' in findPlan(root, root, ''), 'committed elsewhere: historical')
+  const path = join(root, 'docs/missions/open/plan.md')
+  mkdirSync(join(root, 'docs/missions/open'), { recursive: true })
+  writeFileSync(path, '# Plan')
+  assert.ok('missing' in findPlan(root, root, ''), 'no newest-plan fallback')
+  assert.equal(findPlan(root, root, 'open').path, path)
+  assert.equal(findPlan(root, root, 'docs/missions/open').path, path)
+  assert.equal(findPlan(root, root, path).path, path)
+  assert.ok('missing' in findPlan(root, root, 'other'))
 })

@@ -7,7 +7,8 @@ import { basename, join } from 'node:path'
 import { test } from 'node:test'
 
 import { execute } from '../dist/commands.js'
-import { mission, runtime } from '../dist/command-context.js'
+import { runtime } from '../dist/command-context.js'
+import { mission } from '../dist/missions.js'
 import { append, readLog } from '../dist/log.js'
 import { panelEffect } from '../dist/panel-actions.js'
 import { readPanel } from '../dist/panel-model.js'
@@ -25,11 +26,12 @@ test('real scratch tmux: open marks one panel, keeps focus, and is a no-op the s
     rmSync(root, { recursive: true, force: true })
   })
   execFileSync('git', ['init', '-q', '-b', 'main'], { cwd: root })
+  execFileSync('git', ['-c', 'user.name=Probe', '-c', 'user.email=probe@example.invalid', 'commit', '-q', '--allow-empty', '-m', 'initial'], { cwd: root })
   const repo = execFileSync('git', ['rev-parse', '--show-toplevel'], { cwd: root, encoding: 'utf8' }).trim()
-  const caller = tmux(['new-session', '-d', '-s', 'agent', '-P', '-F', '#{pane_id}', 'sleep 30'], undefined, env)
+  const caller = tmux(['new-session', '-d', '-s', 'agent', '-x', '200', '-y', '50', '-P', '-F', '#{pane_id}', 'sleep 30'], undefined, env)
   assert.equal(caller.code, 0, caller.err)
   const pane = caller.out.trim()
-  const r = runtime({ cwd: root, env: { ...env, TMUX: 'scratch', TMUX_PANE: pane } })
+  const r = runtime({ cwd: root, home: join(root, '.home'), env: { ...env, TMUX: 'scratch', TMUX_PANE: pane } })
   const first = await execute('open', ['--planning'], r)
   assert.equal(first.code, 0, first.out)
   const list = () => tmux(['list-panes', '-a', '-F', '#{pane_id}\t#{@troupe-panel}'], undefined, env).out.trim().split('\n')
@@ -46,10 +48,24 @@ test('real scratch tmux: open marks one panel, keeps focus, and is a no-op the s
   assert.ok(firstFrame.includes('Orch is planning…'), firstFrame)
 
   assert.equal(tmux(['display', '-p', '-t', 'agent', '#{pane_id}'], undefined, env).out.trim(), pane)
-  const second = await execute('open', [], r)
+  const plain = await execute('open', [], r)
+  assert.equal(plain.code, 1, plain.out)
+  assert.match(plain.out, /no mission for this pane; pass -m <mission> \(no open mission\)/)
+  const second = await execute('open', ['--planning'], r)
   assert.equal(second.code, 0, second.out)
   assert.match(second.out, /already open/)
   assert.deepEqual(list(), panes)
+  // Binding the pane later hands the planning panel its mission.
+  const made = await execute('mission', ['new', 'later'], r)
+  assert.equal(made.code, 0, made.out)
+  assert.match(made.out, /already open/)
+  assert.deepEqual(list(), panes)
+  let frame = ''
+  for (let i = 0; i < 200 && !frame.includes('later'); i++) {
+    frame = tmux(['capture-pane', '-p', '-t', panelPane], undefined, env).out
+    await new Promise(resolve => setTimeout(resolve, 20))
+  }
+  assert.ok(frame.includes('later'), frame)
 })
 
 test('real scratch tmux: dispatch, live status, bracketed send, result wait and close', { skip: spawnSync('tmux', ['-V']).status !== 0, timeout: 20000 }, async t => {
@@ -99,7 +115,7 @@ paste: bracketed
   const m = mission(r, 'm1')
   append(m.log, 'panel', { ev: 'gate-answer', gate: 'plan', answer: 'approve', plan: m.hash })
   const session = `troupe-${basename(root).replace(/[^A-Za-z0-9_-]/g, '-')}`
-  const manual = tmux(['new-session', '-d', '-s', session, '-n', 'roles', '-P', '-F', '#{pane_id}', 'sleep 30'], undefined, env)
+  const manual = tmux(['new-session', '-d', '-s', session, '-n', 'roles-m1', '-P', '-F', '#{pane_id}', 'sleep 30'], undefined, env)
   assert.equal(manual.code, 0, manual.err)
   const manualPane = manual.out.trim()
   const rolesWindow = tmux(['display', '-p', '-t', manualPane, '#{window_id}'], undefined, env).out.trim()
@@ -284,4 +300,200 @@ test('real scratch tmux: a panel answer reaches the marked ready agent once', { 
   flushAnswers(r, mission(r, 'm1'))
   await new Promise(resolve => setTimeout(resolve, 30))
   assert.equal(readFileSync(received, 'utf8').trim().split('\n').length, 1)
+})
+
+// Two orchestrators, each bound to its own mission, plus an unbound pane, on one scratch tmux server.
+const parallelWorld = (t, prefix) => {
+  const base = mkdtempSync(join(tmpdir(), `troupe-${prefix}-`))
+  const socket = `troupe-${prefix}-${process.pid}-${randomUUID().slice(0, 8)}`
+  const env = { ...process.env, TMUX: undefined, TMUX_PANE: undefined, TROUPE_TMUX_SOCKET: socket }
+  t.after(() => {
+    tmux(['kill-server'], undefined, env)
+    rmSync(base, { recursive: true, force: true })
+  })
+  const home = join(base, 'home')
+  mkdirSync(home)
+  const agent = join(base, 'fake-agent.sh')
+  writeFileSync(agent, "#!/bin/sh\nprintf '\\033[2J\\033[HREADY\\n'\nwhile IFS= read -r line; do printf '\\033[2J\\033[HREADY\\n'; done\n")
+  chmodSync(agent, 0o755)
+  const repo = name => {
+    const root = join(base, name)
+    mkdirSync(join(root, '.troupe/agents'), { recursive: true })
+    const git = (...args) => execFileSync('git', args, { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] })
+    git('init', '-q', '-b', 'main')
+    git('config', 'user.name', 'Probe')
+    git('config', 'user.email', 'probe@example.invalid')
+    writeFileSync(join(root, '.troupe/agents/fake.yaml'), `command: ${JSON.stringify(agent)}\nmodel: []\neffort: []\npermission:\n  - [--policy]\nprompt: last-arg\nscreen:\n  waits: ['^WAIT$']\n  working: ['^WORKING$']\n  ready: ['^READY$']\npaste: bracketed\n`)
+    writeFileSync(join(root, 'README'), name)
+    git('add', '.')
+    git('commit', '-qm', 'initial')
+    return { root, git }
+  }
+  // An orchestrator stand-in: a Codex-like prompt that records every line typed into it.
+  const orchestrator = (name, window) => {
+    const received = join(base, `${name}.received`)
+    const script = `printf '› Ask Codex to do anything\\n'; while IFS= read -r line; do printf '%s\\n' "$line" >> ${shellOf([received])}; done`
+    const opened = tmux(window === 0 ? ['new-session', '-d', '-s', 'agents', '-x', '200', '-y', '50', '-P', '-F', '#{pane_id}', shellOf(['/bin/sh', '-c', script])]
+      : ['new-window', '-d', '-t', 'agents:', '-P', '-F', '#{pane_id}', shellOf(['/bin/sh', '-c', script])], undefined, env)
+    assert.equal(opened.code, 0, opened.err)
+    return { pane: opened.out.trim(), received }
+  }
+  const at = (cwd, pane) => runtime({ cwd, home, env: { ...env, TMUX: 'scratch', TMUX_PANE: pane }, inputTTY: false, outputTTY: false })
+  const panes = () => tmux(['list-panes', '-a', '-F', '#{pane_id}\t#{@troupe-panel}\t#{@troupe-panel-orchestrator}\t#{@troupe-mission}\t#{@troupe-mission-repo}'], undefined, env).out.trim().split('\n')
+    .map(line => { const [pane, panel, orchestrator, mission, repo] = line.split('\t'); return { pane, panel, orchestrator, mission, repo } })
+  const windows = () => tmux(['list-windows', '-a', '-F', '#{window_name}\t#{window_panes}'], undefined, env).out.trim().split('\n')
+  return { base, env, repo, orchestrator, at, panes, windows }
+}
+
+const fakePlan = name => `# ${name}\n\n\`\`\`yaml\ngoal: Check ${name}\nbase: mission/${name}\nroles:\n  api:\n    agent: fake\n    flags: [--policy, ask]\n    touches: []\n\`\`\`\n\n## Role: api\n\nReply.\n`
+
+test('real scratch tmux: two missions in one repository each follow their own orchestrator pane', { skip: spawnSync('tmux', ['-V']).status !== 0, timeout: 40000 }, async t => {
+  const w = parallelWorld(t, 'parallel')
+  const { root, git } = w.repo('repo')
+  const a = w.orchestrator('a', 0)
+  const b = w.orchestrator('b', 1)
+  const c = w.orchestrator('c', 2)
+  const [ra, rb, rc] = [a, b, c].map(one => w.at(root, one.pane))
+
+  for (const [name, r] of [['alpha', ra], ['beta', rb]]) {
+    const made = await execute('mission', ['new', name], r)
+    assert.equal(made.code, 0, made.out)
+    assert.ok(made.out.includes(join(root, '.troupe/missions', name)), made.out)
+    assert.equal(git('symbolic-ref', '--short', 'HEAD').trim(), 'main', 'mission new never switches the main checkout')
+  }
+  assert.match((await execute('mission', ['new', 'beta'], rc)).out, /already exists/)
+  assert.match((await execute('mission', ['new', 'gamma'], ra)).out, /runs mission alpha/)
+  assert.equal(git('status', '--porcelain').trim(), '', 'mission worktrees stay out of the main checkout status')
+
+  // Each caller pane resolves its own mission without -m, from the main checkout.
+  for (const [name, r] of [['alpha', ra], ['beta', rb]]) {
+    const worktree = join(root, '.troupe/missions', name)
+    writeFileSync(join(worktree, `docs/missions/${name}/plan.md`), fakePlan(name))
+    execFileSync('git', ['add', '.'], { cwd: worktree })
+    execFileSync('git', ['commit', '-qm', `${name}: plan`], { cwd: worktree })
+    const m = mission(r)
+    assert.equal(m.name, name)
+    assert.equal(m.worktree, worktree)
+    const checked = await execute('check', [], r)
+    assert.equal(checked.code, 0, checked.out)
+    append(m.log, 'panel', { ev: 'gate-answer', gate: 'plan', answer: 'approve', plan: m.hash })
+    assert.equal(JSON.parse((await execute('status', ['--json'], r)).out).mission, name)
+  }
+  // -m reads the other mission's plan from wherever it runs, but not against a pane's own binding.
+  assert.equal(mission(rc, 'beta').worktree, join(root, '.troupe/missions/beta'))
+  assert.match((await execute('status', ['-m', 'beta'], ra)).out, /runs mission alpha; -m beta names another/)
+
+  // An unbound pane refuses and lists both; status lists them with exit 0.
+  const refused = await execute('stage', ['build'], rc)
+  assert.equal(refused.code, 1)
+  for (const name of ['alpha', 'beta']) assert.ok(refused.out.includes(`${name}  ${join(root, '.troupe/missions', name)}`), refused.out)
+  const listed = await execute('status', ['--json'], rc)
+  assert.equal(listed.code, 0, listed.out)
+  const open = JSON.parse(listed.out).missions
+  assert.deepEqual(open.map(one => [one.name, one.orchestrator]), [['alpha', a.pane], ['beta', b.pane]])
+
+  // One panel per mission, beside its orchestrator, and open stays idempotent per mission.
+  const panels = () => w.panes().filter(one => one.panel === root)
+  assert.deepEqual(panels().map(one => [one.orchestrator, one.mission]).sort(), [[a.pane, 'alpha'], [b.pane, 'beta']])
+  assert.deepEqual(open.map(one => one.panel), [panels().find(one => one.mission === 'alpha').pane, panels().find(one => one.mission === 'beta').pane])
+  assert.match((await execute('open', [], ra)).out, /already open/)
+  assert.equal(panels().length, 2)
+  // An unbound pane neither opens an idle panel nor takes over a live orchestrator's mission.
+  const idle = await execute('open', [], rc)
+  assert.equal(idle.code, 1)
+  for (const name of ['alpha', 'beta']) assert.ok(idle.out.includes(`${name}  ${join(root, '.troupe/missions', name)}`), idle.out)
+  const unbound = readPanel(rc, '')
+  assert.ok(unbound.missing.startsWith('panel: no mission for this pane') && unbound.missing.includes('alpha') && unbound.missing.includes('beta'), unbound.missing)
+  const stolen = await execute('open', ['-m', 'alpha'], rc)
+  assert.equal(stolen.code, 1)
+  assert.match(stolen.out, new RegExp(`mission alpha is run by pane ${a.pane}`))
+  assert.ok(!w.panes().find(one => one.pane === c.pane).mission, 'the unbound pane stays unbound')
+  assert.equal(panels().length, 2)
+  const alphaPanel = panels().find(one => one.mission === 'alpha').pane
+  let frame = ''
+  for (let i = 0; i < 150 && !frame.includes('alpha'); i++) {
+    frame = tmux(['capture-pane', '-p', '-t', alphaPanel], undefined, w.env).out
+    await new Promise(resolve => setTimeout(resolve, 20))
+  }
+  assert.ok(frame.includes('alpha') && !frame.includes('beta'), frame)
+
+  // One roles-<m> window per mission.
+  for (const r of [ra, rb]) {
+    const dispatched = await execute('dispatch', ['api'], r)
+    assert.equal(dispatched.code, 0, dispatched.out)
+  }
+  assert.deepEqual(w.windows().filter(line => line.startsWith('roles')).sort(), ['roles-alpha\t1', 'roles-beta\t1'])
+  assert.ok(existsSync(join(root, '.troupe/worktrees/alpha/api')) && existsSync(join(root, '.troupe/worktrees/beta/api')), 'role worktrees stay under the main checkout')
+
+  // A gate answer reaches only its own mission's orchestrator.
+  assert.equal((await execute('gate', ['release', 'Ship alpha?', '--no-wait'], ra)).code, 0)
+  const rPanel = w.at(root, alphaPanel)
+  const reading = readPanel(rPanel, '')
+  assert.equal(reading.mission.name, 'alpha', 'the panel resolves through its orchestrator')
+  assert.equal(await panelEffect(rPanel, 'alpha', { kind: 'answer', gate: gateTarget(reading.model), answer: 'approve' }), 'Approved release')
+  for (let i = 0; i < 100 && !existsSync(a.received); i++) {
+    flushAnswers(rPanel, mission(rPanel))
+    await new Promise(resolve => setTimeout(resolve, 20))
+  }
+  assert.equal(readFileSync(a.received, 'utf8'), 'release approved in the panel. Continue the mission.\n')
+  assert.equal(existsSync(b.received), false)
+
+  // Teardown of beta waits for its push, then leaves alpha intact.
+  const beta = join(root, '.troupe/missions/beta')
+  assert.match((await execute('teardown', [], rb)).out, /mission\/beta: not pushed/)
+  execFileSync('git', ['init', '-q', '--bare', join(w.base, 'remote.git')])
+  git('remote', 'add', 'origin', join(w.base, 'remote.git'))
+  execFileSync('git', ['push', '-q', 'origin', 'mission/beta'], { cwd: beta, stdio: 'ignore' })
+  const torn = await execute('teardown', [], rb)
+  assert.equal(torn.code, 0, torn.out)
+  assert.equal(existsSync(beta), false)
+  assert.equal(git('rev-parse', '--verify', '-q', 'mission/beta').trim().length, 40, 'the mission branch stays')
+  assert.deepEqual(panels().map(one => one.mission), ['alpha'])
+  assert.equal(w.panes().find(one => one.pane === b.pane).mission, '', 'the beta orchestrator is unbound')
+  assert.deepEqual(w.windows().filter(line => line.startsWith('roles')), ['roles-alpha\t1'])
+  assert.ok(existsSync(join(root, '.troupe/missions/alpha')))
+  assert.equal(JSON.parse((await execute('status', ['--json'], ra)).out).roles[0].state !== 'gone', true)
+  assert.match((await execute('teardown', ['-m', 'beta'], rc)).out, /Nothing left to tear down for beta/)
+  assert.deepEqual(JSON.parse((await execute('status', ['--json'], rc)).out).missions.map(one => one.name), ['alpha'])
+
+  // Once alpha's orchestrator is gone, another pane may take the mission and its panel over.
+  assert.equal(tmux(['kill-pane', '-t', a.pane], undefined, w.env).code, 0)
+  const taken = await execute('open', ['-m', 'alpha'], rc)
+  assert.equal(taken.code, 0, taken.out)
+  assert.match(taken.out, /already open/)
+  assert.equal(w.panes().find(one => one.pane === c.pane).mission, 'alpha')
+  assert.deepEqual(panels().map(one => [one.orchestrator, one.mission]), [[c.pane, 'alpha']])
+})
+
+test('real scratch tmux: the same mission name in two repositories stays apart', { skip: spawnSync('tmux', ['-V']).status !== 0, timeout: 20000 }, async t => {
+  const w = parallelWorld(t, 'repos')
+  const one = w.repo('one')
+  const two = w.repo('two')
+  const a = w.orchestrator('a', 0)
+  const b = w.orchestrator('b', 1)
+  assert.equal((await execute('mission', ['new', 'alpha'], w.at(one.root, a.pane))).code, 0)
+  assert.equal((await execute('mission', ['new', 'alpha'], w.at(two.root, b.pane))).code, 0)
+  assert.equal(mission(w.at(one.root, a.pane)).worktree, join(one.root, '.troupe/missions/alpha'))
+  assert.equal(mission(w.at(two.root, b.pane)).worktree, join(two.root, '.troupe/missions/alpha'))
+  // A pane bound to an open mission in one repository cannot start another in a second one.
+  const twice = await execute('mission', ['new', 'beta'], w.at(two.root, a.pane))
+  assert.equal(twice.code, 1)
+  assert.match(twice.out, new RegExp(`this pane runs mission alpha in ${one.root}; start beta from another pane`))
+  assert.equal(existsSync(join(two.root, '.troupe/missions/beta')), false)
+  assert.equal(w.panes().find(p => p.pane === a.pane).repo.startsWith(one.root), true)
+  // Nor can it take over a mission in the second one whose orchestrator is gone.
+  const q = w.orchestrator('q', 2)
+  assert.equal((await execute('mission', ['new', 'beta'], w.at(two.root, q.pane))).code, 0)
+  assert.equal(tmux(['kill-pane', '-t', q.pane], undefined, w.env).code, 0)
+  const takeover = await execute('open', ['-m', 'beta'], w.at(two.root, a.pane))
+  assert.equal(takeover.code, 1)
+  assert.match(takeover.out, new RegExp(`this pane runs mission alpha in ${one.root}; open beta from another pane`))
+  const held = w.panes().find(p => p.pane === a.pane)
+  assert.equal(held.mission, 'alpha')
+  assert.equal(held.repo.startsWith(one.root), true)
+  // A pane bound in one repository is unbound in the other.
+  const across = JSON.parse((await execute('status', ['--json'], w.at(two.root, a.pane))).out)
+  assert.deepEqual(across.missions.map(m => [m.name, m.orchestrator]), [['alpha', b.pane], ['beta', '']])
+  const panels = w.panes().filter(p => p.panel !== '' && p.orchestrator !== q.pane)
+  assert.deepEqual(panels.map(p => [p.panel, p.orchestrator]).sort(), [[one.root, a.pane], [two.root, b.pane]])
 })

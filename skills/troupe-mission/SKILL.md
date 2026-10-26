@@ -6,8 +6,8 @@ description: Run a multi-step software change as a troupe mission, with this ses
 # Mission
 
 You are the orchestrator in the person's current agent session. The person
-watches the panel beside you and the roles in the `roles` window, and can
-talk to any role directly. You plan, dispatch, review the results, merge,
+watches the panel beside you and the roles in the `roles-<mission>` window,
+and can talk to any role directly. You plan, dispatch, review the results, merge,
 and stop at the person's gates. You do not write the roles' code.
 
 The `troupe` CLI enforces what keeps the work correct: no role opens before
@@ -43,12 +43,16 @@ at the gate.
 
 ## 2. Plan
 
-Create the mission branch `mission/<mission>` from the base branch in this
-checkout (ask first if the checkout has uncommitted work), copy
-`templates/plan.md` from this skill's folder to
-`docs/missions/<mission>/plan.md`, and fill it in. Set `base:` to the mission
-branch: each role's worktree is cut from it at dispatch, so a role sees what
-you merged before it.
+Run `troupe mission new <mission>` (add `--base <ref>` when the mission
+should not start from the checkout's current branch). It creates the
+mission's own worktree on branch `mission/<mission>`, prints its path, and
+writes the plan template to `docs/missions/<mission>/plan.md` there with
+`base:` already set to the mission branch: each role's worktree is cut from
+it at dispatch, so a role sees what you merged before it. It also binds this
+session's pane to the mission, so the commands below act on it without `-m`,
+and other missions in the same repository can run beside it. The person's
+checkout stays on its branch. Fill in the plan in the mission worktree, by
+its full path.
 
 - **A role is a window.** Name roles for what they do (`api`, `web`,
   `review`). Split by coupling, not by file: files that change together go
@@ -78,7 +82,8 @@ you merged before it.
   sentences and each done-when item to one checkable line, what and not how,
   usually three to six of them; the how goes in the role sections.
 
-Run `troupe check` until it is clean. Commit the plan on the mission branch.
+Run `troupe check` until it is clean. Commit the plan in the mission
+worktree (`git -C <worktree> add` and `commit`).
 
 ## 3. Gate: plan OK?
 
@@ -116,9 +121,9 @@ then give it each branch in the order they land:
 the role's old result aside first, so `troupe wait --role` waits for the new
 one.
 
-- PASS: merge the role's branch onto the mission branch (one commit per
-  role, subject `<role>: <what it does>`), then dispatch the roles that just
-  became ready.
+- PASS: merge the role's branch onto the mission branch in the mission
+  worktree (`git -C <worktree> merge …`; one commit per role, subject
+  `<role>: <what it does>`), then dispatch the roles that just became ready.
 - Act-on findings: `troupe send <builder> "<the findings, or the review
   file's path>"` to the same window, on the same branch; then review again.
   **One fix round, then you rule**: merge it, or hold it and tell the
@@ -133,18 +138,20 @@ the fix loop or the plan.
 
 ## 7. Open the MR, then teardown before finishing
 
-`troupe stage mr`; push the mission branch and open one MR against the base
-branch, per the project's conventions. In the same step, after the MR opens,
+`troupe stage mr`; push the mission branch (`git -C <worktree> push`) and
+open one MR against the base branch, per the project's conventions. In the same step, after the MR opens,
 run `troupe stage teardown -m <mission>`, then `troupe teardown -m <mission>`;
 only then report the MR link and cleanup result. Opening the MR does not
 finish the mission. A refused push: tell the person and stop.
 
 Teardown removes mission-owned role panes, worktrees, branches and temporary
-briefs/results while keeping the MR head and log. It closes only role panes; the orchestrator and panel panes opened
-by `up` stay open. Dirty or untracked files and unmerged commits refuse cleanup;
-resolve them before retrying, or tell the person cleanup is blocked and ask
-before discarding them with `--force`. Repeating teardown with explicit
-`-m` is safe. Only a person merges the MR.
+briefs/results, and the mission worktree, while keeping the mission branch
+(the MR head) and the log. It closes this mission's panel and unbinds your
+pane; your session stays open. Dirty or untracked files, unmerged commits and
+an unpushed mission branch refuse cleanup; resolve them before retrying, or
+tell the person cleanup is blocked and ask before discarding them with
+`--force`. Repeating teardown with explicit `-m` is safe. Only a person
+merges the MR.
 
 ## Telling the person
 

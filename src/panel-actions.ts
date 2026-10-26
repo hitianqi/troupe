@@ -1,4 +1,5 @@
-import { clean, mission, mux, Refusal, workflowStages } from './command-context.ts'
+import { clean, mux, Refusal, workflowStages } from './command-context.ts'
+import { mission } from './missions.ts'
 import type { Runtime } from './command-context.ts'
 import { append } from './log.ts'
 import { ownedPane } from './panes.ts'

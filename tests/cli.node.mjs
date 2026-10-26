@@ -34,7 +34,7 @@ test('an unknown command prints the usage on stderr and exits 2', () => {
   assert.match(r.stderr, /dispatch/)
 })
 
-test('help documents readiness, teardown and newest-open defaults', () => {
+test('help documents readiness, teardown and per-pane mission defaults', () => {
   const r = run('--help')
-  for (const text of ['show the panel beside', '--ready', 'teardown [--force]', 'newest open', 'finished missions require -m']) assert.ok(r.stdout.includes(text), text)
+  for (const text of ['show the panel beside', '--ready', 'teardown [--force]', "this pane's mission", 'mission new <name>', 'finished missions require -m']) assert.ok(r.stdout.includes(text), text)
 })

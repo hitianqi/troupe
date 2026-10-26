@@ -6,7 +6,8 @@ import { basename, dirname, join } from 'node:path'
 import { test } from 'node:test'
 
 import { execute } from '../dist/commands.js'
-import { mission, runtime } from '../dist/command-context.js'
+import { runtime } from '../dist/command-context.js'
+import { mission } from '../dist/missions.js'
 import { append, readLog } from '../dist/log.js'
 import { shellOf } from '../dist/run.js'
 import { INSTALL_MARKER } from '../dist/setup.js'
@@ -57,6 +58,12 @@ Build the endpoint.
 Build the page.
 `
 
+// Each troupe pane option, by the property the fake keeps it in.
+const MARKS = { '@troupe-owner': 'owner', '@troupe-orchestrator-token': 'token', '@troupe-panel': 'panel', '@troupe-planning': 'planning',
+  '@troupe-mission': 'mission', '@troupe-mission-repo': 'missionRepo', '@troupe-panel-orchestrator': 'panelOrchestrator' }
+const format = (id, p, text) => text.replace(/#\{([^}]+)\}/g, (_, key) => key === 'pane_id' ? id : key === 'pane_dead' ? (p.dead ? '1' : '0')
+  : key === 'window_name' ? p.windowName : key === 'session_id' ? '$1' : key === 'window_id' ? p.window : String(p[MARKS[key]] ?? ''))
+
 const world = (t, env = { TROUPE_TMUX_SOCKET: 'unit-socket' }) => {
   const base = mkdtempSync(join(tmpdir(), 'troupe-command-'))
   t.after(() => rmSync(base, { recursive: true, force: true }))
@@ -70,6 +77,9 @@ const world = (t, env = { TROUPE_TMUX_SOCKET: 'unit-socket' }) => {
   mkdirSync(join(root, '.git'), { recursive: true })
   mkdirSync(home)
   write(join(pkg, 'skills/troupe-mission/SKILL.md'), 'Workflow instructions.')
+  write(join(pkg, 'skills/troupe-mission/templates/plan.md'), plan().replace('base: main', 'base: mission/<mission>   # cut roles from it'))
+  // The checkout is on m1's mission branch, so commands resolve m1 without -m.
+  const head = { branch: 'mission/m1' }
   const calls = []
   const panes = new Map()
   const worktrees = new Map()
@@ -87,6 +97,7 @@ const world = (t, env = { TROUPE_TMUX_SOCKET: 'unit-socket' }) => {
     if (command === 'git') {
       if (args.includes('--show-toplevel')) return yes(root)
       if (args.includes('--git-common-dir')) return yes('.git')
+      if (args[0] === 'symbolic-ref') return yes(head.branch)
       if (args[0] === 'rev-parse') return yes('abcdef123456')
       if (args[0] === 'show-ref') return no()
       if (args[0] === 'worktree' && args[1] === 'list') return yes([...worktrees].map(([path, branch]) => `worktree ${path}\0branch refs/heads/${branch}\0\0`).join(''))
@@ -95,8 +106,9 @@ const world = (t, env = { TROUPE_TMUX_SOCKET: 'unit-socket' }) => {
         worktrees.delete(args.at(-1))
       }
       if (args[0] === 'worktree' && args[1] === 'add') {
-        const path = args.at(-2)
         const branch = args[args.indexOf('-b') + 1]
+        const path = args[args.indexOf('-b') + 2]
+        if ([...worktrees.values()].includes(branch)) return { code: 128, out: '', err: `fatal: a branch named '${branch}' already exists` }
         mkdirSync(path, { recursive: true })
         worktrees.set(path, branch)
       }
@@ -114,24 +126,18 @@ const world = (t, env = { TROUPE_TMUX_SOCKET: 'unit-socket' }) => {
       return yes(`$1 ${window} ${pane}\n`)
     }
     if (args[0] === 'set-option') {
-      if (args.includes('@troupe-owner')) panes.get(target).owner = args.at(-1)
-      if (args.includes('@troupe-orchestrator')) panes.get(target).orchestrator = args.includes('-u') ? undefined : args.at(-1)
-      if (args.includes('@troupe-orchestrator-token')) panes.get(target).token = args.includes('-u') ? undefined : args.at(-1)
-      if (args.includes('@troupe-panel')) panes.get(target).panel = args.at(-1)
-      if (args.includes('@troupe-planning')) panes.get(target).planning = args.includes('-u') ? undefined : args.at(-1)
+      const option = args.find(arg => arg in MARKS)
+      if (option !== undefined) panes.get(target)[MARKS[option]] = args.includes('-u') ? undefined : args.at(-1)
     }
-    if (args[0] === 'display' && args.at(-1).includes('@troupe-planning')) return yes(`${panes.get(target)?.panel ?? ''}\t${panes.get(target)?.planning ?? ''}`)
     if (args[0] === 'display') {
       if (args.at(-1) === '#{session_id}') return yes('$1')
       if (args.at(-1) === '#{pane_width}') return yes('200')
       const p = panes.get(target)
-      return p ? yes(`${target}\t${p.dead ? 1 : 0}\t${p.owner}`) : no()
+      return p ? yes(format(target, p, args.at(-1))) : no()
     }
     if (args[0] === 'capture-pane') return panes.has(target) ? yes(panes.get(target).screen) : no()
     if (args[0] === 'list-panes' && args.at(-1).includes('#{pane_pid}')) return yes('')
-    if (args[0] === 'list-panes' && args.at(-1).includes('@troupe-orchestrator')) return yes([...panes].map(([id, p]) => `${id}\t${p.dead ? 1 : 0}\t${p.orchestrator ?? ''}\t${p.token ?? ''}`).join('\n'))
-    if (args[0] === 'list-panes' && args.at(-1).includes('@troupe-panel')) return yes([...panes].map(([id, p]) => `${id}\t${p.dead ? 1 : 0}\t${p.panel ?? ''}`).join('\n'))
-    if (args[0] === 'list-panes') return yes([...panes].map(([id, p]) => `${p.windowName}\t$1 ${p.window} ${id}`).join('\n'))
+    if (args[0] === 'list-panes') return yes([...panes].map(([id, p]) => format(id, p, args.at(-1))).join('\n'))
     if (args[0] === 'load-buffer') afterLoad?.()
     if (args[0] === 'kill-pane') panes.delete(target)
     return yes()
@@ -144,7 +150,7 @@ const world = (t, env = { TROUPE_TMUX_SOCKET: 'unit-socket' }) => {
   const events = () => readLog(join(root, '.git/troupe/m1/log.jsonl')).events
   const approve = () => call('approve', '-m', 'm1')
 
-  return { root, home, pkg, write, calls, panes, output, r, call, events, approve, afterLoad: fn => { afterLoad = fn } }
+  return { root, home, pkg, write, calls, panes, worktrees, head, output, r, call, events, approve, afterLoad: fn => { afterLoad = fn } }
 }
 
 test('dispatch refuses unapproved, changed, problematic and unknown roles without opening panes', async t => {
@@ -311,20 +317,27 @@ test('setup updates marked copies and removes only its own skill directories', a
   assert.equal((await w.call('setup')).code, 1)
 })
 
-test('up uses a new mission window, plain orchestrator and half-width panel, then attaches outside tmux', async t => {
+test('up starts a mission: its worktree, plain orchestrator there and half-width panel, then attaches outside tmux', async t => {
   const w = world(t)
-  const result = await w.call('up', '--orch', 'codex')
+  assert.match((await w.call('up', '--orch', 'codex')).out, /pass -m <mission>/)
+  const result = await w.call('up', '-m', 'm2', '--orch', 'codex')
   assert.equal(result.code, 0, result.out)
-  assert.ok(w.calls.some(c => c.args.includes('new-session') && c.args.at(-1) === "'codex'"))
-  assert.ok(w.calls.some(c => c.args.includes('split-window') && c.args.includes('-h') && c.args.includes('100') && c.args.at(-1).includes("'panel'")))
+  const worktree = join(w.root, '.troupe/missions/m2')
+  assert.equal(w.worktrees.get(worktree), 'mission/m2')
+  assert.match(readFileSync(join(worktree, 'docs/missions/m2/plan.md'), 'utf8'), /^base: mission\/m2 +# cut roles from it$/m)
+  assert.ok(w.calls.some(c => c.args.includes('new-session') && c.args.at(-1) === "'codex'" && c.args[c.args.indexOf('-c') + 1] === worktree))
+  assert.ok(w.calls.some(c => c.args.includes('split-window') && c.args.includes('-h') && c.args.includes('100') && c.args.at(-1).endsWith("'panel'")))
   assert.ok(w.calls.some(c => c.args.includes('attach-session') && c.inherit))
-  assert.equal(w.events().at(-1).ev, 'up')
-  assert.ok([...w.panes.values()].some(p => p.orchestrator === w.root && p.token))
+  assert.equal(readLog(join(w.root, '.git/troupe/m2/log.jsonl')).events.at(-1).ev, 'up')
+  const orchestrator = [...w.panes].find(([, p]) => p.mission === 'm2' && !p.panel && p.token)
+  assert.ok(orchestrator)
+  assert.ok([...w.panes.values()].some(p => p.panel === w.root && p.panelOrchestrator === orchestrator[0] && p.mission === 'm2'))
   const noOp = w.calls.length
-  assert.match((await w.call('open')).out, /already open/)
+  assert.match((await w.call('open', '-m', 'm2')).out, /already open/)
   assert.ok(w.calls.slice(noOp).filter(c => c.command === 'tmux').every(c => c.args[2] === 'list-panes'))
+  assert.match((await w.call('up', '-m', 'm2')).out, /already/)
   const before = w.calls.length
-  assert.equal((await execute('up', [], { ...w.r, env: { ...w.r.env, TMUX: 'unit', TMUX_PANE: '%1' } })).code, 0)
+  assert.equal((await execute('up', ['-m', 'm3'], { ...w.r, env: { ...w.r.env, TMUX: 'unit', TMUX_PANE: '%1' } })).code, 0)
   assert.ok(!w.calls.slice(before).some(c => c.args.includes('has-session')))
   assert.ok(w.calls.slice(before).some(c => c.args.includes('display') && c.args.includes('%1') && c.args.at(-1) === '#{session_id}'))
   assert.ok(w.calls.some(c => c.args.includes('new-window')))
@@ -392,7 +405,7 @@ test('status watch cancels, wait reports an exited pane, and up can start before
   assert.match((await w.call('wait', '--role', 'api')).out, /pane gone/)
   assert.equal((await w.call('send', 'api', 'hello')).code, 1)
   rmSync(join(w.root, 'docs/missions/m1/plan.md'))
-  assert.equal((await w.call('up')).code, 0)
+  assert.equal((await w.call('up', '-m', 'm2')).code, 0)
 })
 
 test('a failed capture does not turn an existing role into a missing pane', async t => {
@@ -410,24 +423,25 @@ test('a failed capture does not turn an existing role into a missing pane', asyn
 test('dispatch reuses the named session and roles window, leaving unlogged panes alone', async t => {
   const w = world(t)
   await w.approve()
-  w.panes.set('%99', { window: '@99', windowName: 'roles', owner: 'other', screen: 'READY', dead: false })
+  w.panes.set('%98', { window: '@98', windowName: 'roles-m2', owner: 'other', screen: 'READY', dead: false })
+  w.panes.set('%99', { window: '@99', windowName: 'roles-m1', owner: 'other', screen: 'READY', dead: false })
   assert.equal((await w.call('dispatch', 'api')).code, 0)
   assert.equal((await w.call('dispatch', 'web')).code, 0)
   assert.ok(!w.calls.some(c => c.args.includes('new-session') || c.args.includes('new-window')))
   assert.equal(w.calls.filter(c => c.args.includes('split-window')).length, 2)
   assert.ok(w.calls.some(c => c.args.includes('select-layout') && c.args.includes('@99') && c.args.includes('tiled')))
   assert.equal((await w.call('close', '--all')).code, 0)
-  assert.deepEqual([...w.panes.keys()], ['%99'])
+  assert.deepEqual([...w.panes.keys()], ['%98', '%99'])
 })
 
 test('dispatch creates roles in an existing session without a roles window', async t => {
   const w = world(t)
   await w.approve()
-  w.panes.set('%99', { window: '@99', windowName: 'roles extra', owner: 'other', screen: 'READY', dead: false })
+  w.panes.set('%99', { window: '@99', windowName: 'roles', owner: 'other', screen: 'READY', dead: false })
   assert.equal((await w.call('dispatch', 'api')).code, 0)
   const created = w.calls.find(c => c.args.includes('new-window'))
   assert.ok(created.args.includes('$1:'))
-  assert.ok(created.args.includes('roles'))
+  assert.ok(created.args.includes('roles-m1'))
   assert.ok(!w.calls.some(c => c.args.includes('new-session')))
 })
 
@@ -529,16 +543,22 @@ test('teardown still refuses unread log lines, including with force', async t =>
   assert.equal(w.panes.size, 1)
 })
 
-test('open reuses a live repository panel without tmux writes, even without a plan', async t => {
+test('plain open refuses an unresolved mission without tmux writes; a resolved one reuses the live panel', async t => {
   const w = world(t)
   rmSync(join(w.root, 'docs/missions/m1/plan.md'))
+  w.head.branch = 'main'
   w.panes.set('%99', { panel: w.root, dead: false })
-  const result = await w.call('open')
-  assert.deepEqual(result, { code: 0, out: 'Panel already open in %99.\n' })
+  const refused = await w.call('open')
+  assert.equal(refused.code, 1)
+  assert.match(refused.out, /no mission for this pane; pass -m <mission>/)
   assert.ok(w.calls.filter(c => c.command === 'tmux').every(c => c.args[2] === 'list-panes'))
+  assert.match((await w.call('open', '--planning')).out, /already open in %99/)
+  w.head.branch = 'mission/m1'
+  assert.match((await w.call('open')).out, /already open in %99/)
+  assert.equal(w.panes.get('%99').mission, 'm1', 'an unclaimed panel takes the mission resolved here')
 })
 
-test('open splits the caller on the right, marks the panel, and passes the requested mission', async t => {
+test('open splits the caller on the right, binds the caller and marks the panel with it and the mission', async t => {
   const w = world(t)
   w.panes.set('%99', { window: '@99', windowName: 'agent', screen: 'READY', owner: 'person' })
   const result = await execute('open', ['-m', 'm1'], { ...w.r, env: { ...w.r.env, TMUX: 'unit', TMUX_PANE: '%99' } })
@@ -546,9 +566,13 @@ test('open splits the caller on the right, marks the panel, and passes the reque
   assert.equal(result.out.trim().split('\n').length, 1)
   const split = w.calls.find(c => c.args.includes('split-window')).args.slice(2)
   assert.deepEqual(split.slice(0, 7), ['split-window', '-d', '-h', '-l', '90', '-t', '%99'])
-  assert.ok(split.at(-1).includes("'panel' '-m' 'm1'"))
-  assert.equal(w.panes.get('%99').orchestrator, w.root)
+  assert.ok(split.at(-1).endsWith("'panel'"))
+  assert.equal(w.panes.get('%99').mission, 'm1')
+  assert.equal(w.panes.get('%99').missionRepo, join(w.root, '.git'))
   assert.ok(w.panes.get('%99').token)
+  const panel = [...w.panes.values()].find(p => p.panel === w.root)
+  assert.equal(panel.panelOrchestrator, '%99')
+  assert.equal(panel.mission, 'm1')
   assert.ok(w.calls.some(c => c.args.includes('@troupe-panel') && c.args.at(-1) === w.root))
   assert.ok(!w.calls.some(c => c.args.includes('attach-session') || c.command === 'osascript'))
   assert.ok(!w.calls.some(c => c.args.includes('mouse')))
@@ -661,7 +685,7 @@ test('up chooses the available orchestrator, preferring claude, and an explicit 
     [['claude', 'codex'], ['--orch', 'codex'], 'codex'],
   ]) {
     const w = world(t)
-    const result = await execute('up', args, { ...w.r, run: (command, argv, options) => command === 'which' && ['claude', 'codex'].includes(argv[0]) && !found.includes(argv[0])
+    const result = await execute('up', ['-m', 'm2', ...args], { ...w.r, run: (command, argv, options) => command === 'which' && ['claude', 'codex'].includes(argv[0]) && !found.includes(argv[0])
       ? { code: 1, out: '', err: '' } : w.r.run(command, argv, options) })
     assert.equal(result.code, 0, result.out)
     assert.ok(w.calls.some(c => c.args.includes('new-session') && c.args.at(-1) === shellOf([expected])))
@@ -709,17 +733,24 @@ test('callerPane falls back to the one unmarked pane at the repository root', as
   rmSync(root, { recursive: true, force: true })
 })
 
-test('open from caller B replaces caller A and the next panel answer goes only to B', async t => {
+test('open from caller B takes over its mission only once caller A is dead, and the next panel answer goes only to B', async t => {
   const w = world(t)
   for (const id of ['%90', '%91']) w.panes.set(id, { window: '@90', windowName: 'agent', owner: '', screen: '› Ask Codex to do anything', dead: false })
   const open = pane => execute('open', [], { ...w.r, env: { ...w.r.env, TMUX: 'unit', TMUX_PANE: pane } })
   assert.equal((await open('%90')).code, 0)
-  assert.equal(w.panes.get('%90').orchestrator, w.root)
+  assert.equal(w.panes.get('%90').mission, 'm1')
   const panels = [...w.panes.values()].filter(p => p.panel === w.root).length
+  const refused = await open('%91')
+  assert.equal(refused.code, 1, 'a live orchestrator keeps its mission')
+  assert.match(refused.out, /mission m1 is run by pane %90/)
+  assert.equal(w.panes.get('%90').mission, 'm1')
+  assert.equal(w.panes.get('%91').mission, undefined)
+  w.panes.get('%90').dead = true
   assert.match((await open('%91')).out, /already open/)
-  assert.equal(w.panes.get('%90').orchestrator, undefined)
+  assert.equal(w.panes.get('%90').mission, undefined)
   assert.equal(w.panes.get('%90').token, undefined)
-  assert.equal(w.panes.get('%91').orchestrator, w.root)
+  assert.equal(w.panes.get('%91').mission, 'm1')
+  assert.equal([...w.panes.values()].find(p => p.panel === w.root).panelOrchestrator, '%91')
   assert.equal([...w.panes.values()].filter(p => p.panel === w.root).length, panels)
   const token = w.panes.get('%91').token
   assert.equal((await open('%91')).code, 0)

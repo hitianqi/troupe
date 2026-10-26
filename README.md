@@ -42,7 +42,8 @@ them when run again, and never overwrites a skill folder it did not write.
 
 You can also start from an agent you already have open: ask it to run a
 troupe mission; it runs `troupe open --planning` to show the panel while
-preparing the plan. In tmux the panel splits off beside the agent; in
+preparing the plan, then `troupe mission new <mission>`, which gives the
+mission its own worktree and binds it to that agent's pane. In tmux the panel splits off beside the agent; in
 herdr it opens in a herdr pane
 beside the agent, attached to troupe's tmux session; elsewhere it prints the
 `tmux attach` line (on macOS, Terminal or iTerm2 opens with it).
@@ -50,27 +51,35 @@ beside the agent, attached to troupe's tmux session; elsewhere it prints the
 In the repository you want to change:
 
 ```sh
-troupe up                 # or: troupe up --orch codex
+troupe up -m <mission>    # or: troupe up -m <mission> --orch codex
 ```
 
-troupe opens a `mission` window: the orchestrator on the left, the panel on
-the right. Inside tmux it uses the current session; outside, it starts one
-and attaches. Then:
+troupe creates the mission's worktree, `.troupe/missions/<mission>` on a new
+branch `mission/<mission>` cut from your current branch, and opens a
+`mission` window: the orchestrator on the left, working in that worktree,
+the panel on the right. Your checkout stays on its branch. Inside tmux it
+uses the current session; outside, it starts one and attaches. Then:
 
 1. Tell the orchestrator what you want. It writes
-   `docs/missions/<mission>/plan.md` and runs `troupe check` until it is clean.
+   `docs/missions/<mission>/plan.md` in the mission worktree and runs
+   `troupe check` until it is clean.
 2. The panel shows the plan gate: the goal, why, the done-when list and, per
    role, its agent, model, effort, flags, task, when it starts and the files
    it touches. `a` approves; `c` sends your change back to the orchestrator.
    (`troupe approve` in a terminal works too; a model's shell call cannot
    approve.)
-3. The orchestrator dispatches the roles. Each opens in the `roles` window,
-   in `.troupe/worktrees/<mission>/<role>` on branch `role/<mission>/<role>`.
+3. The orchestrator dispatches the roles. Each opens in the
+   `roles-<mission>` window, in `.troupe/worktrees/<mission>/<role>` on
+   branch `role/<mission>/<role>`.
    The panel marks a role that waits on you (a trust prompt, a permission):
    `o` jumps to its pane, you answer there, and come back.
 4. A reviewer role checks each branch as it lands; findings go back to the
    same window for one fix round; the orchestrator merges onto the mission
    branch. At the MR gate you approve opening the MR. You merge it.
+
+Several missions can run at once, in one repository or in several: start
+each from its own agent pane. Each has its own worktree, panel and roles
+window, and every command acts on the mission bound to the pane it runs in.
 
 ## The plan
 
@@ -121,38 +130,42 @@ profile; a dependency cycle; two roles whose `touches` overlap without a
 
 ## Commands
 
-All take `-m, --mission <name>` (default: the newest open mission under
-`docs/missions/`). Exit 0 on success, 1 when refused (with the reasons), 2
+All take `-m, --mission <name>`. Without it, a command acts on the mission
+bound to the pane it runs in (a panel follows its orchestrator's), else on
+the `mission/<name>` branch checked out where it runs; otherwise it refuses
+and lists the open missions with their worktrees. `-m` reads the plan from
+the mission's worktree from anywhere, but refuses to name another mission
+than the pane's own. Exit 0 on success, 1 when refused (with the reasons), 2
 on usage errors.
 
 | Command | What it does |
 |---|---|
 | `setup [--remove]` | install the workflow skill for each harness found |
-| `open [--planning]` | show the panel beside your current agent; signal that a plan is being prepared |
-| `up [--orch claude\|codex]` | open the orchestrator and the panel |
+| `mission new <name> [--base <ref>]` | create the mission's worktree on `mission/<name>` with the plan template, bind this pane to it and open its panel |
+| `open [--planning]` | show this pane's mission's panel beside it (one per mission); without a mission it refuses and lists the open ones, except with `--planning`, which shows a panel waiting for `mission new`; `open -m <name>` from an unbound pane makes it that mission's orchestrator, only once the previous orchestrator pane is gone or dead |
+| `up -m <name> [--orch claude\|codex]` | `mission new`, then open the orchestrator in the mission worktree and the panel |
 | `panel` | the live panel (`up` runs it; `--once --plain` prints one frame) |
 | `check` | check the plan and the user adapters |
 | `approve` | approve the plan, from a terminal only |
 | `gate <id> ["question"] [--no-wait]` | ask the person in the panel; prints `approve` or `change: <text>` |
 | `stage <id>` | move the panel's stage strip (ids from the workflow's `stages.yaml`) |
 | `dispatch <role>` | open a role: worktree, branch, brief, pane |
-| `status [--json] [--watch]` | each role's state, commits, changes outside `touches`, result |
+| `status [--json] [--watch]` | each role's state, commits, changes outside `touches`, result; with no mission resolved, the open missions with their worktree, orchestrator pane and panel pane |
 | `send <role> <text…>` | type into a role's window, only when it is ready |
 | `wait --role <r> [--ready] \| --gate <id> [--timeout s]` | wait for a result, readiness or an answer |
 | `close <role> \| --all` | close troupe's panes; worktrees and branches stay |
-| `teardown [--force]` | close role panes and remove role worktrees, role branches and temporary mission briefs/results; preserve the mission branch and log |
+| `teardown [--force]` | close role panes and the mission's panel, remove role worktrees, role branches, the mission worktree and temporary mission briefs/results; preserve the mission branch and log |
 
-An open mission has a log without a teardown event, or an uncommitted
-plan with no log. Committed historical plans without logs are skipped.
-Explicit `-m` opens any mission, including a finished one. With none open,
-the panel waits for a new plan.
+An open mission has a worktree on its `mission/<name>` branch or a log, and
+no teardown event. Explicit `-m` opens any mission, including a finished
+one. Until its orchestrator is bound, the panel waits for one.
 
-After opening the MR, run `troupe teardown -m <mission>`. It closes only
-role panes; the orchestrator and panel panes opened by `up` stay open.
-It refuses dirty or untracked work and commits unmerged into the plan’s
-`base` mission branch unless `--force`. Panes with a different owner marker
-are skipped. Repeating it with explicit `-m` reports nothing left. The MR
-head and log stay available.
+After opening the MR, run `troupe teardown -m <mission>`. It closes role
+panes and the mission's panel, and unbinds the orchestrator's pane, which
+stays open. It refuses dirty or untracked work, commits unmerged into the
+plan's `base` mission branch, and an unpushed mission branch, unless
+`--force`. Panes with a different owner marker are skipped. Repeating it
+with explicit `-m` reports nothing left. The MR head and log stay available.
 
 Use `troupe wait --role <r> --ready --timeout 60` after dispatch or before
 sending new work. It succeeds on ready, stops with the dialog on waits, and
@@ -191,7 +204,8 @@ flags remain the ones in the plan. See the [Codex CLI reference](https://develop
 
 | What | Where | In git |
 |---|---|---|
-| the plan | `docs/missions/<mission>/plan.md` | yes |
+| the mission worktree | `.troupe/missions/<mission>` on `mission/<mission>` | no |
+| the plan | `docs/missions/<mission>/plan.md` in the mission worktree | yes |
 | the run log (approvals, gates, stages, dispatches) | `<git-common-dir>/troupe/<mission>/log.jsonl` | no |
 | the role's launch brief | `<worktree>/.troupe/brief.md` (archived beside the run log as `brief-<role>.md`) | no |
 | role worktrees | `.troupe/worktrees/<mission>/<role>` (`/.troupe/` is excluded) | no |
@@ -216,5 +230,5 @@ flags remain the ones in the plan. See the [Codex CLI reference](https://develop
 runs them on macOS and Linux with Node 20 and 22. `src/` holds everything:
 the plan (`plan.ts`, `yaml.ts`, `touches.ts`), the adapters (`agents.ts`),
 the log and the live reads (`log.ts`, `state.ts`), the commands
-(`commands.ts`, `role-commands.ts`, `command-context.ts`, `panes.ts`,
-`setup.ts`), and the panel (`model.ts`, `draw.ts`, `canvas.ts`, `panel*.ts`).
+(`commands.ts`, `role-commands.ts`, `command-context.ts`, `missions.ts`,
+`panes.ts`, `setup.ts`), and the panel (`model.ts`, `draw.ts`, `canvas.ts`, `panel*.ts`).
