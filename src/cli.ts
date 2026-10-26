@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs'
 import { createInterface } from 'node:readline/promises'
 
 import { execute } from './commands.ts'
+import { recordActivity } from './activity.ts'
 import { statusLine } from './statusline.ts'
 
 const COMMANDS: [string, string][] = [
@@ -56,6 +57,11 @@ if (arg === '--version' || arg === '-v') {
   console.log(version())
 } else if (arg === undefined || arg === '--help' || arg === '-h') {
   process.stdout.write(usage())
+} else if (arg === 'activity' && rest[0] !== undefined) {
+  // Internal: the lifecycle hooks troupe gives a Claude role (see roleSettings in role-commands.ts).
+  let input = ''
+  for await (const chunk of process.stdin) input += chunk
+  recordActivity(input, rest[0])
 } else if (arg === 'statusline' && rest[0] !== undefined) {
   // Internal: the status line troupe gives a Claude role (see roleSettings in role-commands.ts).
   let input = ''

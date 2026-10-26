@@ -3,7 +3,8 @@ import { existsSync, mkdirSync, readdirSync, renameSync, rmSync, rmdirSync, writ
 import { basename, dirname, join, resolve } from 'node:path'
 
 import { argvOf, optionOf, screenOf } from './agents.ts'
-import type { Agent } from './agents.ts'
+import type { Agent, Screen } from './agents.ts'
+import { ACTIVITY_EVENTS, ACTIVITY_FILE, claudeTurn } from './activity.ts'
 import { clean, excludeTroupe, git, mux, Refusal, within } from './command-context.ts'
 import type { Mission, Reply, Runtime } from './command-context.ts'
 import { append, isApproved } from './log.ts'
@@ -14,7 +15,7 @@ import type { Role } from './plan.ts'
 import { readResult, RESULT_FILE, roleState, waitingOn, workOf } from './state.ts'
 import { shellOf, tmux } from './run.ts'
 import { CONTEXT_FILE, statusLineCommand } from './statusline.ts'
-import { tokensOf } from './usage.ts'
+import { codexTurn, tokensOf } from './usage.ts'
 
 export const briefOf = (m: Mission, role: Role, worktree: string, branch: string): string => [
   `# ${m.name}: ${role.name}`, '',
@@ -44,11 +45,28 @@ export const waitsOnOf = (agent: Agent, screen: string): string | undefined => {
   return undefined
 }
 
+/**
+ * A role's turn as its agent reports it: Claude's lifecycle hooks, Codex's own session log (#42). While a turn runs,
+ * the screen only tells waiting on an approval from working; it never makes a role ready. Before the first report
+ * (startup, a trust dialog), or for an adapter that reports nothing, the screen is the labelled fallback.
+ */
+export const turnOf = (r: Runtime, agent: Agent, opened: { worktree: string; at?: string }, screen: string): Screen => {
+  const reported = agent.usage === 'claude' ? claudeTurn(opened.worktree, opened.at)
+    : agent.usage === 'codex' ? codexTurn(opened.worktree, opened.at, r.home) : undefined
+  if (reported === 'ready') return 'ready'
+  const seen = screenOf(agent, screen)
+  if (reported === 'busy') return seen === 'waits' ? 'waits' : 'working'
+  // Every role starts on its brief: until its agent reports, an empty prompt on screen is not a finished turn.
+  if (agent.usage !== undefined && seen === 'ready') return 'unknown'
+
+  return seen
+}
+
 export const liveOf = (r: Runtime, m: Mission, role: Role): Live & { problem?: string } => {
   const opened = m.folded.roles.get(role.name)
   const pane = opened === undefined ? undefined : ownedPane(r, opened)
   const agent = m.agents[opened?.agent ?? role.agent]
-  const screen = pane !== undefined && agent !== undefined ? screenOf(agent, pane.screen) : 'unknown'
+  const screen = pane !== undefined && agent !== undefined && opened !== undefined ? turnOf(r, agent, opened, pane.screen) : 'unknown'
   let result: ReturnType<typeof readResult>
   let work: ReturnType<typeof workOf> | undefined
   let problem = ''
@@ -120,14 +138,18 @@ export const gitDirsOf = (r: Runtime, m: Mission, role: Role, worktree: string):
 
 /**
  * Per-process settings for a Claude role: no prompt suggestion, whose grey text fills the idle input line (#16),
- * and a status line that reports the real context window, then shows the person's own.
+ * lifecycle hooks that record its turn (#42), and a status line that reports the real context window, then shows
+ * the person's own.
  */
 export const roleSettings = (r: Runtime, m: Mission, agent: Agent, worktree: string): string[] => {
   if (agent.usage !== 'claude') return []
   const forward = statusLineCommand(m.root, r.home)
   const command = shellOf([process.execPath, join(r.packageRoot, 'dist/cli.js'), 'statusline', join(worktree, CONTEXT_FILE), ...(forward === undefined ? [] : [forward])])
 
-  return ['--settings', JSON.stringify({ promptSuggestionEnabled: false, statusLine: { type: 'command', command } })]
+  const record = shellOf([process.execPath, join(r.packageRoot, 'dist/cli.js'), 'activity', join(worktree, ACTIVITY_FILE)])
+  const hooks = Object.fromEntries(ACTIVITY_EVENTS.map(event => [event, [{ hooks: [{ type: 'command', command: record }] }]]))
+
+  return ['--settings', JSON.stringify({ promptSuggestionEnabled: false, hooks, statusLine: { type: 'command', command } })]
 }
 
 export const dispatch = async (r: Runtime, initial: Mission, name: string): Promise<Reply> => {
@@ -157,6 +179,8 @@ export const dispatch = async (r: Runtime, initial: Mission, name: string): Prom
   if (current.hash !== m.hash) throw new Refusal('the plan changed during dispatch; retry after approving it')
   const oldResult = join(worktree, RESULT_FILE)
   if (existsSync(oldResult)) renameSync(oldResult, join(dirname(m.log), `result-${name}-${randomUUID()}.md`))
+  // The previous launch's turn is not this one's.
+  rmSync(join(worktree, ACTIVITY_FILE), { force: true })
   // A retained dead pane is still troupe's; remove it before a replacement.
   if (previous !== undefined && !previous.closed && ownedPane(r, previous).alive) mux(r, ['kill-pane', '-t', previous.pane])
   const window = rolesWindow(r, m, m.name)
@@ -185,7 +209,7 @@ export const send = async (r: Runtime, initial: Mission, name: string, text: str
   const ready = () => {
     const pane = ownedPane(r, opened)
     if (!pane.alive || pane.dead) throw new Refusal(`role ${name}: pane is gone or its agent exited`)
-    const state = screenOf(agent, pane.screen)
+    const state = turnOf(r, agent, opened, pane.screen)
     if (state !== 'ready') throw new Refusal(`role ${name}: pane is ${state}; nothing was typed${state === 'unknown' || state === 'working' ? `; run troupe wait -m ${m.name} --role ${name} --ready [--timeout s]` : ''}`)
   }
   ready()

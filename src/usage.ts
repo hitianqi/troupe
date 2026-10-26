@@ -2,6 +2,7 @@ import { closeSync, openSync, readSync, readdirSync, statSync } from 'node:fs'
 import type { Dirent, Stats } from 'node:fs'
 import { basename, join, resolve } from 'node:path'
 
+import type { Turn } from './activity.ts'
 import { contextWindowOf } from './statusline.ts'
 
 export type Tokens = { used: number; window?: number; input: number; output: number }
@@ -246,6 +247,48 @@ const claudeTokens = ({ path, stat }: Session): Tokens | undefined => {
   claudeCache.set(path, state)
 
   return state.tokens
+}
+
+const turnCache = new Map<string, { key: string; turn?: Turn }>()
+/**
+ * Codex logs each turn: `task_started`, then `task_complete` or `turn_aborted` with the same turn id. Read back to
+ * the latest top-level start (a sub-agent's turn has a parent) and see whether it has ended.
+ */
+const codexTurnOf = ({ path, stat }: Session): Turn | undefined => {
+  const key = stamp(stat)
+  const cached = turnCache.get(path)
+  if (cached?.key === key) return cached.turn
+  const ended = new Set<string>()
+  let turn: Turn | undefined
+  for (const bytes of reverseLines(path, stat.size)) {
+    if (!bytes.includes('"task_') && !bytes.includes('"turn_aborted"')) continue
+    const row = json(bytes)
+    const payload = row?.payload
+    if (row?.type !== 'event_msg' || !object(payload)) continue
+    if ((payload.type === 'task_complete' || payload.type === 'turn_aborted') && typeof payload.turn_id === 'string') ended.add(payload.turn_id)
+    if (payload.type !== 'task_started') continue
+    const attribution = object(payload.turn_attribution) ? payload.turn_attribution : {}
+    const id = typeof payload.turn_id === 'string' ? payload.turn_id : attribution.turn_id
+    if (typeof attribution.parent_turn_id === 'string' || typeof id !== 'string') continue
+    turn = ended.has(id) ? 'ready' : 'busy'
+    break
+  }
+  turnCache.set(path, { key, turn })
+
+  return turn
+}
+
+/** The turn a Codex role's own session log reports, for the newest session started in `cwd` since `since`. */
+export const codexTurn = (cwd: string, since: string | undefined, home: string): Turn | undefined => {
+  try {
+    const cutoff = since === undefined ? -Infinity : time(since)
+    if (cutoff === undefined || cwd === '' || home === '') return undefined
+    const session = newest('codex', resolve(cwd), cutoff, home)
+
+    return session === undefined ? undefined : codexTurnOf(session)
+  } catch {
+    return undefined
+  }
 }
 
 /** Select by session start, not last write: an older session can still be active. */
