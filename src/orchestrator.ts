@@ -8,7 +8,10 @@ import type { Logged } from './log.ts'
 import { markedPanes, markMission, orchestratorsOf, unbind } from './missions.ts'
 import { tmux } from './run.ts'
 
-export const afterMrApproval = (mission: string): string => `Open the PR, then run troupe stage teardown -m ${mission} and troupe teardown -m ${mission} before reporting completion.`
+export const afterMrApproval = (mission: string): string => `Open the PR, then run troupe stage merged -m ${mission} and troupe gate merged -m ${mission} "<the PR link>". Keep the role windows: the person may ask for changes before merging.`
+export const afterMerged = (mission: string): string => `Run troupe stage teardown -m ${mission} and troupe teardown -m ${mission}, then report the cleanup.`
+/** What the orchestrator does after an approved gate; the gates past the plan carry their next step. */
+export const afterApproval = (gate: string, mission: string): string => gate === 'mr-ok' ? afterMrApproval(mission) : gate === 'merged' ? afterMerged(mission) : 'Continue the mission.'
 
 type Target = { pane: string; token: string }
 type Notice = { gate: string; at: string; text: string; target: Target }
@@ -36,7 +39,7 @@ export const queueAnswer = (r: Runtime, m: Mission, answer: Logged): void => {
   if (found.length !== 1) return
   const queue = pending.get(r) ?? new Map<string, Notice>()
   queue.set(`${m.log}\0${answer.gate}`, { gate: answer.gate, at: answer.at, target: found[0]!,
-    text: (answer.answer === 'approve' ? `${answer.gate} approved in the panel. ${answer.gate === 'mr-ok' ? afterMrApproval(m.name) : 'Continue the mission.'}` : `Change requested on ${answer.gate}: ${answer.text ?? ''}`).replace(/\s+/g, ' ').trim() })
+    text: (answer.answer === 'approve' ? `${answer.gate} approved in the panel. ${afterApproval(answer.gate, m.name)}` : `Change requested on ${answer.gate}: ${answer.text ?? ''}`).replace(/\s+/g, ' ').trim() })
   pending.set(r, queue)
   flushAnswers(r, m)
 }

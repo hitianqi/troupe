@@ -86,7 +86,7 @@ test('stages: done with the answer time, now, groups counted, gates ahead', () =
   const m = model(APPROVED, BUILDING)
   assert.deepEqual(
     m.stages.map(stage => `${stage.mark} ${stage.label} ${stage.note}`.trim()),
-    ['done Plan', 'done Plan OK? 10:42', 'now Build 0/3', 'todo Review 0/1', 'gate MR OK?', 'todo Open MR', 'todo Teardown'],
+    ['done Plan', 'done Plan OK? 10:42', 'now Build 0/3', 'todo Review 0/1', 'gate MR OK?', 'todo Open MR', 'gate Merged?', 'todo Teardown'],
   )
   const read = readStages(readFileSync(here('../skills/troupe-mission/stages.yaml'), 'utf8'))
   assert.deepEqual(read.problems, [])

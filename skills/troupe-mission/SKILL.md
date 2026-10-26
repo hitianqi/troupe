@@ -136,13 +136,22 @@ When every role is merged: `troupe stage mr-ok`, then
 recommendation>"`. Nothing is pushed before `approve`. A change sends you to
 the fix loop or the plan.
 
-## 7. Open the MR, then teardown before finishing
+## 7. Open the MR, then gate: merged?
 
 `troupe stage mr`; push the mission branch (`git -C <worktree> push`) and
-open one MR against the base branch, per the project's conventions. In the same step, after the MR opens,
-run `troupe stage teardown -m <mission>`, then `troupe teardown -m <mission>`;
-only then report the MR link and cleanup result. Opening the MR does not
-finish the mission. A refused push: tell the person and stop.
+open one MR against the base branch, per the project's conventions. A
+refused push: tell the person and stop. Then `troupe stage merged` and
+`troupe gate merged "<the MR link>"`, and leave every role window open:
+only a person merges the MR, and until they do, a change they ask for goes
+to the same builder's window, then is pushed to the same MR. Opening the
+MR does not finish the mission.
+
+## 8. Teardown once merged
+
+On `approve` at `merged`: `troupe stage teardown -m <mission>`, then
+`troupe teardown -m <mission>`; only then report the cleanup result.
+Teardown refuses while any gate of the workflow is not approved, so it
+cannot run before the merge.
 
 Teardown removes mission-owned role panes, worktrees, branches and temporary
 briefs/results, and the mission worktree, while keeping the mission branch
@@ -150,12 +159,11 @@ briefs/results, and the mission worktree, while keeping the mission branch
 pane; your session stays open. Dirty or untracked files, unmerged commits and
 an unpushed mission branch refuse cleanup; resolve them before retrying, or
 tell the person cleanup is blocked and ask before discarding them with
-`--force`. Repeating teardown with explicit `-m` is safe. Only a person
-merges the MR.
+`--force`. Repeating teardown with explicit `-m` is safe.
 
 ## Telling the person
 
-They hear from you at the two gates and whenever something blocks: a
+They hear from you at the gates and whenever something blocks: a
 refusal you cannot fix, a role waiting on them, a role held after its fix
 round, a plan change that needs approval again. Their language, short,
 plain words, your recommendation. No step names or logs.

@@ -491,6 +491,7 @@ test('teardown skips a reused pane ID with another owner, with or without force'
     const w = world(t)
     await w.approve()
     await w.call('dispatch', 'api')
+    for (const gate of ['mr-ok', 'merged']) append(join(w.root, '.git/troupe/m1/log.jsonl'), 'panel', { ev: 'gate-answer', gate, answer: 'approve' })
     const opened = w.events().find(e => e.ev === 'dispatch')
     w.panes.get(opened.pane).owner = 'other'
     const reply = await w.call('teardown', ...args)
@@ -693,7 +694,7 @@ test('up chooses the available orchestrator, preferring claude, and an explicit 
   }
 })
 
-test('MR gate approval includes cleanup commands; a change does not', async t => {
+test('MR gate approval asks for the merged gate, merged approval for cleanup; a change carries neither', async t => {
   const w = world(t)
   const log = join(w.root, '.git/troupe/m1/log.jsonl')
   const result = await execute('gate', ['mr-ok'], { ...w.r, sleep: async () => {
@@ -701,8 +702,12 @@ test('MR gate approval includes cleanup commands; a change does not', async t =>
   } })
   assert.equal(result.code, 0)
   assert.ok(result.out.startsWith('approve\n'))
-  assert.match(result.out, /troupe stage teardown -m m1/)
-  assert.match(result.out, /troupe teardown -m m1 before reporting completion/)
+  assert.match(result.out, /troupe stage merged -m m1 and troupe gate merged -m m1/)
+  assert.doesNotMatch(result.out, /troupe teardown/)
+  const merged = await execute('gate', ['merged'], { ...w.r, sleep: async () => {
+    append(log, 'panel', { ev: 'gate-answer', gate: 'merged', answer: 'approve' })
+  } })
+  assert.match(merged.out, /^approve\nRun troupe stage teardown -m m1 and troupe teardown -m m1/)
   await w.call('gate', 'mr-ok', '--no-wait')
   append(log, 'panel', { ev: 'gate-answer', gate: 'mr-ok', answer: 'change', text: 'Fix first' })
   assert.deepEqual(await w.call('wait', '--gate', 'mr-ok'), { code: 0, out: 'change: Fix first\n' })

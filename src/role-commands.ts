@@ -5,7 +5,7 @@ import { basename, dirname, join, resolve } from 'node:path'
 import { argvOf, optionOf, screenOf } from './agents.ts'
 import type { Agent, Screen } from './agents.ts'
 import { ACTIVITY_EVENTS, ACTIVITY_FILE, claudeTurn } from './activity.ts'
-import { clean, excludeTroupe, git, mux, Refusal, within } from './command-context.ts'
+import { clean, excludeTroupe, git, mux, Refusal, within, workflowStages } from './command-context.ts'
 import type { Mission, Reply, Runtime } from './command-context.ts'
 import { append, isApproved } from './log.ts'
 import type { Live } from './model.ts'
@@ -282,6 +282,11 @@ export const teardown = async (r: Runtime, initial: Mission, force: boolean): Pr
   const baseOf = (branch: string): string | undefined => m.folded.roles.get(branch.slice(prefix.length))?.base
   const trees = entries.filter(entry => entry.branch.startsWith(prefix) || resolve(dirname(entry.path)) === parent)
   const reasons: string[] = []
+  // Teardown deletes the windows a requested change would go to: every gate the workflow declares (the MR's merged
+  // gate among them) is approved first (#48).
+  if (!force) for (const stage of workflowStages(r, m.plan.workflow).stages) {
+    if (stage.gate !== undefined && m.folded.gates.get(stage.gate)?.answer !== 'approve') reasons.push(`gate ${stage.gate}: not approved yet; teardown waits for it`)
+  }
   for (const tree of trees) {
     if (resolve(dirname(tree.path)) !== parent || !tree.branch.startsWith(prefix)) reasons.push(`${tree.path}: unexpected worktree location or branch; remove manually`)
     else if (!force && existsSync(tree.path) && git(r, tree.path, ['status', '--porcelain', '--untracked-files=all']).trim()) reasons.push(`${tree.branch}: dirty or untracked changes in ${tree.path}`)

@@ -18,5 +18,8 @@ stages:
     gate: mr-ok
   - id: mr
     label: Open MR
+  - id: merged
+    label: "Merged?"
+    gate: merged
   - id: teardown
     label: Teardown
