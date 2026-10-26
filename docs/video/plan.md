@@ -164,8 +164,11 @@ Reset the demo repo between takes: delete `mission/*` and `role/*` branches,
 
 ## How to record (WSL2)
 
-- `asciinema rec -i 2 <take>.cast -c 'tmux attach -t demo'` on a detached
-  `tmux new-session -d -s demo -c <repo>`; one `.cast` per take. asciinema
+- `asciinema rec <take>.cast -c 'tmux attach -t demo'` on a detached
+  `tmux new-session -d -s demo -c <repo>`; one `.cast` per take. Take A is
+  one unbroken cast from the ask to the cleanup report; the waits are cut in
+  the edit. No `-i` at record time, so the cast keeps the action log's
+  clock; idle is capped when rendering (`agg --idle-time-limit`). asciinema
   and agg run in WSL (`pipx install asciinema`; agg from its release
   binary); `ffmpeg` from apt for cuts and zooms.
 - The driving session does all the input, from a script, so every take is
