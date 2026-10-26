@@ -44,8 +44,8 @@ One builder. The binding rule, the resolver every command calls, the panel
 and roles-window marks, dispatch, teardown and their tests all change
 together: the resolver reads the pane marks that `open` and `mission new`
 write, and `tests/commands.node.mjs` covers all of them. Two builders would
-share that test file and the resolver's contract. A Codex reviewer would be
-on the builder's model, so the reviewer is Claude.
+share that test file and the resolver's contract. The builder is Claude and
+the reviewer Codex, so the review is not on the builder's model.
 
 ```yaml
 troupe: 1
@@ -55,18 +55,18 @@ workflow: troupe-mission
 base: mission/parallel-missions
 roles:
   missions:
-    agent: codex
-    model: gpt-6.1-sol
-    effort: high
-    flags: [-a, on-request, -s, workspace-write]
+    agent: claude
+    model: claude-opus-5-5
+    effort: medium
+    flags: [--permission-mode, acceptEdits]
     text: workflow:builder
     goal: "Bind each mission to its orchestrator pane and worktree; make mission resolution deterministic"
     touches: [src/, tests/, skills/troupe-mission/SKILL.md, README.md]
   review:
-    agent: claude
-    model: opus
-    effort: high
-    flags: [--permission-mode, acceptEdits]
+    agent: codex
+    model: gpt-5.6-sol
+    effort: medium
+    flags: [-a, on-request, -s, workspace-write]
     goal: "Review the missions branch"
     touches: []
     reviews: [missions]
