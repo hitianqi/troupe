@@ -6,7 +6,7 @@ import { dirname, join } from 'node:path'
 import { test } from 'node:test'
 
 import { AGENTS, loadAgents } from '../dist/agents.js'
-import { contextArgs, liveOf, statusOf } from '../dist/role-commands.js'
+import { roleSettings, liveOf, statusOf } from '../dist/role-commands.js'
 import { shellOf } from '../dist/run.js'
 import { statusLine, statusLineCommand } from '../dist/statusline.js'
 import { tokensOf } from '../dist/usage.js'
@@ -222,14 +222,15 @@ test('the role status line saves the reported window and still shows the configu
   assert.equal(statusLineCommand(root, home), 'local-line')
 })
 
-test('only Claude roles get the context status line, forwarding the configured one', t => {
+test('only Claude roles get settings: no prompt suggestions, and the context status line forwarding the configured one', t => {
   const { home, write } = temporary(t)
   const r = { home, packageRoot: '/pkg' }
   const m = { root: join(home, 'repo') }
-  assert.deepEqual(contextArgs(r, m, AGENTS.codex, '/wt'), [])
+  assert.deepEqual(roleSettings(r, m, AGENTS.codex, '/wt'), [])
   write(join(home, '.claude/settings.json'), JSON.stringify({ statusLine: { type: 'command', command: "mine 'x'" } }))
-  const [flag, settings] = contextArgs(r, m, AGENTS.claude, '/wt')
+  const [flag, settings] = roleSettings(r, m, AGENTS.claude, '/wt')
   assert.equal(flag, '--settings')
+  assert.equal(JSON.parse(settings).promptSuggestionEnabled, false)
   const { type, command } = JSON.parse(settings).statusLine
   assert.equal(type, 'command')
   assert.equal(command, shellOf([process.execPath, '/pkg/dist/cli.js', 'statusline', '/wt/.troupe/context.json', "mine 'x'"]))
