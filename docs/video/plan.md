@@ -95,7 +95,11 @@ not a strip. tmux runs in WSL; Windows Terminal is only the window.
   '#{client_width}x#{client_height}'`) is kept for every take. A cell is
   about 0.47 as wide as it is tall, so about 160×45 is 16:9. Do not resize
   during a take.
-- The panel opens at 45% of the orchestrator's pane.
+- **Set (2026-10-26): 156×45**, the orchestrator 66 columns, the panel 89.
+  troupe opens the panel at 45% of the orchestrator's pane, so right after
+  it opens the driver sets it back: `tmux resize-pane -t <panel> -x 89`.
+- Start the orchestrator in a pane already at its final size; a Claude Code
+  resized after it started can leave its screen half redrawn.
 
 ## The panel is portrait, the video is landscape
 
