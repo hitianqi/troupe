@@ -11,7 +11,8 @@ import type { Live } from './model.ts'
 import { createPane, ownedPane, rolesWindow } from './panes.ts'
 import type { Role } from './plan.ts'
 import { readResult, RESULT_FILE, roleState, waitingOn, workOf } from './state.ts'
-import { tmux } from './run.ts'
+import { shellOf, tmux } from './run.ts'
+import { CONTEXT_FILE, statusLineCommand } from './statusline.ts'
 import { tokensOf } from './usage.ts'
 
 export const briefOf = (m: Mission, role: Role, worktree: string, branch: string): string => [
@@ -118,6 +119,15 @@ export const gitDirsOf = (r: Runtime, m: Mission, role: Role, worktree: string):
   return dirs
 }
 
+/** A Claude role reports its real context window through a status line that then shows the person's own. */
+export const contextArgs = (r: Runtime, m: Mission, agent: Agent, worktree: string): string[] => {
+  if (agent.usage !== 'claude') return []
+  const forward = statusLineCommand(m.root, r.home)
+  const command = shellOf([process.execPath, join(r.packageRoot, 'dist/cli.js'), 'statusline', join(worktree, CONTEXT_FILE), ...(forward === undefined ? [] : [forward])])
+
+  return ['--settings', JSON.stringify({ statusLine: { type: 'command', command } })]
+}
+
 export const dispatch = async (r: Runtime, initial: Mission, name: string): Promise<Reply> => {
   const m = mission(r, initial.name)
   approved(m)
@@ -150,7 +160,7 @@ export const dispatch = async (r: Runtime, initial: Mission, name: string): Prom
   const window = rolesWindow(r, m)
   const agent = m.agents[role.agent]
   if (agent === undefined) throw new Refusal(`unknown agent: ${role.agent}`)
-  const argv = argvOf(agent, role, `Read the brief in ${brief} and follow it.`, gitDirsOf(r, m, role, worktree))
+  const argv = argvOf(agent, role, `Read the brief in ${brief} and follow it.`, gitDirsOf(r, m, role, worktree), contextArgs(r, m, agent, worktree))
   const opened = createPane(r, m, name, worktree, argv, window, undefined, 'roles')
   try {
     append(m.log, 'cli', { ev: 'dispatch', role: name, ...opened, worktree, branch, base, argv, agent: role.agent })

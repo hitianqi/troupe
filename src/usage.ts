@@ -1,6 +1,8 @@
 import { closeSync, openSync, readSync, readdirSync, statSync } from 'node:fs'
 import type { Dirent, Stats } from 'node:fs'
-import { join, resolve } from 'node:path'
+import { basename, join, resolve } from 'node:path'
+
+import { contextWindowOf } from './statusline.ts'
 
 export type Tokens = { used: number; window?: number; input: number; output: number }
 type Kind = 'claude' | 'codex'
@@ -202,7 +204,7 @@ const claudeView = (state: Claude, last = state.last, old?: Message): Tokens | u
   const input = state.input + (old === undefined ? 0 : last.used - old.used)
   const output = state.output + (old === undefined ? 0 : last.output - old.output)
   if (!number(input) || !number(output)) return undefined
-  // Claude has no window field: 200k/1m is a guess, based on the current model or observed context size.
+  // Claude's transcript has no window field: 200k/1m is a guess until the role's status line reports the real one.
   return { used: last.used, window: last.model.endsWith('[1m]') || Math.max(state.maxUsed, last.used) > 200_000 ? 1_000_000 : 200_000, input, output }
 }
 
@@ -255,8 +257,10 @@ export const tokensOf = (kind: Kind, cwd: string, since: string | undefined, hom
     const session = newest(kind, resolve(cwd), cutoff, home)
     if (session === undefined) return undefined
     const tokens = kind === 'codex' ? codexTokens(session) : claudeTokens(session)
+    if (tokens === undefined) return undefined
+    const window = kind === 'claude' ? contextWindowOf(cwd, basename(session.path, '.jsonl')) : undefined
 
-    return tokens === undefined ? undefined : { ...tokens }
+    return window === undefined ? { ...tokens } : { ...tokens, window }
   } catch {
     return undefined
   }

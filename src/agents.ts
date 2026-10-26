@@ -93,11 +93,12 @@ export const unsetPermission = (agent: Agent, flags: string[]): string[] =>
 const expand = (template: string[], key: string, value: string): string[] =>
   value === '' ? [] : template.map(arg => arg.replaceAll(`{${key}}`, () => value))
 
-/** An argv array, never shell text; omitted role settings add no arguments. */
-export const argvOf = (agent: Agent, role: Pick<Role, 'model' | 'effort' | 'flags'>, prompt: string, writable: string[] = []): string[] => [
+/** An argv array, never shell text; omitted role settings add no arguments; `extra` comes before the role's flags. */
+export const argvOf = (agent: Agent, role: Pick<Role, 'model' | 'effort' | 'flags'>, prompt: string, writable: string[] = [], extra: string[] = []): string[] => [
   agent.command,
   ...expand(agent.model, 'model', role.model),
   ...expand(agent.effort, 'effort', role.effort),
+  ...extra,
   ...role.flags,
   ...writable.flatMap(path => ['--add-dir', path]),
   prompt,
