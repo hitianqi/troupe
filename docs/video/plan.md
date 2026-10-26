@@ -84,19 +84,18 @@ Everything else must not prompt: start the orchestrator with
   clean, it is take A.
 - Fresh `troupe-demo` repo, local and private on GitHub.
 
-## The terminal: 160×45, 16:9
+## The terminal: a laptop-sized window, about 16:9
 
 Viewers watch on an ordinary screen, so the frame is a normal laptop window,
-not a strip.
+not a strip. tmux runs in WSL; Windows Terminal is only the window.
 
-- Windows Terminal profile for the takes: `initialCols: 160`,
-  `initialRows: 45`, a fixed font and size, no scrollbar. A cell is about
-  0.47 as wide as it is tall, so 160×45 is about 16:9. Do not resize during
-  a take.
-- The panel opens at 45% of the orchestrator's pane: about 72 columns, the
-  width its approval card was laid out for.
-- Rendered at 1920 wide a cell is about 12 px and the text about 22 px,
-  readable on a laptop.
+- The size is set by eye before the rehearsal: the driving session opens the
+  terminal, Tianqi resizes it until the split and the zoomed panel both read
+  well, and that size (cols×rows, read with `tmux display -p
+  '#{client_width}x#{client_height}'`) is kept for every take. A cell is
+  about 0.47 as wide as it is tall, so about 160×45 is 16:9. Do not resize
+  during a take.
+- The panel opens at 45% of the orchestrator's pane.
 
 ## The panel is portrait, the video is landscape
 
@@ -111,8 +110,7 @@ cut as a push-in, or be cut on.
 
 The `roles` window (`o`) is a full window already: the four panes tiled.
 
-Before the rehearsal, render one frame of each (split, zoomed MISSION,
-zoomed ROLES) and check that the zoomed layout reads well.
+Check the zoomed MISSION and ROLES tabs while setting the size.
 
 ## Several missions
 
@@ -122,7 +120,7 @@ and two more cards slide out of it along the diagonal, staggered in depth,
 each a different mission running.
 
 Only the front card must be readable. The two behind are a few seconds each
-of any small mission in the same 160×45 terminal (a README section, a test),
+of any small mission in the same terminal size (a README section, a test),
 recorded once roles are working and FLOW moves; no need to finish them.
 
 The 3D cards are beyond ffmpeg: render the casts to video with agg, then
@@ -153,7 +151,7 @@ planes, a gliding camera, depth of field).
   merged gate → teardown. Covers 15–54 s.
 - **B, C, D, the three starts**: a plain terminal with `troupe up`, Claude
   Code with `/troupe-mission <ask>`, Codex with `$troupe-mission <ask>`; each
-  recorded until the panel appears (~20 s), at 160×45 so the three rows line
+  recorded until the panel appears (~20 s), at the same size so the three rows line
   up. C can be the opening of take A. Stacked into one frame in the edit.
 - **F, G, the missions behind**: a few seconds each, any small task.
 - **E, pain shot** (optional): several agents in plain terminals.
