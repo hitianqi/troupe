@@ -298,7 +298,7 @@ test('ROLES: each role under its own rule, one fact per line', () => {
   const facts = rows => Object.fromEntries(rows.filter(line => /^ {3}\S/.test(line)).map(line => [line.trim().split(/\s+/)[0], line]))
   const p = facts(block(panel, commands))
   assert.deepEqual(Object.keys(p), ['agent', 'effort', 'ctx', 'tokens', 'work', 'time', 'branch', 'flags', 'waits'])
-  assert.match(p.effort, /■■■□□ high$/)
+  assert.match(p.effort, /◼◼◼◻◻ high$/)
   assert.match(p.work, /1 commit · 2 files ✗ 1 outside touches$/)
   assert.match(p.flags, /-a on-request -s workspace-write$/)
   assert.match(p.waits, /waits on +Trust this folder\?$/)
@@ -312,7 +312,7 @@ test('ROLES: each role under its own rule, one fact per line', () => {
   assert.ok(!lines.join('\n').includes('╔') && !lines.join('\n').includes('▰'), 'no cards, no pips')
   const runs = drawn.lines.flat()
   assert.ok(runs.some(run => run.text.includes('✗ 1') && run.tone === 'error'))
-  assert.ok(runs.some(run => run.text === '■■■' && run.tone === 'accent'))
+  assert.ok(runs.some(run => run.text === '◼◼◼' && run.tone === 'accent'))
   const hits = drawn.hits.filter(hit => hit.target.kind === 'role' && hit.col === 1)
   assert.deepEqual(hits.map(hit => [hit.target.name, hit.row]), [['panel', panel], ['commands', commands], ['review', review]])
 })
@@ -339,7 +339,7 @@ test('ROLES narrow: the list scrolls, lines stay inside the width, and a click o
 test('effort: five square cells and the word, default when unset, an unknown word as written; agent colors on every surface', () => {
   const cells = line => line.map(run => run.text).join('')
   for (const [word, n] of [['minimal', 1], ['low', 1], ['medium', 2], ['high', 3], ['xhigh', 4], ['max', 5]]) {
-    assert.equal(cells(effortOf(word)), `${'■'.repeat(n)}${'□'.repeat(5 - n)} ${word}`)
+    assert.equal(cells(effortOf(word)), `${'◼'.repeat(n)}${'◻'.repeat(5 - n)} ${word}`)
     assert.deepEqual(effortOf(word).map(run => run.tone), ['accent', 'chrome', 'dim'])
   }
   assert.deepEqual(effortOf(''), [{ text: 'default', tone: 'dim' }])

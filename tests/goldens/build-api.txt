@@ -12,28 +12,28 @@
  review                    │   │  ╔════════════════════════╗
     ○ review      ✻    —   │   │  ║ ◆ api     waits on you ║
                            │   ├─▶║ ⬢ codex gpt-6.1-sol    ║──┐
-─ STAGES ───────────────── │   │  ║ ■■■□□ high             ║  │
+─ STAGES ───────────────── │   │  ║ ◼◼◼◻◻ high             ║  │
   ✓ Plan                   │   │  ╚════════════════════════╝  │
   ✓ Plan OK?        10:42  │   │                              │
   ● Build             0/3  │   │                              │
   ○ Review            0/1  │   │  ┌────────────────────────┐  │   ┌──────────────────────┐
   ◇ MR OK?                 │   │  │ ● store        working │  │   │ ○ review     planned │
   ○ Open MR                │   └─▶│ ✻ claude opus          │──┼──▶│ ✻ claude sonnet      │
-  ○ Teardown               │      │ ■■■□□ high             │  │   │ ■■■□□ high           │
+  ○ Teardown               │      │ ◼◼◼◻◻ high             │  │   │ ◼◼◼◻◻ high           │
                            │      └────────────────────────┘  │   └──────────────────────┘
 ─ ACTIVITY ─────────────── │                                  │
  12:07 dispatched store    │        after api                 │
  12:07 dispatched api      │      ┌────────────────────────┐  │
  10:42 stage: build        │      │ ○ web          planned │  │
  10:42 plan approved       │      │ ✻ claude sonnet        │──┘
- 10:41 plan gate opened    │      │ ■■□□□ medium           │
+ 10:41 plan gate opened    │      │ ◼◼◻◻◻ medium           │
                            │      └────────────────────────┘
                            │
                            │
                            │ ─ ◆ api · waits on you ────────────────────────────────────────────
                            │  goal     Rotate the token on refresh; refuse a reused one with 401
                            │           reuse
-                           │  agent    ⬢ codex gpt-6.1-sol   ■■■□□ high
+                           │  agent    ⬢ codex gpt-6.1-sol   ◼◼◼◻◻ high
                            │           -a on-request -s workspace-write
                            │  branch   role/auth-refresh/api
                            │  touches  src/api/refresh.ts src/api/errors.ts

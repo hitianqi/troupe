@@ -11,20 +11,20 @@
                            │   │  ┌────────────────────────┐
 ─ STAGES ───────────────── │   │  │ ✓ lock            done │
   ✓ Plan                   │   └─▶│ ⬢ codex gpt-6.1-sol    │
-  ✓ Plan OK?        10:42  │      │ ■■■□□ high             │
+  ✓ Plan OK?        10:42  │      │ ◼◼◼◻◻ high             │
   ● Build             0/3  │      └────────────────────────┘
   ○ Review            0/1  │                   │
   ◇ MR OK?                 │                   ▼
   ○ Open MR                │      ┌────────────────────────┐
   ○ Teardown               │      │ ○ build        planned │
                            │      │ ⬢ codex gpt-6.1-sol    │
-─ ACTIVITY ─────────────── │      │ ■■■□□ high             │
+─ ACTIVITY ─────────────── │      │ ◼◼◼◻◻ high             │
  12:07 dispatched store    │      └────────────────────────┘
  12:07 dispatched api      │
  10:42 stage: build        │      ╔════════════════════════╗
  10:42 plan approved       │      ║ ○ review       planned ║
  10:41 plan gate opened    │      ║ ✻ claude opus          ║
-                           │      ║ ■■■□□ high             ║
+                           │      ║ ◼◼◼◻◻ high             ║
                            │      ║ reviews lock, build as ║
                            │      ║ each lands             ║
                            │      ╚════════════════════════╝
@@ -34,7 +34,7 @@
                            │ ─ ○ review · planned ────────────────────────────
                            │  goal     Rotate the token on refresh; refuse a
                            │           reused one with 401 reuse
-                           │  agent    ✻ claude opus   ■■■□□ high
+                           │  agent    ✻ claude opus   ◼◼◼◻◻ high
                            │           -a on-request -s workspace-write
                            │  branch   role/demo/review
                            │  touches  — changes nothing
