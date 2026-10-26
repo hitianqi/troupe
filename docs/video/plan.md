@@ -34,7 +34,12 @@ Mission ask (typed on camera, English):
 > page renders them as a list, and it gets a clean look with a dark mode. One
 > role for the data, one for the page (after the data), one for the style,
 > and a Codex reviewer on gpt-5.6-sol. Page on opus, data and style on
-> sonnet.
+> sonnet. Every role runs with full access.
+
+"Full access" makes the plan pin `--dangerously-skip-permissions` on the
+Claude roles and `--dangerously-bypass-approvals-and-sandbox` on Codex, both
+of which `troupe check` takes as pinned; anything less and Codex asks for
+approval at every step. Check on the approval card before approving.
 
 Expected plan:
 
@@ -69,9 +74,10 @@ on the right, both in frame.
 
 The orchestrator is Claude Code started in the demo repo, so the repo is
 trusted for Claude and its role worktrees do not ask. Codex has never run
-there, so the `review` role opens on Codex's "Trust this folder?" dialog:
-the panel turns it yellow, `o`, answer, back. Check in the rehearsal that it
-appears; if Codex was run in the repo before, it will not.
+there, so the `review` role may open on Codex's "Trust this folder?"
+dialog: the panel turns it yellow, `o`, answer, back. Whether it still asks
+under full access is found in the rehearsal; if it does not, the beat is
+dropped rather than staged.
 
 Everything else must not prompt: start the orchestrator with
 `claude --dangerously-skip-permissions`.
