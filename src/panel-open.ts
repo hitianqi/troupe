@@ -52,6 +52,19 @@ export const openPanel = (r: Runtime, want: string, planning = false): Reply => 
   if (caller !== undefined) return { code: 0, out: `Opened panel in ${opened.pane} beside your agent.\n` }
   mux(r, ['select-window', '-t', opened.window])
   const name = sessionName(repo)
+  const socket = r.env.TROUPE_TMUX_SOCKET
+  const attach = `tmux${socket ? ` -L ${shellOf([socket])}` : ''} attach -t ${name}`
+  const herdrPane = r.env.HERDR_PANE_ID
+  if (herdrPane) {
+    // herdr is a multiplexer of its own, so the caller has no tmux pane: open a herdr pane beside it that attaches.
+    try {
+      const split = r.run('herdr', ['pane', 'split', herdrPane, '--direction', 'right'], { env: r.env })
+      const pane: unknown = split.code === 0 ? JSON.parse(split.out).result?.pane?.pane_id : undefined
+      if (typeof pane === 'string' && r.run('herdr', ['pane', 'run', pane, attach], { env: r.env }).code === 0) {
+        return { code: 0, out: `Opened panel beside your agent in herdr pane ${pane} (${opened.pane}).\n` }
+      }
+    } catch { /* herdr can be unavailable or answer oddly; the session remains attachable. */ }
+  }
   const terminal = r.env.TERM_PROGRAM
   if (r.platform === 'darwin' && (terminal === 'Apple_Terminal' || terminal === 'iTerm.app')) {
     try {
@@ -59,8 +72,6 @@ export const openPanel = (r: Runtime, want: string, planning = false): Reply => 
       if (launched.code === 0) return { code: 0, out: `Opened panel in ${terminal === 'Apple_Terminal' ? 'Terminal' : 'iTerm2'} (${opened.pane}).\n` }
     } catch { /* A terminal can be unavailable; the session remains attachable. */ }
   }
-  const socket = r.env.TROUPE_TMUX_SOCKET
-  const attach = `tmux${socket ? ` -L ${shellOf([socket])}` : ''} attach -t ${name}`
 
   return { code: 0, out: `Opened panel in ${opened.pane}; attach with: ${attach}; role windows will appear in that session.\n` }
 }

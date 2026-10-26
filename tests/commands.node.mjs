@@ -586,6 +586,32 @@ for (const terminal of ['Apple_Terminal', 'iTerm.app']) {
   })
 }
 
+test('open inside herdr attaches the session in a herdr pane beside the caller, before trying AppleScript', async t => {
+  const w = world(t)
+  const herdr = []
+  const result = await execute('open', [], { ...w.r, platform: 'darwin', env: { ...w.r.env, HERDR_PANE_ID: 'w1:p3', TERM_PROGRAM: 'iTerm.app' }, run: (command, args, options) => {
+    if (command !== 'herdr') return w.r.run(command, args, options)
+    herdr.push(args)
+    return { code: 0, out: args[1] === 'split' ? JSON.stringify({ result: { pane: { pane_id: 'w1:p4' } } }) : '', err: '' }
+  } })
+  assert.equal(result.code, 0, result.out)
+  const name = `troupe-${basename(w.root).replace(/[^A-Za-z0-9_-]/g, '-')}`
+  assert.deepEqual(herdr, [['pane', 'split', 'w1:p3', '--direction', 'right'], ['pane', 'run', 'w1:p4', `tmux -L 'unit-socket' attach -t ${name}`]])
+  assert.match(result.out, /^Opened panel beside your agent in herdr pane w1:p4 \(%\d+\)\.\n$/)
+  assert.ok(!w.calls.some(c => c.command === 'osascript'))
+})
+
+test('a failed herdr split falls back to the attach instructions', async t => {
+  for (const split of [{ code: 1, out: '', err: 'no server' }, { code: 0, out: 'not json', err: '' }]) {
+    const w = world(t)
+    const result = await execute('open', [], { ...w.r, platform: 'linux', env: { ...w.r.env, HERDR_PANE_ID: 'w1:p3' }, run: (command, args, options) =>
+      command === 'herdr' ? split : w.r.run(command, args, options) })
+    assert.equal(result.code, 0)
+    assert.match(result.out, /tmux -L 'unit-socket' attach -t troupe-/)
+    assert.equal(w.panes.size, 1)
+  }
+})
+
 test('open prints the attach command on other terminals/platforms without running AppleScript', async t => {
   for (const [platform, terminal] of [['darwin', 'other'], ['linux', 'Apple_Terminal']]) {
     const w = world(t, {})
