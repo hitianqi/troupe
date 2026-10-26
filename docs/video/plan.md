@@ -154,14 +154,17 @@ The first full run worked end to end; it is redone for these:
   > the page with its styles, which waits on data. Codex reviews each as it
   > lands. Builders run with full access, and medium effort is plenty.
 - **The live window beat**, while the reviewer works and every role window is
-  still open: click each card in FLOW (orchestrator, data, page, review) and
-  hold each for about 8 s; the detail and the live window under FLOW follow
-  the card. With two builders FLOW is 17 rows and the live window about 9,
-  both on screen at once; a selection resets the column's scroll, so a
-  taller FLOW pushes the live window off screen. Zoomed in the edit.
+  still open: click the FLOW cards data, page, review (not the
+  orchestrator), about 2 s each, the last one 5 s so the live window is seen
+  moving; the detail and the live window under FLOW follow the card. With
+  two builders FLOW is 17 rows and the live window about 9, both on screen
+  at once; a selection resets the column's scroll, so a taller FLOW pushes
+  the live window off screen. Then click "Open window": the `roles` window,
+  every role in its own pane to talk to, held 2 s; back to the panel.
 - **The tour**, late, when the panel holds the most (the MR gate open,
   before approving): every tab in turn, MISSION, ROLES, PLAN (and `f` for the
-  full text), LOG, DIFF, scrolling where there is more, about 5 s each.
+  full text), LOG, DIFF, scrolling where there is more, about 2–3 s each
+  (sped up or trimmed in the edit).
 - The orchestrator is not woken when a waiting role is answered (#53) or
   when the reviewer finishes a later branch (#54); nudge it in a line if it
   sits idle.
