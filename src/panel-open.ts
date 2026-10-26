@@ -4,6 +4,7 @@ import { mux, Refusal, repository } from './command-context.ts'
 import type { Reply, Repository, Runtime } from './command-context.ts'
 import { callerOf, heldBy, markedPanes, markMission, orchestratorsOf, resolveMission, Unresolved } from './missions.ts'
 import { createPane, ownedPane, sessionName } from './panes.ts'
+import { recordOrchestrator } from './notices.ts'
 import { markOrchestrator } from './orchestrator.ts'
 import { available } from './setup.ts'
 import { shellOf, tmux } from './run.ts'
@@ -60,6 +61,7 @@ export const openPanel = (r: Runtime, want: string, planning = false): Reply => 
     // A pane that opens a mission's panel is that mission's orchestrator.
     markOrchestrator(r, repo, caller, name)
   }
+  recordOrchestrator(r, repo, name)
   const panels = markedPanes(r).filter(one => one.panel === repo.root)
   const existing = (caller === undefined ? undefined : panels.find(one => one.orchestrator === caller))
     ?? (name === '' ? undefined : panels.find(one => one.repo === repo.common && one.mission === name))

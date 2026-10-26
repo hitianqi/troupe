@@ -17,12 +17,25 @@ export type Event =
   | { ev: 'send'; role: string; text: string }
   | { ev: 'close'; role: string }
   | { ev: 'teardown'; role?: never }
+  /** The agent session running the mission, and the pane to type to it (#43). */
+  | { ev: 'orchestrator'; harness: 'claude' | 'codex'; session: string; mux: 'tmux' | 'herdr'; pane: string }
+  /** A line troupe typed into the orchestrator; its key says what it reported. */
+  | { ev: 'notice'; key: string; text: string }
 /** Who wrote a line: what the writer says, not a proof. */
 export type By = 'cli' | 'panel' | 'orch'
 export type Logged = Event & { at: string; by: By }
 
 /** The plan gate: the one gate the core owns, because dispatch depends on it. */
 export const PLAN_GATE = 'plan'
+
+export type Orchestrator = { harness: 'claude' | 'codex'; session: string; mux: 'tmux' | 'herdr'; pane: string; at: string }
+
+/** The mission's orchestrator as last recorded (#43). */
+export const orchestratorOf = (events: Logged[]): Orchestrator | undefined => {
+  const last = events.filter(e => e.ev === 'orchestrator').at(-1)
+
+  return last?.ev === 'orchestrator' ? { harness: last.harness, session: last.session, mux: last.mux, pane: last.pane, at: last.at } : undefined
+}
 
 export const logPath = (commonDir: string, mission: string): string => join(commonDir, 'troupe', mission, 'log.jsonl')
 
@@ -35,7 +48,7 @@ export const append = (path: string, by: By, event: Event, at = new Date()): Log
   return line
 }
 
-const EVENTS = ['gate-open', 'gate-answer', 'stage', 'dispatch', 'send', 'close', 'up', 'teardown']
+const EVENTS = ['gate-open', 'gate-answer', 'stage', 'dispatch', 'send', 'close', 'up', 'teardown', 'orchestrator', 'notice']
 
 /** The log's events, and how many lines could not be read (a torn last line, a hand edit). */
 export const readLog = (path: string): { events: Logged[]; unread: number } => {

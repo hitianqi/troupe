@@ -17,9 +17,14 @@ one pane; nothing is typed into a window that is not ready; each role's
 cause, do not retry as is or work around it. Never type into a role window
 yourself (no `tmux send-keys`); use `troupe send`.
 
-`troupe wait` and `troupe gate` block until something happens. Run them in
-the background when your harness can, so it wakes you when they end;
-otherwise give `--timeout` and run them again.
+You don't wait on a timer. Once you have dispatched, sent work or opened a
+gate, end your turn: when a role finishes or the person answers a gate in
+the panel, troupe types one line into your session (`Role api finished:
+done: …`, `mr-ok approved in the panel. …`) after your current turn ends,
+and you continue from it. It knows your session from the troupe commands
+you run, so run them from this session. Never `sleep` to wait.
+`troupe gate --no-wait` opens a gate without blocking; `troupe wait` is
+for when you need an answer within the same turn.
 
 How far to read, how to split, what to ask and how long your messages are
 is your judgment; the steps below are the order things happen in.
@@ -98,8 +103,8 @@ approval again before the next dispatch.
 ## 4. Build
 
 `troupe stage build`, then `troupe dispatch <role>` for every builder whose
-`depends_on` are done; independent roles run at once. Arm one
-`troupe wait --role <role>` per dispatched role. A role stuck on a dialog (a
+`depends_on` are done; independent roles run at once, then end your turn;
+each role's finish arrives as a line from troupe. A role stuck on a dialog (a
 trust prompt, a permission) shows in the panel as waiting on the person;
 tell them which window if it stays. `troupe status` shows every role.
 
@@ -118,8 +123,7 @@ ends the wait early so you can act on it.
 `troupe stage review` once the first branch lands. Dispatch the reviewer,
 then give it each branch in the order they land:
 `troupe send review "Review role/<mission>/<role>: …"`. `troupe send` puts
-the role's old result aside first, so `troupe wait --role` waits for the new
-one.
+the role's old result aside first, so its next result is news again.
 
 - PASS: merge the role's branch onto the mission branch in the mission
   worktree (`git -C <worktree> merge …`; one commit per role, subject

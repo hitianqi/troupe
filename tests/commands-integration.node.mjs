@@ -20,7 +20,7 @@ import { gitDirsOf } from '../dist/role-commands.js'
 test('real scratch tmux: open marks one panel, keeps focus, and is a no-op the second time', { skip: spawnSync('tmux', ['-V']).status !== 0, timeout: 15000 }, async t => {
   const root = mkdtempSync(join(tmpdir(), 'troupe-open-integration-'))
   const socket = `troupe-open-${process.pid}-${randomUUID().slice(0, 8)}`
-  const env = { ...process.env, TMUX: undefined, TMUX_PANE: undefined, TROUPE_TMUX_SOCKET: socket }
+  const env = { ...hostless(process.env), TMUX: undefined, TMUX_PANE: undefined, TROUPE_TMUX_SOCKET: socket }
   t.after(() => {
     tmux(['kill-server'], undefined, env)
     rmSync(root, { recursive: true, force: true })
@@ -75,7 +75,7 @@ test('real scratch tmux: dispatch, live status, bracketed send, result wait and 
   const socket = `troupe-test-${process.pid}-${randomUUID().slice(0, 8)}`
   mkdirSync(root)
   mkdirSync(home)
-  const env = { ...process.env, TMUX: undefined, TMUX_PANE: undefined, TROUPE_TMUX_SOCKET: socket }
+  const env = { ...hostless(process.env), TMUX: undefined, TMUX_PANE: undefined, TROUPE_TMUX_SOCKET: socket }
   t.after(() => {
     tmux(['kill-server'], undefined, env)
     rmSync(base, { recursive: true, force: true })
@@ -164,6 +164,8 @@ paste: bracketed
   assert.equal(readLog(m.log).events.at(-1).ev, 'teardown')
 })
 
+/** The test's own environment, without the agent session or terminal it may be running inside (#43 reads those). */
+const hostless = env => Object.fromEntries(Object.entries(env).filter(([key]) => !/^(CLAUDE|CODEX|HERDR)_|^CLAUDECODE$/.test(key)))
 const cleanupRepo = t => {
   const root = mkdtempSync(join(tmpdir(), 'troupe-teardown-'))
   t.after(() => rmSync(root, { recursive: true, force: true }))
@@ -331,7 +333,7 @@ test('a commit made while panes close is retained and does not finish teardown',
 test('real scratch tmux: a panel answer reaches the marked ready agent once', { skip: spawnSync('tmux', ['-V']).status !== 0, timeout: 15000 }, async t => {
   const w = cleanupRepo(t)
   const socket = `troupe-wake-${process.pid}-${randomUUID().slice(0, 8)}`
-  const env = { ...process.env, TMUX: undefined, TMUX_PANE: undefined, TROUPE_TMUX_SOCKET: socket }
+  const env = { ...hostless(process.env), TMUX: undefined, TMUX_PANE: undefined, TROUPE_TMUX_SOCKET: socket }
   t.after(() => tmux(['kill-server'], undefined, env))
   const received = join(w.root, '.troupe/received.txt')
   const script = `printf '› Ask Codex to do anything\\n'; while IFS= read -r line; do printf '%s\\n' "$line" >> ${shellOf([received])}; done`
@@ -358,7 +360,7 @@ test('real scratch tmux: a panel answer reaches the marked ready agent once', { 
 const parallelWorld = (t, prefix) => {
   const base = mkdtempSync(join(tmpdir(), `troupe-${prefix}-`))
   const socket = `troupe-${prefix}-${process.pid}-${randomUUID().slice(0, 8)}`
-  const env = { ...process.env, TMUX: undefined, TMUX_PANE: undefined, TROUPE_TMUX_SOCKET: socket }
+  const env = { ...hostless(process.env), TMUX: undefined, TMUX_PANE: undefined, TROUPE_TMUX_SOCKET: socket }
   t.after(() => {
     tmux(['kill-server'], undefined, env)
     rmSync(base, { recursive: true, force: true })

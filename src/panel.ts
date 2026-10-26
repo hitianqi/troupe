@@ -5,6 +5,7 @@ import type { Line } from './canvas.ts'
 import type { Reply, Runtime } from './command-context.ts'
 import { draw } from './draw.ts'
 import type { Drawn } from './draw.ts'
+import { deliverNotices } from './notices.ts'
 import { flushAnswers } from './orchestrator.ts'
 import { panelEffect } from './panel-actions.ts'
 import { initialUi, parseInput, transition } from './panel-input.ts'
@@ -106,7 +107,7 @@ export const panel = async (r: Runtime, options: PanelOptions, terminal: Termina
         }
         missionName = nextMission
       }
-      if ('mission' in reading) flushAnswers(r, reading.mission)
+      if ('mission' in reading) { flushAnswers(r, reading.mission); deliverNotices(r, reading.mission) }
       normalize()
       paintFrame()
     }
