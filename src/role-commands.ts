@@ -1,14 +1,15 @@
 import { randomUUID } from 'node:crypto'
-import { appendFileSync, existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, rmdirSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readdirSync, renameSync, rmSync, rmdirSync, writeFileSync } from 'node:fs'
 import { basename, dirname, join, resolve } from 'node:path'
 
 import { argvOf, optionOf, screenOf } from './agents.ts'
 import type { Agent } from './agents.ts'
-import { clean, git, mission, mux, Refusal, within } from './command-context.ts'
+import { clean, excludeTroupe, git, mux, Refusal, within } from './command-context.ts'
 import type { Mission, Reply, Runtime } from './command-context.ts'
 import { append, isApproved } from './log.ts'
 import type { Live } from './model.ts'
-import { createPane, ownedPane, rolesWindow } from './panes.ts'
+import { boundTo, markedPanes, mission, missionTree, missionTrees, orchestratorsOf, unbind } from './missions.ts'
+import { createPane, ownedPane, rolesName, rolesWindow } from './panes.ts'
 import type { Role } from './plan.ts'
 import { readResult, RESULT_FILE, roleState, waitingOn, workOf } from './state.ts'
 import { tmux } from './run.ts'
@@ -91,9 +92,7 @@ const approved = (m: Mission): void => {
 }
 
 const prepareWorktree = (r: Runtime, m: Mission, worktree: string, branch: string, base: string): void => {
-  const exclude = join(m.common, 'info/exclude')
-  mkdirSync(dirname(exclude), { recursive: true })
-  if (!existsSync(exclude) || !readFileSync(exclude, 'utf8').split(/\r?\n/).includes('/.troupe/')) appendFileSync(exclude, '\n/.troupe/\n')
+  excludeTroupe(m.common)
   const entries = git(r, m.root, ['worktree', 'list', '--porcelain', '-z']).split('\0\0')
   const existing = entries.find(entry => entry.split('\0').includes(`worktree ${worktree}`))
   if (existing !== undefined) {
@@ -147,11 +146,11 @@ export const dispatch = async (r: Runtime, initial: Mission, name: string): Prom
   if (existsSync(oldResult)) renameSync(oldResult, join(dirname(m.log), `result-${name}-${randomUUID()}.md`))
   // A retained dead pane is still troupe's; remove it before a replacement.
   if (previous !== undefined && !previous.closed && ownedPane(r, previous).alive) mux(r, ['kill-pane', '-t', previous.pane])
-  const window = rolesWindow(r, m)
+  const window = rolesWindow(r, m, m.name)
   const agent = m.agents[role.agent]
   if (agent === undefined) throw new Refusal(`unknown agent: ${role.agent}`)
   const argv = argvOf(agent, role, `Read the brief in ${brief} and follow it.`, gitDirsOf(r, m, role, worktree))
-  const opened = createPane(r, m, name, worktree, argv, window, undefined, 'roles')
+  const opened = createPane(r, m, name, worktree, argv, window, undefined, rolesName(m.name))
   try {
     append(m.log, 'cli', { ev: 'dispatch', role: name, ...opened, worktree, branch, base, argv, agent: role.agent })
   } catch (error) {
@@ -218,6 +217,10 @@ export const teardown = async (r: Runtime, initial: Mission, force: boolean): Pr
   const parent = within(m.root, `.troupe/worktrees/${m.name}`)
   const prefix = `role/${m.name}/`
   const target = m.plan.base || `mission/${m.name}`
+  // The mission's own worktree goes too, once its branch is pushed; a checkout elsewhere on the branch is left alone.
+  const missionBranch = `mission/${m.name}`
+  const own = missionTrees(r, m).get(m.name)
+  const missionWorktree = own !== undefined && resolve(own) === missionTree(m, m.name) ? own : undefined
   const entries = git(r, m.root, ['worktree', 'list', '--porcelain', '-z']).split('\0\0').filter(Boolean).map(entry => {
     const fields = entry.split('\0')
     return { path: fields.find(field => field.startsWith('worktree '))?.slice(9) ?? '', branch: fields.find(field => field.startsWith('branch refs/heads/'))?.slice(18) ?? '' }
@@ -235,6 +238,10 @@ export const teardown = async (r: Runtime, initial: Mission, force: boolean): Pr
       const merged = r.run('git', ['merge-base', '--is-ancestor', `refs/heads/${branch}`, target], { cwd: m.root })
       if (merged.code !== 0) reasons.push(`${branch}: unmerged into ${target}${merged.err.trim() ? ` (${merged.err.trim()})` : ''}`)
     }
+  }
+  if (missionWorktree !== undefined && !force) {
+    if (existsSync(missionWorktree) && git(r, missionWorktree, ['status', '--porcelain', '--untracked-files=all']).trim()) reasons.push(`${missionBranch}: dirty or untracked changes in ${missionWorktree}`)
+    if (git(r, m.root, ['branch', '-r', '--contains', `refs/heads/${missionBranch}`]).trim() === '') reasons.push(`${missionBranch}: not pushed; push it before removing ${missionWorktree}`)
   }
   // Unknown files are never recursively swept up, even with --force.
   if (existsSync(parent)) for (const name of readdirSync(parent)) {
@@ -268,6 +275,15 @@ export const teardown = async (r: Runtime, initial: Mission, force: boolean): Pr
     removed++
   }
   if (existsSync(parent)) { rmdirSync(parent); removed++ }
+  if (missionWorktree !== undefined) {
+    if (!force && existsSync(missionWorktree) && git(r, missionWorktree, ['status', '--porcelain', '--untracked-files=all']).trim()) throw new Refusal(`${missionBranch}: dirty or untracked changes appeared during teardown`)
+    git(r, m.root, ['worktree', 'remove', ...(force ? ['--force'] : []), missionWorktree])
+    removed++
+  }
+  // The orchestrator stays open, unbound; its panel closes.
+  const panes = markedPanes(r)
+  for (const panel of panes.filter(one => one.panel === m.root && boundTo(panes, m, one.pane) === m.name)) { mux(r, ['kill-pane', '-t', panel.pane]); removed++ }
+  for (const orchestrator of orchestratorsOf(panes, m, m.name)) unbind(r, orchestrator.pane)
   for (const file of readdirSync(dirname(m.log))) {
     if (/^(brief-.+|result-.+)\.md$/.test(file)) { rmSync(join(dirname(m.log), file)); removed++ }
   }

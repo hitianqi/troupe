@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { realpathSync } from 'node:fs'
 import { basename } from 'node:path'
 
+import { rootOf } from './check.ts'
 import { mux, Refusal } from './command-context.ts'
 import type { Repository, Runtime } from './command-context.ts'
 import { paneOf } from './state.ts'
@@ -55,7 +56,7 @@ const sameDir = (a: string, b: string): boolean => {
 }
 
 const sessionOf = (r: Runtime, repo: Repository): string | undefined => {
-  const caller = callerPane(r, repo.root)
+  const caller = callerPane(r, rootOf(r.cwd, r.run))
   if (caller !== undefined) return mux(r, ['display', '-p', '-t', caller, '#{session_id}']).trim()
   const name = `=${sessionName(repo)}`
   if (tmux(['has-session', '-t', name], r.run, r.env).code !== 0) return undefined
@@ -86,11 +87,14 @@ export const createPane = (r: Runtime, repo: Repository, name: string, cwd: stri
   return { ...opened, owner }
 }
 
-export const rolesWindow = (r: Runtime, repo: Repository): Location | undefined => {
+/** Each mission tiles its roles in its own window; tmux window names cannot hold `:`. */
+export const rolesName = (mission: string): string => `roles-${mission}`
+
+export const rolesWindow = (r: Runtime, repo: Repository, mission: string): Location | undefined => {
   const session = sessionOf(r, repo)
   if (session === undefined) return undefined
   const panes = mux(r, ['list-panes', '-s', '-t', session, '-F', `#{window_name}\t${IDS}`]).trim().split('\n')
-  const roles = panes.find(line => line.startsWith('roles\t'))
+  const roles = panes.find(line => line.startsWith(`${rolesName(mission)}\t`))
 
-  return roles === undefined ? undefined : ids(roles.slice('roles\t'.length))
+  return roles === undefined ? undefined : ids(roles.slice(`${rolesName(mission)}\t`.length))
 }

@@ -1,18 +1,14 @@
-import { existsSync, readFileSync, realpathSync } from 'node:fs'
+import { appendFileSync, existsSync, mkdirSync, readFileSync, realpathSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-import { loadAgents } from './agents.ts'
 import type { Agent } from './agents.ts'
-import { findPlan, rootOf, textProblems } from './check.ts'
-import { fold, logPath, readLog } from './log.ts'
+import { rootOf } from './check.ts'
 import type { Folded, Logged } from './log.ts'
-import { readPlan } from './plan.ts'
 import type { Plan } from './plan.ts'
 import { run, tmux } from './run.ts'
 import type { Ran, Run, RunOptions } from './run.ts'
-import { planHash } from './state.ts'
 import { DEFAULT_STAGES, readStages } from './stages.ts'
 
 export type Reply = { out: string; code: number }
@@ -68,12 +64,20 @@ export const ok = (result: Ran, what: string): string => {
 export const git = (r: Runtime, cwd: string, args: string[]): string => ok(r.run('git', args, { cwd }), 'git')
 export const mux = (r: Runtime, args: string[], options?: RunOptions): string => ok(tmux(args, r.run, r.env, options), 'tmux')
 
+/** `root` is the main checkout, where mission and role worktrees live, from any worktree of the repository. */
 export type Repository = { root: string; common: string }
 export const repository = (r: Runtime): Repository => {
-  const root = rootOf(r.cwd, r.run)
-  const common = resolve(root, git(r, root, ['rev-parse', '--git-common-dir']).trim())
+  const top = rootOf(r.cwd, r.run)
+  const common = resolve(top, git(r, top, ['rev-parse', '--git-common-dir']).trim())
 
-  return { root, common }
+  return { root: basename(common) === '.git' ? dirname(common) : top, common }
+}
+
+/** Keeps troupe's worktrees out of the main checkout's status. */
+export const excludeTroupe = (common: string): void => {
+  const exclude = join(common, 'info/exclude')
+  mkdirSync(dirname(exclude), { recursive: true })
+  if (!existsSync(exclude) || !readFileSync(exclude, 'utf8').split(/\r?\n/).includes('/.troupe/')) appendFileSync(exclude, '\n/.troupe/\n')
 }
 
 /** A repo/skill reference cannot escape its root, including through a symlink. */
@@ -116,38 +120,8 @@ export const roleText = (r: Runtime, root: string, workflow: string, ref: string
   return { ref, bytes: existsSync(path) ? readFileSync(path, 'utf8') : undefined }
 }
 
-export type Mission = Repository & { name: string; path: string; source: string; plan: Plan; agents: Record<string, Agent>; problems: string[]; hash: string; log: string; events: Logged[]; folded: Folded; texts: Map<string, string> }
-export const mission = (r: Runtime, want = ''): Mission => {
-  if (want !== '' && !NAME.test(want)) throw new Usage('mission must be a folder name under docs/missions')
-  const repo = repository(r)
-  const found = findPlan(repo.root, repo.root, want === '' ? '' : join(repo.root, 'docs/missions', want, 'plan.md'), r.run)
-  if ('missing' in found) throw new Refusal(found.missing)
-  const name = basename(dirname(found.path))
-  if (!NAME.test(name)) throw new Refusal(`invalid mission folder: ${name}`)
-  const loaded = loadAgents(repo.root, r.home)
-  const source = readFileSync(found.path)
-  const plan = readPlan(source.toString('utf8'), loaded.agents)
-  const problems = [...loaded.problems, ...plan.problems, ...textProblems(repo.root, plan)]
-  const texts = new Map<string, string>()
-  const refs = plan.roles.filter(role => role.text !== '').map(role => {
-    try {
-      const text = roleText(r, repo.root, plan.workflow, role.text)
-      if (text.bytes === undefined) problems.push(`role ${role.name}: missing text ${role.text}`)
-      else texts.set(role.name, text.bytes)
-
-      return text
-    } catch (error) {
-      problems.push(`role ${role.name}: ${(error as Error).message}`)
-
-      return { ref: role.text, bytes: undefined }
-    }
-  })
-  const log = logPath(repo.common, name)
-  const read = readLog(log)
-  if (read.unread > 0) problems.push(`${log}: ${read.unread} unread log line(s)`)
-
-  return { ...repo, name, path: found.path, source: source.toString('utf8'), plan, agents: loaded.agents, problems, hash: planHash(source, refs), log, events: read.events, folded: fold(read.events), texts }
-}
+/** `worktree` holds the plan, the agents and the role texts; `root` stays the main checkout. */
+export type Mission = Repository & { name: string; worktree: string; path: string; source: string; plan: Plan; agents: Record<string, Agent>; problems: string[]; hash: string; log: string; events: Logged[]; folded: Folded; texts: Map<string, string> }
 
 export const clean = (m: Mission): void => {
   if (m.problems.length > 0) throw new Refusal(m.problems.join('\n'))

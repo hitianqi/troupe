@@ -8,7 +8,8 @@ import { test } from 'node:test'
 import { fileURLToPath } from 'node:url'
 
 import { textOf } from '../dist/canvas.js'
-import { mission, runtime } from '../dist/command-context.js'
+import { runtime } from '../dist/command-context.js'
+import { mission } from '../dist/missions.js'
 import { draw } from '../dist/draw.js'
 import { append, readLog } from '../dist/log.js'
 import { flushAnswers } from '../dist/orchestrator.js'
@@ -42,7 +43,9 @@ const world = t => {
   const calls = []
   const output = []
   const pane = { owner: 'ours', screen: 'READY', dead: false, exists: true }
-  const orch = { marked: false, token: 'orch-token', screen: '› Ask Codex to do anything', dead: false }
+  const orch = { marked: false, mission: 'm1', token: 'orch-token', screen: '› Ask Codex to do anything', dead: false }
+  // The checkout is on m1's mission branch, so a panel without -m resolves m1.
+  const head = { branch: 'mission/m1' }
   let afterLoad
   const planning = { active: false }
   let clock = 0
@@ -52,13 +55,15 @@ const world = t => {
     if (command === 'git') {
       if (raw.includes('--show-toplevel')) return yes(root)
       if (raw.includes('--git-common-dir')) return yes('.git')
+      if (raw[0] === 'symbolic-ref') return yes(head.branch)
       if (raw[0] === 'diff') return yes('src/api.ts\n')
       return yes()
     }
+    if (command === 'ps') return { code: 1, out: '', err: '' }
     assert.equal(command, 'tmux')
     assert.deepEqual(raw.slice(0, 2), ['-L', 'panel-test'])
     const args = raw.slice(2)
-    if (args[0] === 'list-panes' && args.at(-1).includes('@troupe-orchestrator')) return yes(orch.marked ? `%9\t${orch.dead ? 1 : 0}\t${root}\t${orch.token}` : '')
+    if (args[0] === 'list-panes' && args.at(-1).includes('@troupe-mission')) return yes(orch.marked ? `%9\t${orch.dead ? 1 : 0}\t${orch.mission}\t${join(root, '.git')}\t\t\t${orch.token}` : '')
     if (args[0] === 'load-buffer') afterLoad?.()
     if (args[0] === 'display' && args.at(-1).includes('@troupe-planning')) return yes(`${root}\t${planning.active ? '1' : ''}`)
     if (args[0] === 'set-option' && args.includes('@troupe-planning') && args.includes('-u')) planning.active = false
@@ -78,7 +83,7 @@ const world = t => {
     append(log, 'cli', { ev: 'dispatch', role: 'api', agent: 'fake', session: '$1', window: '@1', pane: '%1', owner: 'ours', socket: 'old-socket', server: '/old/socket', worktree, branch: 'role/m1/api', base: 'abc', argv: ['fake'] })
   }
 
-  return { root, path, log, write, pane, planning, orch, afterLoad: fn => { afterLoad = fn }, calls, output, r, read, openGate, launch, events: () => readLog(log).events, advance: ms => { clock += ms } }
+  return { root, path, log, write, pane, planning, orch, head, afterLoad: fn => { afterLoad = fn }, calls, output, r, read, openGate, launch, events: () => readLog(log).events, advance: ms => { clock += ms } }
 }
 const tick = () => new Promise(resolve => setImmediate(resolve))
 const key = key => ({ kind: 'key', key })
@@ -342,7 +347,7 @@ test('one packet cannot approve a second unseen gate after approving the plan', 
   await running
 })
 
-test('switching the newest mission cancels an in-progress draft', { timeout: 5000 }, async t => {
+test('switching the resolved mission cancels an in-progress draft', { timeout: 5000 }, async t => {
   const w = world(t)
   const stop = new AbortController()
   t.after(() => stop.abort())
@@ -353,6 +358,7 @@ test('switching the newest mission cancels an in-progress draft', { timeout: 500
   await tick()
   assert.ok(w.output.at(-1).includes('send to api'))
   w.write(join(w.root, 'docs/missions/m2/plan.md'), PLAN)
+  w.head.branch = 'mission/m2'
   await new Promise(resolve => setTimeout(resolve, 2100))
   assert.ok(w.output.at(-1).includes('Mission changed; input cancelled.'))
   assert.ok(!w.output.at(-1).includes('send to api'))
@@ -391,7 +397,7 @@ test('CLI panel --once --plain shows the plan gate, then the build after approva
   assert.equal(bad.status, 2)
 })
 
-test('default panel polls after the last mission finishes, cancels its draft, and discovers a new plan', { timeout: 7000 }, async t => {
+test('default panel polls after the last mission finishes, cancels its draft, and discovers the next mission', { timeout: 7000 }, async t => {
   const w = world(t)
   w.openGate()
   const stop = new AbortController()
@@ -405,6 +411,7 @@ test('default panel polls after the last mission finishes, cancels its draft, an
   await new Promise(resolve => setTimeout(resolve, 2100))
   assert.ok(w.output.at(-1).includes('no mission yet'))
   w.write(join(w.root, 'docs/missions/new/plan.md'), PLAN)
+  w.head.branch = 'mission/new'
   await new Promise(resolve => setTimeout(resolve, 2100))
   assert.ok(w.output.at(-1).includes('Build the endpoint'))
   assert.ok(!w.output.at(-1).includes('Old draft'))
