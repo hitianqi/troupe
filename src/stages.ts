@@ -15,6 +15,7 @@ export const DEFAULT_STAGES: Stage[] = [
   { id: 'review', label: 'Review' },
   { id: 'mr-ok', label: 'MR OK?', gate: 'mr-ok' },
   { id: 'mr', label: 'Open MR' },
+  { id: 'merged', label: 'Merged?', gate: 'merged' },
   { id: 'teardown', label: 'Teardown' },
 ]
 

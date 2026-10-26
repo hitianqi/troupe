@@ -16,15 +16,15 @@
   ○ Review            0/1  │                   │
   ◇ MR OK?                 │                   ▼
   ○ Open MR                │      ┌────────────────────────┐
-  ○ Teardown               │      │ ○ build        planned │
-                           │      │ ⬢ codex gpt-6.1-sol    │
-─ ACTIVITY ─────────────── │      │ ◼◼◼◻◻ high             │
- 12:07 dispatched store    │      └────────────────────────┘
- 12:07 dispatched api      │
- 10:42 stage: build        │      ╔════════════════════════╗
- 10:42 plan approved       │      ║ ○ review       planned ║
- 10:41 plan gate opened    │      ║ ✻ claude opus          ║
-                           │      ║ ◼◼◼◻◻ high             ║
+  ◇ Merged?                │      │ ○ build        planned │
+  ○ Teardown               │      │ ⬢ codex gpt-6.1-sol    │
+                           │      │ ◼◼◼◻◻ high             │
+─ ACTIVITY ─────────────── │      └────────────────────────┘
+ 12:07 dispatched store    │
+ 12:07 dispatched api      │      ╔════════════════════════╗
+ 10:42 stage: build        │      ║ ○ review       planned ║
+ 10:42 plan approved       │      ║ ✻ claude opus          ║
+ 10:41 plan gate opened    │      ║ ◼◼◼◻◻ high             ║
                            │      ║ reviews lock, build as ║
                            │      ║ each lands             ║
                            │      ╚════════════════════════╝

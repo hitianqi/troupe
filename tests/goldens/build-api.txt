@@ -19,15 +19,15 @@
   ○ Review            0/1  │   │  ┌────────────────────────┐  │   ┌──────────────────────┐
   ◇ MR OK?                 │   │  │ ● store        working │  │   │ ○ review     planned │
   ○ Open MR                │   └─▶│ ✻ claude opus          │──┼──▶│ ✻ claude sonnet      │
-  ○ Teardown               │      │ ◼◼◼◻◻ high             │  │   │ ◼◼◼◻◻ high           │
-                           │      └────────────────────────┘  │   └──────────────────────┘
-─ ACTIVITY ─────────────── │                                  │
- 12:07 dispatched store    │        after api                 │
- 12:07 dispatched api      │      ┌────────────────────────┐  │
- 10:42 stage: build        │      │ ○ web          planned │  │
- 10:42 plan approved       │      │ ✻ claude sonnet        │──┘
- 10:41 plan gate opened    │      │ ◼◼◻◻◻ medium           │
-                           │      └────────────────────────┘
+  ◇ Merged?                │      │ ◼◼◼◻◻ high             │  │   │ ◼◼◼◻◻ high           │
+  ○ Teardown               │      └────────────────────────┘  │   └──────────────────────┘
+                           │                                  │
+─ ACTIVITY ─────────────── │        after api                 │
+ 12:07 dispatched store    │      ┌────────────────────────┐  │
+ 12:07 dispatched api      │      │ ○ web          planned │  │
+ 10:42 stage: build        │      │ ✻ claude sonnet        │──┘
+ 10:42 plan approved       │      │ ◼◼◻◻◻ medium           │
+ 10:41 plan gate opened    │      └────────────────────────┘
                            │
                            │
                            │ ─ ◆ api · waits on you ────────────────────────────────────────────

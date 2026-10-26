@@ -13,7 +13,7 @@ import { available, installSkill, setup, skillTarget } from './setup.ts'
 import { readResult } from './state.ts'
 import { tmux } from './run.ts'
 import { panel } from './panel.ts'
-import { afterMrApproval, markOrchestrator } from './orchestrator.ts'
+import { afterApproval, markOrchestrator } from './orchestrator.ts'
 import { createPanel, openPanel } from './panel-open.ts'
 
 const OPTIONS: Record<string, string[]> = {
@@ -74,7 +74,7 @@ const wait = async (r: Runtime, m: Mission, target: { role?: string; gate?: stri
     if (target.gate !== undefined) {
       const answer = folded.gates.get(target.gate)
       if (answer?.answer !== undefined) return { code: 0, out: answer.answer === 'approve'
-        ? `approve\n${target.gate === 'mr-ok' ? `${afterMrApproval(m.name)}\n` : ''}` : `change: ${answer.text ?? ''}\n` }
+        ? `approve\n${target.gate === 'mr-ok' || target.gate === 'merged' ? `${afterApproval(target.gate, m.name)}\n` : ''}` : `change: ${answer.text ?? ''}\n` }
     } else {
       const opened = folded.roles.get(target.role ?? '')
       if (opened === undefined) throw new Refusal(`role ${target.role}: not dispatched`)

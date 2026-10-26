@@ -155,6 +155,7 @@ paste: bracketed
   assert.equal((await execute('dispatch', ['api', '-m', 'm1'], r)).code, 0)
   assert.equal((await execute('wait', ['--role', 'api', '--ready', '--timeout', '5', '-m', 'm1'], r)).code, 0)
   const reopened = readLog(m.log).events.filter(e => e.ev === 'dispatch').at(-1)
+  for (const gate of ['mr-ok', 'merged']) append(m.log, 'panel', { ev: 'gate-answer', gate, answer: 'approve' })
   const torn = await execute('teardown', ['-m', 'm1'], r)
   assert.equal(torn.code, 0, torn.out)
   assert.notEqual(tmux(['display', '-p', '-t', reopened.pane, '#{pane_id}'], undefined, env).out.trim(), reopened.pane)
@@ -178,6 +179,8 @@ const cleanupRepo = t => {
   const r = runtime({ cwd: root, home: join(root, 'home') })
   const m = mission(r, 'm1')
   append(m.log, 'orch', { ev: 'stage', stage: 'build' })
+  // Teardown waits for every gate the workflow declares (#48); these missions have passed them.
+  for (const gate of ['plan', 'mr-ok', 'merged']) append(m.log, 'panel', { ev: 'gate-answer', gate, answer: 'approve' })
   const path = join(root, '.troupe/worktrees/m1/api')
   git('worktree', 'add', '-qb', 'role/m1/api', path)
   const call = (...args) => execute('teardown', ['-m', 'm1', ...args], r)
@@ -273,6 +276,20 @@ test('teardown takes a squash-merged role as merged by its content, and refuses 
   assert.equal(reply.code, 0, reply.out)
   assert.equal(w.git('branch', '--list', 'role/m1/*').trim(), '')
   assert.equal(existsSync(w.path), false)
+})
+
+test('teardown waits for every gate the workflow declares, the merged gate included; --force overrides (#48)', async t => {
+  const w = cleanupRepo(t)
+  append(w.m.log, 'panel', { ev: 'gate-open', gate: 'merged', ask: 'https://example.invalid/pr/1' })
+  let reply = await w.call()
+  assert.equal(reply.code, 1, reply.out)
+  assert.match(reply.out, /gate merged: not approved yet; teardown waits for it/)
+  assert.doesNotMatch(reply.out, /gate (plan|mr-ok)/)
+  assert.ok(existsSync(w.path), 'the role window and worktree stay for a requested change')
+  append(w.m.log, 'panel', { ev: 'gate-answer', gate: 'merged', answer: 'change', text: 'rename the flag' })
+  assert.match((await w.call()).out, /gate merged: not approved yet/)
+  reply = await w.call('--force')
+  assert.equal(reply.code, 0, reply.out)
 })
 
 test('clean teardown works without force and partial failure stays open for a retry', async t => {
@@ -475,6 +492,7 @@ test('real scratch tmux: two missions in one repository each follow their own or
 
   // Teardown of beta waits for its push, then leaves alpha intact.
   const beta = join(root, '.troupe/missions/beta')
+  for (const gate of ['plan', 'mr-ok', 'merged']) append(mission(rb).log, 'panel', { ev: 'gate-answer', gate, answer: 'approve' })
   assert.match((await execute('teardown', [], rb)).out, /mission\/beta: not pushed/)
   execFileSync('git', ['init', '-q', '--bare', join(w.base, 'remote.git')])
   git('remote', 'add', 'origin', join(w.base, 'remote.git'))

@@ -75,7 +75,9 @@ uses the current session; outside, it starts one and attaches. Then:
    `o` jumps to its pane, you answer there, and come back.
 4. A reviewer role checks each branch as it lands; findings go back to the
    same window for one fix round; the orchestrator merges onto the mission
-   branch. At the MR gate you approve opening the MR. You merge it.
+   branch. At the MR gate you approve opening the MR. You merge it, then
+   answer `Merged?` in the panel; only then are the role windows and
+   worktrees removed.
 
 Several missions can run at once, in one repository or in several: start
 each from its own agent pane. Each has its own worktree, panel and roles
@@ -160,11 +162,12 @@ An open mission has a worktree on its `mission/<name>` branch or a log, and
 no teardown event. Explicit `-m` opens any mission, including a finished
 one. Until its orchestrator is bound, the panel waits for one.
 
-After opening the MR, run `troupe teardown -m <mission>`. It closes role
-panes and the mission's panel, and unbinds the orchestrator's pane, which
-stays open. It refuses dirty or untracked work, commits unmerged into the
-plan's `base` mission branch, and an unpushed mission branch, unless
-`--force`. Panes with a different owner marker are skipped. Repeating it
+Once the MR is merged and its `merged` gate approved, run `troupe teardown -m
+<mission>`. It closes role panes and the mission's panel, and unbinds the
+orchestrator's pane, which stays open. It refuses while any gate the
+workflow declares is not approved, and refuses dirty or untracked work,
+commits unmerged into the plan's `base` mission branch, and an unpushed
+mission branch, unless `--force`. Panes with a different owner marker are skipped. Repeating it
 with explicit `-m` reports nothing left. The MR head and log stay available.
 
 Use `troupe wait --role <r> --ready --timeout 60` after dispatch or before
