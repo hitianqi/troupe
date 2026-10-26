@@ -102,7 +102,7 @@ not a strip. tmux runs in WSL; Windows Terminal is only the window.
 Beside the orchestrator the panel is a portrait half. That is the right shot
 where both halves matter (the ask, the change-plan moment, the PR link).
 Where the beat is the panel itself, **zoom the panel pane** with tmux
-`prefix z`: it fills the 160×45 window, redraws at that width (the panel
+`prefix z`: it fills the window, redraws at that width (the panel
 redraws on resize), and the MISSION tab lays out landscape: the left column,
 FLOW with the reviewer in its side lane, the selected role's live window
 beside it. `prefix z` again goes back to the split. The zoom can stay in the
