@@ -49,29 +49,31 @@ def framed(col, row, scale, left):
 
 
 PANEL = framed(66, 22, 0.6, 800)        # the panel on the right two thirds; the caption on the left
-PANEL_MID = framed(66, 22, 0.6, 506)    # the panel centred
 LIVE = framed(93, 36.5, 1.05, 760)      # the selected role's live window
+OVERVIEW = 0.44                         # the whole window, its top near the frame's top, a caption strip below
+WHOLE_UP = (WIN_W / 2, WIN_H / 2 + 92 / OVERVIEW, OVERVIEW)
+OPEN = cell(99, 42)                     # the panel's "o Open window", review selected
 
 SHOTS = [
     dict(
-        name='roles', src='roles', length=6.0,
-        map=[(0.0, 0.9, 1.4, 2.3), (0.9, 1.5, 2.3, 2.9), (1.5, 1.9, 3.9, 4.3), (1.9, 4.9, 4.3, 10.3), (4.9, 6.0, 10.3, 11.4)],
-        camera=[(0.0, *PANEL_MID), (0.95, *PANEL_MID), (1.6, *WHOLE, FIT), (2.6, *cell(78, 36), 0.72), (6.0, *cell(78, 36), 0.74)],
-        pointer=[(0.0, *cell(118, 30)), (0.75, *cell(101, 42)), (1.2, *cell(101, 42)), (1.9, *cell(118, 40))],
-        clicks=[0.9],
-        pointer_alpha=[(0.0, 1), (1.9, 1), (2.3, 0)],
-        shade=[(0.0, 1.0), (0.9, 1.0), (1.3, 0.0)],
-        caption=('Every role in a real window. Talk to any of them.', 1.2, 5.7, 'bottom'),
-    ),
-    dict(
-        name='cards', src='cards', length=9.0,
-        map=[(0.0, 1.0, 0.3, 1.3), (1.0, 2.2, 1.3, 2.5), (2.2, 2.4, 3.2, 3.4), (2.4, 3.6, 3.4, 4.6), (3.6, 3.8, 5.2, 5.4), (3.8, 9.0, 5.4, 10.6)],
-        camera=[(0.0, *PANEL_MID), (0.8, *PANEL), (4.1, *PANEL), (5.3, *LIVE), (9.0, *LIVE[:2], 1.08)],
-        shade=[(0.0, 1.0), (9.0, 1.0)],
+        name='cards', src='cards', length=9.4,
+        map=[(0.0, 1.0, 0.3, 1.3), (1.0, 2.2, 1.3, 2.5), (2.2, 2.4, 3.2, 3.4), (2.4, 3.6, 3.4, 4.6), (3.6, 3.8, 5.2, 5.4), (3.8, 9.4, 5.4, 11.0)],
+        camera=[(0.0, *PANEL), (4.1, *PANEL), (5.3, *LIVE), (8.2, *LIVE), (9.1, *PANEL)],
+        shade=[(0.0, 1.0), (9.4, 1.0)],
         pointer=[(0.0, *cell(110, 38)), (0.85, *cell(105, 11)), (1.4, *cell(105, 11)), (2.25, *cell(105, 18)), (2.7, *cell(105, 18)), (3.65, *cell(137, 15)), (4.1, *cell(140, 22))],
         clicks=[1.0, 2.4, 3.8],
         pointer_alpha=[(0.0, 1), (4.1, 1), (4.5, 0)],
-        caption=('Click a role. Watch it work, live.', 0.3, 8.6, 'left'),
+        caption=('Click a role. Watch it work, live.', 0.3, 8.4, 'left'),
+    ),
+    dict(
+        name='roles', src='roles', length=6.4,
+        map=[(0.0, 0.8, 1.5, 2.3), (0.8, 1.4, 2.3, 2.9), (1.4, 1.8, 3.9, 4.3), (1.8, 4.8, 4.3, 10.3), (4.8, 6.4, 10.3, 11.9)],
+        camera=[(0.0, *PANEL), (0.85, *PANEL), (1.6, *WHOLE_UP)],
+        shade=[(0.0, 1.0), (0.85, 1.0), (1.3, 0.0)],
+        pointer=[(0.0, *cell(128, 30)), (0.6, *OPEN), (1.0, *OPEN)],
+        clicks=[0.8],
+        pointer_alpha=[(0.0, 0), (0.15, 1), (1.1, 1), (1.4, 0)],
+        caption=('Every role in a real window. Talk to any of them.', 1.5, 6.1, 'bottom'),
     ),
 ]
 DISSOLVE = 0.3
@@ -154,7 +156,7 @@ def window_at(src, t_src):
 
 
 def pointer(scale):
-    """A Mac arrow: white with a dark edge, its tip at (0, 0)."""
+    """A Mac arrow: black with a white edge, its tip at (0, 0)."""
     h = 34 * scale
     pts = [(0, 0), (0, 0.84), (0.22, 0.66), (0.37, 0.99), (0.52, 0.93), (0.37, 0.61), (0.62, 0.61)]
     pad = int(h * 0.4)
@@ -165,7 +167,7 @@ def pointer(scale):
     ImageDraw.Draw(sh).polygon([(x + 2, y + 3) for x, y in poly], fill=110)
     img.paste((0, 0, 0, 255), (0, 0), sh.filter(ImageFilter.GaussianBlur(3)))
     d = ImageDraw.Draw(img)
-    d.polygon(poly, fill=(255, 255, 255, 255), outline=(10, 10, 10, 255), width=max(2, int(2.2 * scale)))
+    d.polygon(poly, fill=(12, 12, 12, 255), outline=(255, 255, 255, 255), width=max(2, int(2.4 * scale)))
     return img, pad
 
 
@@ -216,7 +218,7 @@ def render_shot(shot, t):
     # The stage viewport in window pixels, cropped then scaled.
     vw, vh = W / s, H / s
     box = (x - vw / 2, y - vh / 2, x + vw / 2, y + vh / 2)
-    view = win.crop(tuple(round(v) for v in box)).resize((W, H), Image.LANCZOS)
+    view = win.transform((W, H), Image.AFFINE, (1 / s, 0, box[0], 0, 1 / s, box[1]), resample=Image.BICUBIC)
     img = stage().copy()
     img.alpha_composite(view)
 
@@ -234,9 +236,10 @@ def render_shot(shot, t):
             img.alpha_composite(layer)
     alpha = keyed(shot['pointer_alpha'], t)[0]
     if alpha > 0.01:
-        press = min((abs(t - c) for c in shot['clicks']), default=9)
-        squash = 0.86 if press < 0.08 else 1.0
-        arrow, pad = pointer(max(0.9, s / 0.6) * squash)
+        near = min((abs(t - c) for c in shot['clicks']), default=9)
+        grow = 1 + 0.4 * (1 - smooth((near - 0.15) / 0.35))
+        squash = 0.9 if near < 0.06 else 1.0
+        arrow, pad = pointer(1.3 * grow * squash)
         if alpha < 1:
             arrow.putalpha(Image.eval(arrow.getchannel('A'), lambda v: int(v * alpha)))
         px, py = to_stage(*keyed(shot['pointer'], t)[:2])
