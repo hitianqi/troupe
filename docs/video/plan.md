@@ -127,20 +127,22 @@ The 3D cards are beyond ffmpeg: render the casts to video with agg, then
 build the shot with the `tianqi-launch-film` approach (real UI on tilted
 planes, a gliding camera, depth of field).
 
-## Storyboard (~66 s, 1920×1080, bilingual captions)
+## Storyboard (at most 75 s, 1920×1080, bilingual captions)
+
+Captions are drafts; they are polished after the footage is in.
 
 | time | beat | shot | caption (en) |
 |---|---|---|---|
 | 0–4 s | pain | several terminals each running an agent, one stuck on a permission dialog nobody sees (staged, or text on the dark stage) | "Five agents. Five terminals. Who's stuck?" |
 | 4–6 s | brand | icon (Signal, faded navy, level 2) + TROUPE wordmark | — |
-| 6–15 s | three ways to start | one frame, three rows playing at once: a plain terminal typing `troupe up`, Claude Code typing `/troupe-mission …`, Codex typing `$troupe-mission …`; then each row's panel slides in | "Start from the CLI, or from the agent you already have open." |
-| 15–22 s | plan first | split: approval card (high) beside the orchestrator → "Medium is plenty" typed on the left → the card refreshes (medium) → `a` | "A plan first. Just tell it what to change." |
-| 22–34 s | real windows | `prefix z` on the panel; click each role in FLOW, the right column follows its live window; `o` → the `roles` window, tiled panes, Claude and Codex side by side | "Every role in its own window, worktree and branch." |
-| 34–40 s | who's waiting | `review` turns yellow (Codex trust dialog) → `o` → answer → back | "It tells you who's waiting on you." |
-| 40–46 s | the whole picture | zoomed ROLES tab (ctx bars, tokens, effort cells), FLOW edges to the reviewer turning green | "Context, tokens, reviews, live." |
-| 46–54 s | land it | split: MR gate `a` → PR link in the orchestrator → (cut: the PR merged on GitHub) → merged gate `a` → the roles window closes | "Approve, merge, and it cleans up." |
-| 54–58 s | several missions | the tilted card splits into three | "Run several missions at once." |
-| 58–66 s | CTA | icon, TROUPE, `npm i -g troupe-cli`, GitHub link | "One command, a whole troupe." |
+| 6–16 s | three ways to start | three columns, each only its input line cropped from its take, typing at once: a shell `troupe up`, Claude Code `/troupe-mission …`, Codex `$troupe-mission …`; Enter; the Claude column grows into the full window and its panel slides in | "Start from the CLI, or from the agent you already have open." |
+| 16–25 s | plan first | split: approval card (high) beside the orchestrator → "Medium is plenty" typed on the left → the card refreshes (medium) → click Approve | "A plan first. Just tell it what to change." |
+| 25–38 s | real windows | `prefix z` on the panel; click each role in FLOW, the right column follows its live window; `o` → the `roles` window, tiled panes, Claude and Codex side by side | "Every role in its own window, worktree and branch." |
+| 38–45 s | who's waiting | `review` turns yellow (Codex trust dialog) → `o` → answer → back | "It tells you who's waiting on you." |
+| 45–52 s | the whole picture | zoomed ROLES tab (ctx bars, tokens, effort cells), FLOW edges to the reviewer turning green | "Context, tokens, reviews, live." |
+| 52–63 s | land it | split: MR gate approved → PR link in the orchestrator → (cut: the PR merged on GitHub) → merged gate approved → the roles window closes → the orchestrator's cleanup report (worktrees, branches, panes removed) | "Approve, merge, and it cleans up." |
+| 63–67 s | several missions | the tilted card splits into three | "Run several missions at once." |
+| 67–75 s | CTA | icon, TROUPE, `npm i -g troupe-cli`, GitHub link | "One command, a whole troupe." |
 
 ## Takes
 
@@ -148,15 +150,14 @@ planes, a gliding camera, depth of field).
   permissions): ask → plan gate (high) → change by talking to the
   orchestrator → approve → dispatch → zoom, click through roles + `o` →
   trust dialog → ROLES tab, PLAN tab → review → MR → merge on GitHub →
-  merged gate → teardown. Covers 15–54 s.
+  merged gate → teardown and the orchestrator's cleanup report. Covers
+  16–63 s.
 - **B, C, D, the three starts**: a plain terminal with `troupe up`, Claude
-  Code with `/troupe-mission <ask>`, Codex with `$troupe-mission <ask>`; each
-  recorded until the panel appears (~20 s), at the same size so the three rows line
-  up. C can be the opening of take A. Stacked into one frame in the edit.
+  Code with `/troupe-mission <ask>`, Codex with `$troupe-mission <ask>`; B
+  and D only until Enter, since the edit keeps just their input line. C is
+  the opening of take A, so it runs on into the panel.
 - **F, G, the missions behind**: a few seconds each, any small task.
 - **E, pain shot** (optional): several agents in plain terminals.
-- Stills: the finished page, light and dark, for a beat before the CTA if
-  time allows.
 
 Reset the demo repo between takes: delete `mission/*` and `role/*` branches,
 `.git/troupe`, `.troupe`, `docs/missions`.
@@ -167,5 +168,16 @@ Reset the demo repo between takes: delete `mission/*` and `role/*` branches,
   `tmux new-session -d -s demo -c <repo>`; one `.cast` per take. asciinema
   and agg run in WSL (`pipx install asciinema`; agg from its release
   binary); `ffmpeg` from apt for cuts and zooms.
-- The driving session types with a per-character script (25 ms) so typing
-  looks human.
+- The driving session does all the input, from a script, so every take is
+  repeatable and every action is on a timeline:
+  - Typing goes in with `tmux send-keys -l`, one character at a time with a
+    varied delay and short pauses between words, so it reads as a person
+    typing.
+  - Clicks go in the same way, as SGR mouse sequences
+    (`send-keys -l $'\e[<0;COL;ROWM\e[<0;COL;ROWm'`, pane-relative); the
+    panel reads them as real clicks. Tested on tmux: the bytes arrive intact.
+  - Each action is logged with its time and its cell (pane offset plus
+    row, col) in `<take>.actions.jsonl`.
+- asciinema records no pointer. The cursor is added in the edit from the
+  action log: a pointer gliding to each click's cell and a small ripple on
+  the click, placed exactly because agg's cell size is known.
