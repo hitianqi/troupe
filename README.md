@@ -42,7 +42,10 @@ them when run again, and never overwrites a skill folder it did not write.
 
 You can also start from an agent you already have open: ask it to run a
 troupe mission; it runs `troupe open --planning` to show the panel while
-preparing the plan.
+preparing the plan. In tmux the panel splits off beside the agent; in
+herdr it opens in a herdr pane
+beside the agent, attached to troupe's tmux session; elsewhere it prints the
+`tmux attach` line (on macOS, Terminal or iTerm2 opens with it).
 
 In the repository you want to change:
 

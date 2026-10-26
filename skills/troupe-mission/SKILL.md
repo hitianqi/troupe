@@ -35,6 +35,12 @@ scope. Read the code it touches. A question the code cannot answer becomes a
 decision in the plan, with your recommendation; ask now only what blocks the
 plan itself.
 
+The plan is shown in the panel, not in the chat. Do not lay out an approach,
+a role split or open decisions in the chat and ask whether to write them up,
+even when the person asks what you think: write them into the plan and let
+the panel show it. The chat carries only a blocking question, or a few lines
+at the gate.
+
 ## 2. Plan
 
 Create the mission branch `mission/<mission>` from the base branch in this
