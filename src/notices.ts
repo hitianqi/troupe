@@ -1,7 +1,8 @@
 import { createHash, randomUUID } from 'node:crypto'
-import { readFileSync } from 'node:fs'
+import { readFileSync, statSync } from 'node:fs'
 import { join, relative } from 'node:path'
 
+import { claudeActivity } from './activity.ts'
 import { mux } from './command-context.ts'
 import type { Mission, Repository, Runtime } from './command-context.ts'
 import { append, fold, logPath, orchestratorOf, readLog } from './log.ts'
@@ -14,8 +15,8 @@ import { tmux } from './run.ts'
 import { claudeSessionTurn, codexThreadTurn } from './usage.ts'
 import type { TurnAt } from './usage.ts'
 
-// Notices (#43): troupe types a line into the orchestrator when a role finishes or a gate is answered, so the
-// orchestrator never polls. Who the orchestrator is, where it runs and what was already said live in the run log;
+// Notices (#43, #53): troupe types a line into the orchestrator when a role finishes, a gate is answered, or the
+// person answers a role's wait in its window, so the orchestrator never polls. Who the orchestrator is, where it runs and what was already said live in the run log;
 // whether it can take a line comes from its own transcript (Claude) or session log (Codex), never its screen.
 
 export type Harness = 'claude' | 'codex'
@@ -76,7 +77,11 @@ export const recordOrchestrator = (r: Runtime, repo: Repository, name: string): 
 
 const said = (events: Logged[]): Set<string> => new Set(events.flatMap(e => e.ev === 'notice' ? [e.key] : []))
 
-/** What the orchestrator has not been told yet, oldest first: gate answers made in the panel, then finished roles. */
+const writtenAt = (path: string): { bytes: string; at: number } | undefined => {
+  try { return { bytes: readFileSync(path, 'utf8'), at: statSync(path).mtimeMs } } catch { return undefined }
+}
+
+/** What the orchestrator has not been told yet: gate answers made in the panel, oldest first, then for each role its answered waits and its finish. */
 export const pendingNotices = (r: Runtime, m: Mission, events: Logged[], since: string): Notice[] => {
   const told = said(events)
   const folded = fold(events)
@@ -91,15 +96,26 @@ export const pendingNotices = (r: Runtime, m: Mission, events: Logged[], since: 
   }
   for (const [name, opened] of folded.roles) {
     if (opened.closed) continue
-    const result = readResult(opened.worktree)
-    if (result === undefined || result.status === '') continue
     const agent = m.agents[opened.agent ?? '']
+    const result = readResult(opened.worktree)
+    const path = join(opened.worktree, RESULT_FILE)
+    const written = writtenAt(path)
+    const finished = result !== undefined && result.status !== '' && written !== undefined
+    const activity = agent?.usage === 'claude' ? claudeActivity(opened.worktree, opened.at, r.home) : undefined
+    // Each wait the person answered in the role's window, oldest first, until told; a finish told or work sent
+    // since, or a result written since, makes it old news.
+    const superseded = events.filter(e => e.ev === 'send' && e.role === name || e.ev === 'notice' && e.key.startsWith(`role:${name}:`)).at(-1)?.at
+    for (const answer of activity?.answers ?? []) {
+      if (answer.at < since || (superseded !== undefined && superseded > answer.at) || (written !== undefined && written.at > Date.parse(answer.at))) continue
+      const key = `answer:${name}:${answer.at}`
+      if (!told.has(key)) notices.push({ key, text: answer.then === 'working' ? `Role ${name} was answered in its window and went on working.` : `Role ${name} was stopped in its window: its dialog was denied or interrupted, and its turn ended.` })
+    }
+    if (!finished) continue
     // The role's own report that its turn ended; an adapter that reports nothing has only its result.
-    if (agent?.usage !== undefined && turnOf(r, agent, opened, '') !== 'ready') continue
-    let bytes = ''
-    try { bytes = readFileSync(join(opened.worktree, RESULT_FILE), 'utf8') } catch { continue }
-    const key = `role:${name}:${createHash('sha256').update(bytes).digest('hex').slice(0, 16)}`
-    if (!told.has(key)) notices.push({ key, text: `Role ${name} finished: ${result.status}: ${result.summary}. Its result is ${join(opened.worktree, RESULT_FILE)}.` })
+    const turn = activity?.turn ?? (agent?.usage === undefined ? undefined : turnOf(r, agent, opened, ''))
+    if (turn !== undefined && turn !== 'ready') continue
+    const key = `role:${name}:${createHash('sha256').update(written.bytes).digest('hex').slice(0, 16)}`
+    if (!told.has(key)) notices.push({ key, text: `Role ${name} finished: ${result.status}: ${result.summary}. Its result is ${path}.` })
   }
 
   return notices.map(one => ({ ...one, text: one.text.replace(/\s+/g, ' ').trim() }))

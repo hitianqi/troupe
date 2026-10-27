@@ -226,7 +226,8 @@ test('only Claude roles get settings: no prompt suggestions, and the context sta
   const { home, write } = temporary(t)
   const r = { home, packageRoot: '/pkg' }
   const m = { root: join(home, 'repo') }
-  assert.deepEqual(roleSettings(r, m, AGENTS.codex, '/wt'), [])
+  // Codex gets no --settings, only its trust override (see activity.node.mjs).
+  assert.equal(roleSettings(r, m, AGENTS.codex, '/wt').includes('--settings'), false)
   write(join(home, '.claude/settings.json'), JSON.stringify({ statusLine: { type: 'command', command: "mine 'x'" } }))
   const [flag, settings] = roleSettings(r, m, AGENTS.claude, '/wt')
   assert.equal(flag, '--settings')

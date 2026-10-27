@@ -198,24 +198,38 @@ holds the built-ins in the same shape.
 
 A built-in role's turn comes from its agent, not its screen. Claude roles
 start with lifecycle hooks in `--settings` (`UserPromptSubmit`,
-`PermissionRequest`, `Stop`, and the idle notice after an interrupt) that
-write `.troupe/activity.json`; Codex roles are read from their own session
-log (`task_started`, `task_complete`, `turn_aborted`). Only that report makes
-a role ready for `send`. While a turn runs, the screen patterns tell waiting
-on an approval from working; before the first report they stand in, but
-never as ready. An adapter with `usage` unset is read from its screen alone.
+`PermissionRequest`, `PostToolBatch`, `Stop`, and the idle notice after an
+interrupt) that write `.troupe/activity.json`; Codex roles are read from
+their own session log (`task_started`, `task_complete`, `turn_aborted`).
+Only that report makes a role ready for `send`. A Claude role's hooks also
+report when it waits on you: `PermissionRequest` opens the wait (an approval
+or a question), the next tool batch ends it as answered, and a deny or Esc,
+which runs no hook, ends it with the interrupt row in the role's transcript.
+Each wait's end is kept in the record (the last 50).
+Otherwise, while a turn runs, the screen patterns tell waiting on an
+approval from working; before the first report they stand in, but never as
+ready. An adapter with `usage` unset is read from its screen alone.
 
 The orchestrator is told, not polled. Every troupe command it runs records
 its agent session in the run log: Claude Code's `CLAUDE_CODE_SESSION_ID` or
 Codex's `CODEX_THREAD_ID`, accepted only when that agent is an ancestor of
 the command, and the pane to type to (tmux, or herdr's `HERDR_PANE_ID`).
-When a role's agent reports its turn over with a result written, or the
-person answers a gate in the panel, the panel types one line into the
-orchestrator after the orchestrator's own turn has ended, read from its
-transcript (Claude's `turn_duration` or interrupt row) or session log
-(Codex). Each line is logged as a `notice`, so none repeats or is lost
-across panel restarts. A mission with no recorded session falls back to
+When a role's agent reports its turn over with a result written, the
+person answers a gate in the panel, or the person answers a Claude role's
+wait in its window (`Role review was answered in its window and went on
+working.`, or `… was stopped in its window …` after a deny or Esc), the
+panel types one line into the orchestrator after the orchestrator's own
+turn has ended, read from its transcript (Claude's `turn_duration` or
+interrupt row) or session log (Codex). Every answered wait is told once,
+oldest first, unless the role's finish was told, work was sent to it, or it
+wrote a result since. Each line is logged as a `notice`, so none repeats or
+is lost across panel restarts. A mission with no recorded session falls back to
 the old screen-checked gate answers.
+
+Codex roles open without the "Trust this folder?" dialog: each is started
+with `-c projects={"<main checkout>"={trust_level="trusted"}}`, the entry
+answering the dialog would save (Codex keys trust by the repository root),
+for that run only; `~/.codex/config.toml` is not changed.
 
 Codex roles using `workspace-write` receive `--add-dir` grants for their own
 Git worktree metadata, shared `objects`, and `refs/heads/role/<mission>` plus
@@ -245,6 +259,7 @@ flags remain the ones in the plan. See the [Codex CLI reference](https://develop
   `unknown` and is never typed into.
 - Codex logs no approval request, so a Codex role waiting on one shows as
   waits only while its screen pattern matches; either way it is not ready.
+  Its answer is not told to the orchestrator.
 - Context use comes from each role's transcript. Codex logs its window; for
   Claude, troupe launches the role with a status line (`--settings`) that
   saves the window Claude Code reports to `.troupe/context.json`, then runs

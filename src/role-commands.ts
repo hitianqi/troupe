@@ -46,14 +46,15 @@ export const waitsOnOf = (agent: Agent, screen: string): string | undefined => {
 }
 
 /**
- * A role's turn as its agent reports it: Claude's lifecycle hooks, Codex's own session log (#42). While a turn runs,
- * the screen only tells waiting on an approval from working; it never makes a role ready. Before the first report
- * (startup, a trust dialog), or for an adapter that reports nothing, the screen is the labelled fallback.
+ * A role's turn as its agent reports it: Claude's lifecycle hooks, Codex's own session log (#42). Claude's hooks also
+ * report a wait on the person. Otherwise, while a turn runs, the screen only tells waiting on an approval from
+ * working; it never makes a role ready. Before the first report (startup, a trust dialog), or for an adapter that
+ * reports nothing, the screen is the labelled fallback.
  */
 export const turnOf = (r: Runtime, agent: Agent, opened: { worktree: string; at?: string }, screen: string): Screen => {
-  const reported = agent.usage === 'claude' ? claudeTurn(opened.worktree, opened.at)
+  const reported = agent.usage === 'claude' ? claudeTurn(opened.worktree, opened.at, r.home)
     : agent.usage === 'codex' ? codexTurn(opened.worktree, opened.at, r.home) : undefined
-  if (reported === 'ready') return 'ready'
+  if (reported === 'ready' || reported === 'waits') return reported
   const seen = screenOf(agent, screen)
   if (reported === 'busy') return seen === 'waits' ? 'waits' : 'working'
   // Every role starts on its brief: until its agent reports, an empty prompt on screen is not a finished turn.
@@ -139,9 +140,12 @@ export const gitDirsOf = (r: Runtime, m: Mission, role: Role, worktree: string):
 /**
  * Per-process settings for a Claude role: no prompt suggestion, whose grey text fills the idle input line (#16),
  * lifecycle hooks that record its turn (#42), and a status line that reports the real context window, then shows
- * the person's own.
+ * the person's own. A Codex role trusts the main checkout for this run only, as answering its trust dialog would
+ * (Codex keys trust by the repository root); a dotted `projects."<root>"` key is not unquoted by `-c`, an inline
+ * table is.
  */
 export const roleSettings = (r: Runtime, m: Mission, agent: Agent, worktree: string): string[] => {
+  if (agent.usage === 'codex') return ['-c', `projects={${JSON.stringify(m.root)}={trust_level="trusted"}}`]
   if (agent.usage !== 'claude') return []
   const forward = statusLineCommand(m.root, r.home)
   const command = shellOf([process.execPath, join(r.packageRoot, 'dist/cli.js'), 'statusline', join(worktree, CONTEXT_FILE), ...(forward === undefined ? [] : [forward])])

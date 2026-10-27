@@ -314,30 +314,16 @@ const userText = (row: Object): { text: string } | 'tool' | undefined => {
  */
 export const claudeSessionTurn = (session: string, home: string): TurnAt | undefined => {
   try {
-    let path = transcripts.get(session)
-    if (path === undefined) {
-      const base = join(home, '.claude/projects')
-      path = entries(base).filter(one => one.isDirectory()).map(one => join(base, one.name, `${session}.jsonl`)).find(one => { try { return statSync(one).isFile() } catch { return false } })
-      if (path === undefined) return undefined
-      transcripts.set(session, path)
-    }
+    const path = transcriptOf(session, home)
+    if (path === undefined) return undefined
     const stat = statSync(path)
     const key = stamp(stat)
     const cached = claudeTurnCache.get(path)
     if (cached?.key === key) return cached.turn
     let turn: TurnAt | undefined
     for (const bytes of reverseLines(path, stat.size)) {
-      const row = json(bytes)
-      if (row === undefined || row.isSidechain === true || row.isMeta === true) continue
-      const at = time(row.timestamp) ?? 0
-      if (row.type === 'system' && row.subtype === 'turn_duration') { turn = { turn: 'ready', at }; break }
-      if (row.type === 'assistant') { turn = { turn: 'busy', at }; break }
-      if (row.type !== 'user') continue
-      const said = userText(row)
-      if (said === 'tool') { turn = { turn: 'busy', at }; break }
-      if (said === undefined || /^\s*<(command-|local-command)/.test(said.text)) continue
-      turn = { turn: said.text.includes('[Request interrupted by user') ? 'ready' : 'busy', at }
-      break
+      turn = claudeRowTurn(bytes)
+      if (turn !== undefined) break
     }
     claudeTurnCache.set(path, { key, turn })
 
@@ -345,6 +331,51 @@ export const claudeSessionTurn = (session: string, home: string): TurnAt | undef
   } catch {
     return undefined
   }
+}
+
+/** The first end of a turn (`turn_duration` or an interrupt row) in a Claude session's transcript at or after `since`. */
+export const claudeTurnEnded = (session: string, home: string, since: number): number | undefined => {
+  try {
+    const path = transcriptOf(session, home)
+    if (path === undefined) return undefined
+    let ended: number | undefined
+    for (const bytes of reverseLines(path, statSync(path).size)) {
+      const turn = claudeRowTurn(bytes)
+      if (turn === undefined) continue
+      if (turn.at < since) break
+      if (turn.turn === 'ready') ended = turn.at
+    }
+
+    return ended
+  } catch {
+    return undefined
+  }
+}
+
+const transcriptOf = (session: string, home: string): string | undefined => {
+  let path = transcripts.get(session)
+  if (path === undefined) {
+    const base = join(home, '.claude/projects')
+    path = entries(base).filter(one => one.isDirectory()).map(one => join(base, one.name, `${session}.jsonl`)).find(one => { try { return statSync(one).isFile() } catch { return false } })
+    if (path !== undefined) transcripts.set(session, path)
+  }
+
+  return path
+}
+
+/** The turn one transcript row shows, or undefined for a row that shows none. */
+const claudeRowTurn = (bytes: Buffer): TurnAt | undefined => {
+  const row = json(bytes)
+  if (row === undefined || row.isSidechain === true || row.isMeta === true) return undefined
+  const at = time(row.timestamp) ?? 0
+  if (row.type === 'system' && row.subtype === 'turn_duration') return { turn: 'ready', at }
+  if (row.type === 'assistant') return { turn: 'busy', at }
+  if (row.type !== 'user') return undefined
+  const said = userText(row)
+  if (said === 'tool') return { turn: 'busy', at }
+  if (said === undefined || /^\s*<(command-|local-command)/.test(said.text)) return undefined
+
+  return { turn: said.text.includes('[Request interrupted by user') ? 'ready' : 'busy', at }
 }
 
 /** The turn a Codex role's own session log reports, for the newest session started in `cwd` since `since`. */
