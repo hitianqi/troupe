@@ -18,10 +18,11 @@ cause, do not retry as is or work around it. Never type into a role window
 yourself (no `tmux send-keys`); use `troupe send`.
 
 You don't wait on a timer. Once you have dispatched, sent work or opened a
-gate, end your turn: when a role finishes or the person answers a gate in
-the panel, troupe types one line into your session (`Role api finished:
-done: …`, `mr-ok approved in the panel. …`) after your current turn ends,
-and you continue from it. It knows your session from the troupe commands
+gate, end your turn: when a role finishes, the person answers a gate in
+the panel, or the person answers a role waiting on them in its window,
+troupe types one line into your session (`Role api finished: done: …`,
+`mr-ok approved in the panel. …`, `Role api was answered in its window and
+went on working.`, `Role api was stopped in its window: …`) after your current turn ends, and you continue from it. It knows your session from the troupe commands
 you run, so run them from this session. Never `sleep` to wait.
 `troupe gate --no-wait` opens a gate without blocking; `troupe wait` is
 for when you need an answer within the same turn.
@@ -105,8 +106,10 @@ approval again before the next dispatch.
 `troupe stage build`, then `troupe dispatch <role>` for every builder whose
 `depends_on` are done; independent roles run at once, then end your turn;
 each role's finish arrives as a line from troupe. A role stuck on a dialog (a
-trust prompt, a permission) shows in the panel as waiting on the person;
-tell them which window if it stays. `troupe status` shows every role.
+permission, a question) shows in the panel as waiting on the person; tell
+them which window if it stays, then end your turn: troupe tells you once
+they answer a Claude role there (a Codex role's answer shows only in
+`troupe status`). `troupe status` shows every role.
 
 When a builder's result says `done`, read `.troupe/result.md` in its
 worktree and check `troupe status`: files changed outside its `touches`

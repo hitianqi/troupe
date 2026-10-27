@@ -1,12 +1,13 @@
 import assert from 'node:assert/strict'
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, rmSync, utimesSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { test } from 'node:test'
 
+import { recordActivity } from '../dist/activity.js'
 import { AGENTS } from '../dist/agents.js'
 import { append, readLog } from '../dist/log.js'
-import { agentSession, callerTarget, deliverNotices } from '../dist/notices.js'
+import { agentSession, callerTarget, deliverNotices, pendingNotices } from '../dist/notices.js'
 import { claudeSessionTurn } from '../dist/usage.js'
 
 const temporary = t => {
@@ -101,4 +102,71 @@ test('notices reach the orchestrator once each, only after it has finished a tur
   write(join(worktree, '.troupe/result.md'), '---\nstatus: blocked\nsummary: needs a key\n---\n')
   deliverNotices(r, m)
   assert.match(typed[2], /^Role api finished: blocked: needs a key/)
+})
+
+const answerSetup = (t, role) => {
+  const { home, write } = temporary(t)
+  const log = join(home, 'repo/.git/troupe/m1/log.jsonl')
+  const worktree = join(home, `repo/.troupe/worktrees/m1/${role}`)
+  const activity = join(worktree, '.troupe/activity.json')
+  const m = { name: 'm1', log, hash: 'h', agents: { claude: AGENTS.claude } }
+  const r = { home, env: {}, run: () => ({ code: 1, out: '', err: '' }) }
+  const stamp = s => new Date(Date.parse('2026-10-26T12:00:00Z') + s * 1000).toISOString()
+  // A new panel process each time: everything comes from the run log and the role's files.
+  const pending = () => pendingNotices(r, m, readLog(log).events, stamp(1))
+  const keys = () => pending().map(one => one.key)
+  const tell = () => { const next = pending()[0]; append(log, 'panel', { ev: 'notice', key: next.key, text: next.text }); return next }
+  const hooks = (...rows) => { mkdirSync(dirname(activity), { recursive: true }); for (const [event, s] of rows) recordActivity(JSON.stringify({ hook_event_name: event, session_id: `${role}-s` }), activity, new Date(stamp(s)), home) }
+  const result = (text, s) => { const path = write(join(worktree, '.troupe/result.md'), text); utimesSync(path, new Date(stamp(s)), new Date(stamp(s))) }
+  append(log, 'cli', { ev: 'orchestrator', harness: 'claude', session: 'orch', mux: 'herdr', pane: 'w1:p4' }, new Date(stamp(1)))
+  append(log, 'cli', { ev: 'dispatch', role, session: '$1', window: '@1', pane: '%1', worktree, branch: `role/m1/${role}`, base: 'abc', argv: ['claude'], agent: 'claude' }, new Date(stamp(2)))
+  return { home, write, log, worktree, stamp, pending, keys, tell, hooks, result }
+}
+
+test('every wait answered in the role window is told once, oldest first, even after it waits again', t => {
+  const { stamp, pending, keys, tell, hooks } = answerSetup(t, 'review')
+  hooks(['UserPromptSubmit', 3], ['PermissionRequest', 4])
+  assert.deepEqual(pending(), [])
+  hooks(['PostToolBatch', 5])
+  assert.deepEqual(pending(), [{ key: `answer:review:${stamp(5)}`, text: 'Role review was answered in its window and went on working.' }])
+  // Not yet told (the orchestrator is busy); it waits again and is answered again: both stay to be told.
+  hooks(['PermissionRequest', 6])
+  assert.deepEqual(keys(), [`answer:review:${stamp(5)}`])
+  hooks(['PostToolBatch', 7])
+  assert.deepEqual(keys(), [`answer:review:${stamp(5)}`, `answer:review:${stamp(7)}`])
+  tell()
+  assert.deepEqual(keys(), [`answer:review:${stamp(7)}`])
+  tell()
+  hooks(['PostToolBatch', 8], ['Stop', 9])
+  assert.deepEqual(pending(), [])
+})
+
+test('a deny or Esc that ends the turn with no result wakes the orchestrator', t => {
+  const { write, home, stamp, pending, hooks } = answerSetup(t, 'wake')
+  hooks(['UserPromptSubmit', 3], ['PermissionRequest', 4])
+  const row = (s, content) => `${JSON.stringify({ type: 'user', timestamp: stamp(s), message: { role: 'user', content } })}\n`
+  write(join(home, '.claude/projects/-wt/wake-s.jsonl'), row(3, 'go') + row(6, [{ type: 'text', text: '[Request interrupted by user for tool use]' }]))
+  assert.deepEqual(pending(), [{ key: `answer:wake:${stamp(6)}`, text: 'Role wake was stopped in its window: its dialog was denied or interrupted, and its turn ended.' }])
+  // The person's next prompt keeps that same answer, so it is neither lost nor said twice.
+  hooks(['UserPromptSubmit', 20])
+  assert.deepEqual(pending().map(one => one.key), [`answer:wake:${stamp(6)}`])
+})
+
+test('an answer a finish has superseded is not replayed when later work is sent', t => {
+  const { log, stamp, keys, tell, hooks, result } = answerSetup(t, 'wake')
+  hooks(['UserPromptSubmit', 3], ['PermissionRequest', 4], ['PostToolBatch', 5])
+  result('---\nstatus: done\nsummary: built it\n---\n', 6)
+  hooks(['Stop', 7])
+  // The result is newer than the answer: the finish tells it.
+  assert.deepEqual(keys().map(key => key.split(':')[0]), ['role'])
+  tell()
+  // troupe send moves the result aside and starts the next turn; the old answer stays old news.
+  append(log, 'cli', { ev: 'send', role: 'wake', text: 'next' }, new Date(stamp(8)))
+  hooks(['UserPromptSubmit', 9])
+  assert.deepEqual(keys(), [])
+  // So is an answer superseded only by work sent since, its finish never told.
+  hooks(['PermissionRequest', 10], ['PostToolBatch', 11])
+  assert.deepEqual(keys(), [`answer:wake:${stamp(11)}`])
+  append(log, 'cli', { ev: 'send', role: 'wake', text: 'more' }, new Date(stamp(12)))
+  assert.deepEqual(keys(), [])
 })
