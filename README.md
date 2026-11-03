@@ -6,6 +6,14 @@
 One plan you approve, then every role in a real terminal window of its own,<br>
 in its own git worktree, on Claude Code or Codex.</p>
 
+<p align="center">
+  <a href="LICENSE"><img alt="license: MIT" src="https://img.shields.io/badge/license-MIT-2F5079"></a>
+  <a href="#agents"><img alt="agents: Claude Code and Codex" src="https://img.shields.io/badge/agents-Claude%20Code%20%C2%B7%20Codex-F29B7A"></a>
+  <img alt="runs in tmux" src="https://img.shields.io/badge/runs%20in-tmux-7FA9D9">
+  <img alt="node 20 or later" src="https://img.shields.io/badge/node-%E2%89%A5%2020-2F5079">
+  <a href="https://github.com/hitianqi/troupe/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/hitianqi/troupe/actions/workflows/ci.yml/badge.svg"></a>
+</p>
+
 <p align="center"><img src="docs/media/panel-live.gif" width="860" alt="The troupe panel beside the orchestrator: roles, stages, activity and a flow of the roles as they work"></p>
 
 ## Why troupe
