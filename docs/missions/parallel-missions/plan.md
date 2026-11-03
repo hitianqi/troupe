@@ -4,7 +4,7 @@
 
 Several missions should run at the same time, in one repository or in several,
 each with its own orchestrator, panel and roles window, none acting on another
-([#36](https://github.com/tianqizhao0704/troupe/issues/36)). Which mission a
+([#36](https://github.com/hitianqi/troupe/issues/36)). Which mission a
 command acts on becomes a deterministic rule in the CLI, not something the
 skill asks the orchestrator to remember: a mission is bound to its
 orchestrator's pane and lives in its own worktree, and troupe refuses rather

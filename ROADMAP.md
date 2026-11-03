@@ -12,7 +12,7 @@ Status: Phase 6 is done (2026-10-25): two real missions, one with a Claude
 Code orchestrator and one with a Codex orchestrator, ran from `troupe up` to
 the MR gate, and the commands' guards were slimmed. Phases 0–3 built an
 earlier form, a Claude Code mod, that Phase 5 replaced. Next: Phase 7.
-Repo: GitHub `tianqizhao0704/troupe` (private). Open source is a later call
+Repo: GitHub `hitianqi/troupe` (private). Open source is a later call
 (Phase 7). Maintenance stays light: README, `check.sh`, tests, CI and the
 docs a phase produces.
 

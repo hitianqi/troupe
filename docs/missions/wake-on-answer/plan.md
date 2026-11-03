@@ -5,7 +5,7 @@
 When a role waits on the person (a trust dialog, a permission prompt) and the
 person answers it in the role's window, the orchestrator is never told and sits
 idle until the person types to it
-([#53](https://github.com/tianqizhao0704/troupe/issues/53)). The role's own
+([#53](https://github.com/hitianqi/troupe/issues/53)). The role's own
 report of the answer should wake it, the same way a finish does (#43). The
 Codex trust dialog that started it should not appear at all.
 
