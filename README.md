@@ -14,6 +14,8 @@ in its own git worktree, on Claude Code or Codex.</p>
   <a href="https://github.com/hitianqi/troupe/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/hitianqi/troupe/actions/workflows/ci.yml/badge.svg"></a>
 </p>
 
+<p align="center"><b>English</b> · <a href="https://github.com/hitianqi/troupe/blob/main/README.zh-CN.md">简体中文</a></p>
+
 <p align="center"><img src="docs/media/panel-live.gif" width="860" alt="The troupe panel beside the orchestrator: roles, stages, activity and a flow of the roles as they work"></p>
 
 ## Why troupe
