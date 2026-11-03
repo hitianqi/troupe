@@ -1,7 +1,6 @@
-# OpenRig and the rig write these into the checkout; never commit them
+# local agent settings; never commit them
 .claude/
 .mcp.json
-.openrig/
 .agents/skills/
 CLAUDE.local.md
 # tooling

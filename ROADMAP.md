@@ -1,22 +1,13 @@
 # troupe — roadmap
 
-troupe lets anyone call up an agent troupe with one command, without
-configuring a software-factory harness such as OpenRig. The orchestrator
-writes a plan with the person; once they approve it, every role opens in a
-real tmux window of its own, in its own git worktree, where the person can
-watch it and talk to it directly. A panel beside the orchestrator stays open
-and shows the work as it moves. The orchestrator and the roles run Claude
-Code or Codex, or any terminal agent with an adapter.
+troupe calls up an agent troupe with one command. The orchestrator writes a
+plan with the person; once they approve it, every role opens in a real tmux
+window of its own, in its own git worktree, where the person can watch it and
+talk to it directly. A panel beside the orchestrator stays open and shows the
+work as it moves. The orchestrator and the roles run Claude Code or Codex, or
+any terminal agent with an adapter.
 
-Status: Phase 6 is done (2026-10-25): two real missions, one with a Claude
-Code orchestrator and one with a Codex orchestrator, ran from `troupe up` to
-the MR gate, and the commands' guards were slimmed. Phases 0–3 built an
-earlier form, a Claude Code mod, that Phase 5 replaced. Next: Phase 7.
-Repo: GitHub `hitianqi/troupe` (private). Open source is a later call
-(Phase 7). Maintenance stays light: README, `check.sh`, tests, CI and the
-docs a phase produces.
-
-## Direction (2026-10-24)
+## Direction
 
 **What the product is.** Plan first, then roles: the orchestrator and the
 person agree on `plan.md`, the person approves it in the panel, and only
@@ -70,81 +61,27 @@ agents            one adapter per harness: start command with a first prompt,
 
 State: `plan.md` (tracked, hashed); `<git-common-dir>/troupe/<m>/log.jsonl`
 (written only by the CLI and the panel); live reads from tmux, git and each
-role's `.troupe/result.md`. The design and its decisions are in the design
-proposal kept in the git folder (`.git/troupe/design/proposal.md`, section
-"Decided").
+role's `.troupe/result.md`.
 
 **Systems.** tmux on macOS, Linux and WSL2; macOS and Linux run in CI. Native
-Windows is not planned (issue #1, closed).
+Windows is not planned.
 
-## Phase 4 outcome (2026-10-24): the Codex probe
+## Where it stands
 
-Both harnesses keep the launch-argument prompt through the trust dialog;
-bracketed paste works in both; under an approval dialog a paste is dropped
-and Enter approves, so troupe never types into a waiting window. Once a
-repository is trusted, neither asks again in its worktrees, sibling or
-nested, so role worktrees live in `.troupe/worktrees/` and need no
-pre-trust. Context use is on neither default screen. The screen captures
-the adapters are tested against are in `tests/fixtures/agents/`.
+Real missions run end to end with a Claude Code or a Codex orchestrator, from
+`troupe up` to the MR gate, with Claude Code and Codex roles side by side.
 
-## Phase 5 outcome (2026-10-24): CLI and panel without the mod
+## Next
 
-Built in eleven steps, one PR each (#6–#14 and the clean-up), Codex writing
-the adapters, the commands and the panel's interaction, Claude the format,
-the state, the drawing and the skill, Sonnet the mechanical steps:
-
-- The package (named `@troupe/cli` then, `troupe-cli` now; private until Phase 7; Node 20+; CI).
-- The plan format: one yaml block with `profiles` and `roles` (a role is a
-  window), raw per-agent `flags`, `## Role:` sections; `troupe check`.
-- Adapters for Claude Code and Codex, and user adapter files.
-- The run log and the live reads.
-- The commands, the brief as a launch argument and `troupe wait`
-  (issue #2, closed).
-- The panel as designed (section 5b), live, with keys and mouse; approval
-  in the panel.
-- The workflow skill for the CLI; `troupe setup` installs it for both
-  harnesses.
-- The mod deleted: `hooks/`, `.claude-plugin/`, `bin/troupe-panel` and the
-  mod's readers and views.
-
-Not yet shown: a real mission with real agents (Phase 6).
-
-## Phases from here
-
-### Phase 6 — The end-to-end run, then slim
-
-A small real mission on this Mac: one Claude Code orchestrator, one Codex
-role and one Claude Code role, from `troupe up` to the MR gate; then the same
-with a Codex orchestrator. Fix what it finds.
-
-Then slim the commands' guards. Done: a pane is troupe's when its id and its
-`@troupe-owner` marker match the log; `session.json` and the command lock
-are gone.
-
-Done when: both runs reach the MR gate with the person only approving,
-answering dialogs and talking to roles, and `troupe dispatch` before
-approval is refused.
-
-### Phase 7 — Open-source release (only if Tianqi decides to open-source)
-
-Delivers: `troupe-cli` on npm (the `troupe` org and the bare name are
-taken), a single-file binary later for machines without Node;
-license; secret scan; README with a short gif. It is published as a new
-repository with one initial commit from the cleaned `main`; this repository
-and its history stay private.
-
-Done when: someone new installs and runs a mission without help, in under
-five minutes to the first panel.
-
-### After: evidence
-
-If troupe needs evidence for its README (a comparison with a single session,
-for example), it comes back as a new issue, on a task that can be named in
-public.
+- **Install in one line**: `troupe-cli` on npm; a single-file binary later for
+  machines without Node.
+- **More agents**: built-in adapters for other terminal agents (Gemini CLI,
+  OpenCode and others), each tested against its real screens.
+- **Codex lifecycle hooks**: report a Codex role's turns through its own hooks,
+  as Claude Code roles already do, instead of reading its session log.
+- **A stricter workflow**: an optional `troupe-mission-strict` skill.
 
 ## Stays out
 
-Tianqi's personal skills (tianqi-taste, tianqi-ui-ux, tianqi-project-
-maintenance, tianqi-skill-design), the chief-of-staff seat, Slack, OpenRig
-(neither configured nor supported), terminal backends other than tmux.
-Reference only, not a dependency: iha2/superlite.
+Terminal backends other than tmux (herdr is supported as the place the
+orchestrator runs, with the roles still in tmux); native Windows.
