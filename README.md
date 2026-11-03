@@ -1,87 +1,88 @@
-<p align="center"><img src="assets/icon.svg" width="128" alt="troupe icon"></p>
+<p align="center"><img src="assets/icon.svg" width="112" alt="troupe icon"></p>
 
-# troupe
+<h1 align="center">troupe</h1>
 
-One command calls up an agent troupe. The orchestrator writes a plan with
-you; once you approve it, every role opens in a real tmux window of its own,
-in its own git worktree and branch, where you can watch it and talk to it
-directly. A panel beside the orchestrator stays open and shows the work as it
-moves. The orchestrator and each role run Claude Code or Codex, with the
-model you pick per role.
+<p align="center"><b>Run a team of coding agents you can actually watch.</b><br>
+One plan you approve, then every role in a real terminal window of its own,<br>
+in its own git worktree, on Claude Code or Codex.</p>
 
-No harness to configure: the plan says who does what, and `troupe` keeps the
-work correct. No role window opens before the plan, as it is now, is
-approved; one role is one worktree, one branch and one pane; nothing is
-typed into a window that is not ready for it; every role's permission is
-pinned in the plan, never inherited. How the mission runs (when to review,
-when to merge, which gates) is a workflow skill you can replace.
+<p align="center"><img src="docs/media/panel-live.gif" width="860" alt="The troupe panel beside the orchestrator: roles, stages, activity and a flow of the roles as they work"></p>
 
-`ROADMAP.md` holds the direction and the phases.
+## Why troupe
 
-## Requirements
+- **You see every agent.** Each role is a live Claude Code or Codex session in
+  its own tmux pane. Jump into any of them, read along, or type to it directly;
+  nothing hides inside a subagent.
+- **Nothing starts before you approve the plan.** The orchestrator writes a
+  plan with you; the panel shows the goal, the done-when list and who runs each
+  role. Press `a`, or `c` to send a change back. Edit the plan later and it needs
+  approval again.
+- **No two agents in the same files.** One role is one worktree, one branch
+  and one pane. Roles whose files overlap must be ordered, or `troupe check`
+  refuses the plan.
+- **Mix agents and models per role.** A Claude Code builder, a Codex builder and
+  a reviewer on a third model, each with the effort and permission flags you
+  pin in the plan.
+- **A reviewer on every branch, and gates where it matters.** A reviewer role
+  checks each branch as it lands; you approve the MR and confirm the merge
+  before anything is torn down.
 
-- **tmux** (macOS, Linux or WSL2).
-- **Node 20 or later** and **git**.
-- **Claude Code** and/or **Codex** on the `PATH`.
+## Quick start
 
-## Install
-
-Not on npm yet. From a clone:
-
-```sh
-npm ci && npm run build && npm link   # puts `troupe` on the PATH
-troupe setup                          # installs the workflow skill for Claude Code and/or Codex
-```
-
-`troupe setup` copies `skills/troupe-mission/` to `~/.claude/skills/` and
-`~/.agents/skills/` for the harnesses it finds, marks its copies, updates
-them when run again, and never overwrites a skill folder it did not write.
-`troupe setup --remove` takes its copies away.
-
-## A mission
-
-You can also start from an agent you already have open: ask it to run a
-troupe mission; it runs `troupe open --planning` to show the panel while
-preparing the plan, then `troupe mission new <mission>`, which gives the
-mission its own worktree and binds it to that agent's pane. In tmux the panel splits off beside the agent; in
-herdr it opens in a herdr pane
-beside the agent, attached to troupe's tmux session; elsewhere it prints the
-`tmux attach` line (on macOS, Terminal or iTerm2 opens with it).
-
-In the repository you want to change:
+You need tmux (macOS, Linux or WSL2), Node 20+, git, and Claude Code and/or
+Codex on the `PATH`.
 
 ```sh
-troupe up -m <mission>    # or: troupe up -m <mission> --orch codex
+npm install -g troupe-cli
+troupe setup        # installs the troupe-mission skill for Claude Code and/or Codex
 ```
 
-troupe creates the mission's worktree, `.troupe/missions/<mission>` on a new
-branch `mission/<mission>` cut from your current branch, and opens a
-`mission` window: the orchestrator on the left, working in that worktree,
-the panel on the right. Your checkout stays on its branch. Inside tmux it
-uses the current session; outside, it starts one and attaches. Then:
+Then, inside tmux, open Claude Code or Codex in the repository you want to
+change and ask for a mission:
 
-1. Tell the orchestrator what you want. It writes
-   `docs/missions/<mission>/plan.md` in the mission worktree and runs
-   `troupe check` until it is clean.
-2. The panel shows the plan gate: the goal, why, the done-when list and, per
-   role, its agent, model, effort, flags, task, when it starts and the files
-   it touches. `a` approves; `c` sends your change back to the orchestrator.
-   (`troupe approve` in a terminal works too; a model's shell call cannot
-   approve.)
-3. The orchestrator dispatches the roles. Each opens in the
-   `roles-<mission>` window, in `.troupe/worktrees/<mission>/<role>` on
-   branch `role/<mission>/<role>`.
-   The panel marks a role that waits on you (a trust prompt, a permission):
-   `o` jumps to its pane, you answer there, and come back.
-4. A reviewer role checks each branch as it lands; findings go back to the
-   same window for one fix round; the orchestrator merges onto the mission
-   branch. At the MR gate you approve opening the MR. You merge it, then
-   answer `Merged?` in the panel; only then are the role windows and
-   worktrees removed.
+```
+Run a troupe mission: add a search box that filters the list as you type,
+and a dark theme that follows the system setting.
+```
 
-Several missions can run at once, in one repository or in several: start
-each from its own agent pane. Each has its own worktree, panel and roles
-window, and every command acts on the mission bound to the pane it runs in.
+The panel opens beside your agent, and the plan shows up in it for approval.
+(`troupe up -m <mission>` starts the orchestrator and the panel for you
+instead.)
+
+## How a mission runs
+
+**1. Plan, then approve.** The orchestrator reads the code, writes
+`docs/missions/<mission>/plan.md` and runs `troupe check` until it is clean.
+You read the plan in the panel, send a change, and approve.
+
+<p align="center"><img src="docs/media/plan-review.gif" width="860" alt="Scrolling the plan in the panel, sending a change, and approving the revised plan"></p>
+
+**2. Roles open, each in its own window.** Independent roles start at once;
+the others wait for what they depend on. When a role waits on you (a
+permission, a question), the panel says so; `o` jumps to its pane, you answer
+there, and come back.
+
+<p align="center"><img src="docs/media/roles-live.gif" width="860" alt="The roles window: a Claude Code builder, a Codex builder and a reviewer working side by side"></p>
+
+**3. Review as each branch lands.** The reviewer checks every branch; findings
+go back to the same window for one fix round, then the orchestrator merges onto
+the mission branch.
+
+**4. Land it.** At the MR gate you approve opening the MR. You merge it,
+answer `Merged?` in the panel, and only then are the role windows and worktrees
+removed.
+
+<p align="center"><img src="docs/media/mr-gate.gif" width="860" alt="The MR gate, the Merged? gate and teardown closing the role windows"></p>
+
+Several missions can run at once, in one repository or in several: start each
+from its own agent pane. Your checkout stays on its branch throughout; each
+mission works in `.troupe/missions/<mission>` on `mission/<mission>`. In
+herdr, the panel opens in a herdr pane beside the agent, attached to troupe's
+tmux session.
+
+How a mission runs (when to review, when to merge, which gates) is a workflow
+skill, `skills/troupe-mission`, that you can change or replace. The CLI only
+enforces what keeps the work correct.
 
 ## The plan
 
@@ -268,7 +269,8 @@ flags remain the ones in the plan. See the [Codex CLI reference](https://develop
 
 ## Development
 
-`./check.sh` (or `npm test`) builds and runs the tests under plain Node; CI
+From a clone: `npm ci && npm run build && npm link` puts your build of
+`troupe` on the `PATH`. `./check.sh` (or `npm test`) builds and runs the tests under plain Node; CI
 runs them on macOS and Linux with Node 20 and 22. `src/` holds everything:
 the plan (`plan.ts`, `yaml.ts`, `touches.ts`), the adapters (`agents.ts`),
 the log and the live reads (`log.ts`, `state.ts`), the commands
