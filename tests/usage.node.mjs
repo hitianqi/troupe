@@ -9,7 +9,7 @@ import { AGENTS, loadAgents } from '../dist/agents.js'
 import { roleSettings, liveOf, statusOf } from '../dist/role-commands.js'
 import { shellOf } from '../dist/run.js'
 import { statusLine, statusLineCommand } from '../dist/statusline.js'
-import { tokensOf } from '../dist/usage.js'
+import { codexTurn, tokensOf } from '../dist/usage.js'
 
 const cwd = '/repo/.troupe/worktrees/m1/api'
 const started = '2026-10-24T10:00:00Z'
@@ -59,6 +59,16 @@ for (const kind of ['claude', 'codex']) {
     assert.equal(get(kind), undefined)
   })
 }
+
+test('Codex skips a sub-agent log with the same cwd and start second for both turn and tokens', t => {
+  const { home, put, get } = temporary(t)
+  const turn = row => jsonl({ timestamp: '2026-10-24T10:00:01Z', type: 'event_msg', payload: { turn_id: 't1', ...row } })
+  put('codex', fixture('codex') + turn({ type: 'task_started' }) + turn({ type: 'task_complete' }), 'role')
+  // Named to sort after the role's log, so the start-second tie would pick it without the skip.
+  put('codex', fixture('codex-guardian'), 'zz-guardian')
+  assert.equal(codexTurn(cwd, started, home), 'ready')
+  assert.deepEqual(get('codex', started), { used: 200, window: 475000, input: 300, output: 30 })
+})
 
 test('Claude includes caches in context and session totals, counting each message ID once', t => {
   const { put, get } = temporary(t)

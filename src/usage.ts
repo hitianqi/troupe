@@ -110,7 +110,9 @@ const metaOf = (path: string, stat: Stats, kind: Kind): Meta | undefined => {
     if (row === undefined) continue
     if (kind === 'codex') {
       const payload = row.payload
-      if (row.type === 'session_meta' && object(payload) && typeof payload.cwd === 'string') {
+      // A sub-agent (Codex's guardian) logs its own session with the role's cwd and start second: never the role's.
+      const child = object(payload) && ((payload.parent_thread_id ?? null) !== null || (object(payload.source) && payload.source.subagent !== undefined))
+      if (row.type === 'session_meta' && object(payload) && typeof payload.cwd === 'string' && !child) {
         const started = time(payload.timestamp) ?? time(row.timestamp)
         if (started !== undefined) meta = { started, cwd: payload.cwd }
       }
