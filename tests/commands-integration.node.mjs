@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { execFileSync, spawnSync } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { basename, join } from 'node:path'
 import { test } from 'node:test'
@@ -358,7 +358,7 @@ test('real scratch tmux: a panel answer reaches the marked ready agent once', { 
 
 // Two orchestrators, each bound to its own mission, plus an unbound pane, on one scratch tmux server.
 const parallelWorld = (t, prefix) => {
-  const base = mkdtempSync(join(tmpdir(), `troupe-${prefix}-`))
+  const base = realpathSync(mkdtempSync(join(tmpdir(), `troupe-${prefix}-`)))
   const socket = `troupe-${prefix}-${process.pid}-${randomUUID().slice(0, 8)}`
   const env = { ...hostless(process.env), TMUX: undefined, TMUX_PANE: undefined, TROUPE_TMUX_SOCKET: socket }
   t.after(() => {

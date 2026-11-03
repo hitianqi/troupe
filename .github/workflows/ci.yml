@@ -13,4 +13,14 @@ jobs:
         with:
           node-version: ${{ matrix.node }}
       - run: npm ci
+      # The real-tmux tests skip without tmux; macOS runners do not ship it.
+      - if: runner.os == 'macOS'
+        run: brew install tmux
+      - if: runner.os == 'Linux'
+        run: command -v tmux || (sudo apt-get update && sudo apt-get install -y tmux)
+      # Agents often run troupe from a shell with no UTF-8 locale; test that case.
       - run: npm test
+        env:
+          LANG: ''
+          LC_ALL: ''
+          LC_CTYPE: ''

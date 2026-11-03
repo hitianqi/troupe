@@ -61,8 +61,8 @@ const world = t => {
     }
     if (command === 'ps') return { code: 1, out: '', err: '' }
     assert.equal(command, 'tmux')
-    assert.deepEqual(raw.slice(0, 2), ['-L', 'panel-test'])
-    const args = raw.slice(2)
+    assert.deepEqual(raw.slice(0, 3), ['-u', '-L', 'panel-test'])
+    const args = raw.slice(3)
     if (args[0] === 'list-panes' && args.at(-1).includes('@troupe-mission')) return yes(orch.marked ? `%9\t${orch.dead ? 1 : 0}\t${orch.mission}\t${join(root, '.git')}\t\t\t${orch.token}` : '')
     if (args[0] === 'load-buffer') afterLoad?.()
     if (args[0] === 'display' && args.at(-1).includes('@troupe-planning')) return yes(`${root}\t${planning.active ? '1' : ''}`)
@@ -242,7 +242,7 @@ test('send dead key and effects use command refusals; open selects only a logged
   assert.ok(!w.calls.some(c => c.args.includes('select-pane')))
   w.pane.owner = 'ours'
   assert.equal(await panelEffect(w.r, 'm1', { kind: 'open', role: 'api' }), 'Opened api')
-  assert.deepEqual(w.calls.filter(c => c.args.includes('select-window') || c.args.includes('select-pane')).map(c => c.args.slice(2)), [['select-window', '-t', '@1'], ['select-pane', '-t', '%1']])
+  assert.deepEqual(w.calls.filter(c => c.args.includes('select-window') || c.args.includes('select-pane')).map(c => c.args.slice(3)), [['select-window', '-t', '@1'], ['select-pane', '-t', '%1']])
   w.pane.screen = 'READY'
   assert.match(await panelEffect(w.r, 'm1', { kind: 'send', role: 'api', text: 'hello' }), /Sent to api/)
   assert.equal(w.events().at(-1).ev, 'send')

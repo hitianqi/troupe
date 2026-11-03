@@ -17,9 +17,12 @@ export const run: Run = (command, args, options = {}) => {
   return { code: child.status ?? 1, out: child.stdout ?? '', err: child.error?.message ?? child.stderr ?? '' }
 }
 
-/** All CLI tmux calls, including live-state reads, go through this helper. */
+/**
+ * All CLI tmux calls, including live-state reads, go through this helper. `-u` keeps tmux from
+ * replacing tabs and non-ASCII with `_` in format output when the caller's locale is not UTF-8.
+ */
 export const tmux = (args: string[], runner: Run = run, env = process.env, options: RunOptions = {}): Ran =>
-  runner('tmux', [...(env.TROUPE_TMUX_SOCKET ? ['-L', env.TROUPE_TMUX_SOCKET] : []), ...args], { ...options, env })
+  runner('tmux', ['-u', ...(env.TROUPE_TMUX_SOCKET ? ['-L', env.TROUPE_TMUX_SOCKET] : []), ...args], { ...options, env })
 
 /** Each element stays one shell word, including quotes, newlines and dollars. */
 export const shellOf = (argv: string[]): string => argv.map(arg => `'${arg.replaceAll("'", "'\\''")}'`).join(' ')

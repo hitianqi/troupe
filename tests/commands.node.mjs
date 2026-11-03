@@ -91,7 +91,7 @@ const world = (t, env = { TROUPE_TMUX_SOCKET: 'unit-socket' }) => {
   const no = () => ({ code: 1, out: '', err: 'not found' })
   const run = (command, raw, options = {}) => {
     calls.push({ command, args: [...raw], ...options })
-    const args = command === 'tmux' && raw[0] === '-L' ? raw.slice(2) : raw
+    const args = command !== 'tmux' ? raw : raw[1] === '-L' ? raw.slice(3) : raw.slice(1)
     if (command === 'which') return yes(`/fake/${args[0]}\n`)
     if (command === 'ps') return no()
     if (command === 'git') {
@@ -115,7 +115,7 @@ const world = (t, env = { TROUPE_TMUX_SOCKET: 'unit-socket' }) => {
       return yes()
     }
     assert.equal(command, 'tmux')
-    if (env.TROUPE_TMUX_SOCKET) assert.deepEqual(raw.slice(0, 2), ['-L', env.TROUPE_TMUX_SOCKET])
+    if (env.TROUPE_TMUX_SOCKET) assert.deepEqual(raw.slice(0, 3), ['-u', '-L', env.TROUPE_TMUX_SOCKET])
     const target = args[args.indexOf('-t') + 1]
     if (args[0] === 'has-session') return panes.size ? yes() : no()
     if (['new-session', 'new-window', 'split-window'].includes(args[0])) {
@@ -334,7 +334,7 @@ test('up starts a mission: its worktree, plain orchestrator there and half-width
   assert.ok([...w.panes.values()].some(p => p.panel === w.root && p.panelOrchestrator === orchestrator[0] && p.mission === 'm2'))
   const noOp = w.calls.length
   assert.match((await w.call('open', '-m', 'm2')).out, /already open/)
-  assert.ok(w.calls.slice(noOp).filter(c => c.command === 'tmux').every(c => c.args[2] === 'list-panes'))
+  assert.ok(w.calls.slice(noOp).filter(c => c.command === 'tmux').every(c => c.args[3] === 'list-panes'))
   assert.match((await w.call('up', '-m', 'm2')).out, /already/)
   const before = w.calls.length
   assert.equal((await execute('up', ['-m', 'm3'], { ...w.r, env: { ...w.r.env, TMUX: 'unit', TMUX_PANE: '%1' } })).code, 0)
@@ -552,7 +552,7 @@ test('plain open refuses an unresolved mission without tmux writes; a resolved o
   const refused = await w.call('open')
   assert.equal(refused.code, 1)
   assert.match(refused.out, /no mission for this pane; pass -m <mission>/)
-  assert.ok(w.calls.filter(c => c.command === 'tmux').every(c => c.args[2] === 'list-panes'))
+  assert.ok(w.calls.filter(c => c.command === 'tmux').every(c => c.args[3] === 'list-panes'))
   assert.match((await w.call('open', '--planning')).out, /already open in %99/)
   w.head.branch = 'mission/m1'
   assert.match((await w.call('open')).out, /already open in %99/)
@@ -565,7 +565,7 @@ test('open splits the caller on the right, binds the caller and marks the panel 
   const result = await execute('open', ['-m', 'm1'], { ...w.r, env: { ...w.r.env, TMUX: 'unit', TMUX_PANE: '%99' } })
   assert.equal(result.code, 0, result.out)
   assert.equal(result.out.trim().split('\n').length, 1)
-  const split = w.calls.find(c => c.args.includes('split-window')).args.slice(2)
+  const split = w.calls.find(c => c.args.includes('split-window')).args.slice(3)
   assert.deepEqual(split.slice(0, 7), ['split-window', '-d', '-h', '-l', '90', '-t', '%99'])
   assert.ok(split.at(-1).endsWith("'panel'"))
   assert.equal(w.panes.get('%99').mission, 'm1')
