@@ -31,6 +31,7 @@ on macOS and Linux with Node 20 and 22, without a UTF-8 locale.
 
 ## Adding an agent
 
-Any terminal agent can be a role through an adapter file (see "Agents" in the
-README). A built-in adapter in `src/agents.ts` needs its screen patterns
+Any terminal agent can be a role through an adapter file (see
+[Agents in the user guide](docs/guide.md#agents)). A built-in adapter in
+`src/agents.ts` needs its screen patterns
 taken from the agent's real screens, with captures in `tests/fixtures/agents/`.
