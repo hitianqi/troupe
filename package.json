@@ -1,10 +1,26 @@
 {
   "name": "troupe-cli",
   "version": "0.6.0",
-  "private": true,
   "license": "MIT",
   "type": "module",
   "description": "One command calls up an agent troupe: each role in its own tmux window and git worktree",
+  "keywords": [
+    "claude-code",
+    "codex",
+    "agents",
+    "multi-agent",
+    "tmux",
+    "git-worktree",
+    "orchestrator",
+    "cli"
+  ],
+  "homepage": "https://github.com/hitianqi/troupe#readme",
+  "bugs": "https://github.com/hitianqi/troupe/issues",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/hitianqi/troupe.git"
+  },
+  "author": "Tianqi Zhao",
   "bin": {
     "troupe": "dist/cli.js"
   },
@@ -13,13 +29,13 @@
   },
   "files": [
     "dist",
-    "skills",
-    "assets"
+    "skills"
   ],
   "scripts": {
-    "build": "tsc -p tsconfig.build.json && chmod +x dist/cli.js",
+    "build": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\" && tsc -p tsconfig.build.json && chmod +x dist/cli.js",
     "test": "npm run build && node --test tests/cli.node.mjs tests/plan.node.mjs tests/state.node.mjs tests/draw.node.mjs tests/agents.node.mjs tests/commands.node.mjs tests/commands-integration.node.mjs tests/panel-live.node.mjs tests/usage.node.mjs tests/activity.node.mjs tests/notices.node.mjs",
-    "check": "./check.sh"
+    "check": "./check.sh",
+    "prepack": "npm run build"
   },
   "devDependencies": {
     "@types/node": "20.19.43",
