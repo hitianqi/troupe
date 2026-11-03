@@ -39,6 +39,17 @@ const attachScript = (terminal: boolean): string => `on run argv
   end tell
 end run`
 
+/** A herdr pane split right of `herdrPane` that runs `attach`; undefined when herdr cannot. */
+const besideInHerdr = (r: Runtime, herdrPane: string, attach: string): string | undefined => {
+  try {
+    const split = r.run('herdr', ['pane', 'split', herdrPane, '--direction', 'right'], { env: r.env })
+    const pane: unknown = split.code === 0 ? JSON.parse(split.out).result?.pane?.pane_id : undefined
+    if (typeof pane === 'string' && r.run('herdr', ['pane', 'run', pane, attach], { env: r.env }).code === 0) return pane
+  } catch { /* herdr can be unavailable or answer oddly; the session remains attachable. */ }
+
+  return undefined
+}
+
 /** Opens the panel of the caller's mission beside the caller; one panel per mission. */
 export const openPanel = (r: Runtime, want: string, planning = false): Reply => {
   if (!available(r, 'tmux')) throw new Refusal('tmux is required for troupe open')
@@ -62,32 +73,32 @@ export const openPanel = (r: Runtime, want: string, planning = false): Reply => 
     markOrchestrator(r, repo, caller, name)
   }
   recordOrchestrator(r, repo, name)
+  // herdr is a multiplexer of its own, so a caller there has no tmux pane: its herdr pane names it as a panel's orchestrator.
+  const herdrPane = caller === undefined ? r.env.HERDR_PANE_ID || undefined : undefined
+  const owner = caller ?? herdrPane
   const panels = markedPanes(r).filter(one => one.panel === repo.root)
-  const existing = (caller === undefined ? undefined : panels.find(one => one.orchestrator === caller))
+  const existing = (owner === undefined ? undefined : panels.find(one => one.orchestrator === owner))
     ?? (name === '' ? undefined : panels.find(one => one.repo === repo.common && one.mission === name))
-    ?? (caller === undefined ? panels.find(one => one.orchestrator === '' && one.mission === '') : undefined)
+    ?? (owner === undefined ? panels.find(one => one.orchestrator === '' && one.mission === '') : undefined)
+  const socket = r.env.TROUPE_TMUX_SOCKET
+  const attachTo = (target: string) => `tmux${socket ? ` -L ${shellOf([socket])}` : ''} attach -t ${target}`
   if (existing !== undefined) {
-    if (caller !== undefined && existing.orchestrator !== caller) mux(r, ['set-option', '-p', '-t', existing.pane, '@troupe-panel-orchestrator', caller])
+    if (owner !== undefined && existing.orchestrator !== owner) mux(r, ['set-option', '-p', '-t', existing.pane, '@troupe-panel-orchestrator', owner])
     if (name !== '' && (existing.mission !== name || existing.repo !== repo.common)) markMission(r, repo, existing.pane, name)
     if (planning) mux(r, ['set-option', '-p', '-t', existing.pane, '@troupe-planning', '1'])
-    return { code: 0, out: `Panel already open in ${existing.pane}.\n` }
+    // Attaching to the panel's pane opens its session at its window.
+    const pane = herdrPane === undefined ? undefined : besideInHerdr(r, herdrPane, attachTo(existing.pane))
+    if (pane !== undefined) return { code: 0, out: `Opened panel beside your agent in herdr pane ${pane} (${existing.pane}).\n` }
+    return { code: 0, out: `Panel already open in ${existing.pane}${herdrPane === undefined ? '' : `; attach with: ${attachTo(existing.pane)}`}.\n` }
   }
-  const opened = createPanel(r, repo, name, caller, caller === undefined ? undefined : { pane: caller }, 45, planning)
+  const opened = createPanel(r, repo, name, owner, caller === undefined ? undefined : { pane: caller }, 45, planning)
   if (caller !== undefined) return { code: 0, out: `Opened panel in ${opened.pane} beside your agent.\n` }
   mux(r, ['select-window', '-t', opened.window])
   const session = sessionName(repo)
-  const socket = r.env.TROUPE_TMUX_SOCKET
-  const attach = `tmux${socket ? ` -L ${shellOf([socket])}` : ''} attach -t ${session}`
-  const herdrPane = r.env.HERDR_PANE_ID
-  if (herdrPane) {
-    // herdr is a multiplexer of its own, so the caller has no tmux pane: open a herdr pane beside it that attaches.
-    try {
-      const split = r.run('herdr', ['pane', 'split', herdrPane, '--direction', 'right'], { env: r.env })
-      const pane: unknown = split.code === 0 ? JSON.parse(split.out).result?.pane?.pane_id : undefined
-      if (typeof pane === 'string' && r.run('herdr', ['pane', 'run', pane, attach], { env: r.env }).code === 0) {
-        return { code: 0, out: `Opened panel beside your agent in herdr pane ${pane} (${opened.pane}).\n` }
-      }
-    } catch { /* herdr can be unavailable or answer oddly; the session remains attachable. */ }
+  const attach = attachTo(session)
+  if (herdrPane !== undefined) {
+    const pane = besideInHerdr(r, herdrPane, attach)
+    if (pane !== undefined) return { code: 0, out: `Opened panel beside your agent in herdr pane ${pane} (${opened.pane}).\n` }
   }
   const terminal = r.env.TERM_PROGRAM
   if (r.platform === 'darwin' && (terminal === 'Apple_Terminal' || terminal === 'iTerm.app')) {

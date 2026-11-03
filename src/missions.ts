@@ -15,7 +15,8 @@ import { planHash } from './state.ts'
 // `mission/<m>` and is bound to its orchestrator's pane (`@troupe-mission`,
 // with the repository's common git dir in `@troupe-mission-repo`, so a pane
 // in another repository never matches). A panel pane names its orchestrator
-// in `@troupe-panel-orchestrator` and follows that pane's binding.
+// in `@troupe-panel-orchestrator` and follows that pane's binding; one named
+// by a herdr pane, which tmux does not list, follows its own mark.
 
 /** No mission could be resolved for the caller; the message lists the open ones. */
 export class Unresolved extends Refusal {

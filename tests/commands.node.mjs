@@ -627,6 +627,26 @@ test('open inside herdr attaches the session in a herdr pane beside the caller, 
   assert.ok(!w.calls.some(c => c.command === 'osascript'))
 })
 
+test('open inside herdr shows the herdr pane its own panel again, and leaves an unbound one to its owner', async t => {
+  const w = world(t)
+  w.panes.set('%98', { panel: w.root, dead: false })
+  const herdr = []
+  const open = () => execute('open', ['--planning'], { ...w.r, platform: 'linux', env: { ...w.r.env, HERDR_PANE_ID: 'w1:p3' }, run: (command, args, options) => {
+    if (command !== 'herdr') return w.r.run(command, args, options)
+    herdr.push(args)
+    return { code: 0, out: args[1] === 'split' ? JSON.stringify({ result: { pane: { pane_id: `w1:p${herdr.length + 3}` } } }) : '', err: '' }
+  } })
+  const first = await open()
+  const panel = [...w.panes].find(([, p]) => p.panelOrchestrator === 'w1:p3')?.[0]
+  assert.ok(panel !== undefined && panel !== '%98', first.out)
+  assert.equal(w.panes.get('%98').panelOrchestrator, undefined)
+  const again = await open()
+  assert.equal(again.code, 0, again.out)
+  assert.equal(again.out, `Opened panel beside your agent in herdr pane w1:p6 (${panel}).\n`)
+  assert.deepEqual(herdr.slice(2), [['pane', 'split', 'w1:p3', '--direction', 'right'], ['pane', 'run', 'w1:p6', `tmux -L 'unit-socket' attach -t ${panel}`]])
+  assert.equal(w.panes.get(panel).mission, 'm1')
+})
+
 test('a failed herdr split falls back to the attach instructions', async t => {
   for (const split of [{ code: 1, out: '', err: 'no server' }, { code: 0, out: 'not json', err: '' }]) {
     const w = world(t)
