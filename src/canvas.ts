@@ -1,9 +1,8 @@
-// A character canvas in the OpenRig TUI's theme: the panel draws every part
-// as cells of text, then reads them back as lines of styled runs, painted as
-// ANSI or kept plain for the goldens. (The mod's view.ts and graph.ts keep
-// their own copies until step 9 deletes them.)
+// A character canvas: the panel draws every part as cells of text, then reads
+// them back as lines of styled runs, painted as ANSI or kept plain for the
+// goldens.
 
-/** OpenRig's theme (tui/dist/theme.js), `dim` lighter so waiting items read. */
+/** The panel's theme, `dim` lighter so waiting items read. */
 export const TONES = {
   bright: '#e8eaf0',
   accent: '#6fa8ff',
