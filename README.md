@@ -111,4 +111,12 @@ Multiple missions can run in the same repository or across repositories. Each ge
 - [Contributing](CONTRIBUTING.md) — development setup, checks and adding an agent.
 - [Issues](https://github.com/hitianqi/troupe/issues) — bugs, questions and feature requests.
 
+## Acknowledgements
+
+<a href="https://github.com/Prover-Technology"><img src="https://github.com/Prover-Technology.png" width="48" height="48" alt="Prover" align="left"></a>
+
+troupe started as an internal tool at [Prover](https://github.com/Prover-Technology) and is open-sourced with their support. See [NOTICE](NOTICE).
+
+<br clear="left">
+
 MIT licensed. Built with TypeScript, tmux and git, with no runtime npm dependencies.

@@ -111,4 +111,12 @@ troupe setup
 - [参与贡献](CONTRIBUTING.md)：开发环境、检查和新增 agent。
 - [Issues](https://github.com/hitianqi/troupe/issues)：报 bug、提问或提需求。
 
+## 致谢
+
+<a href="https://github.com/Prover-Technology"><img src="https://github.com/Prover-Technology.png" width="48" height="48" alt="Prover" align="left"></a>
+
+troupe 最初是 [Prover](https://github.com/Prover-Technology) 的内部工具，在 Prover 的支持下开源。详见 [NOTICE](NOTICE)。
+
+<br clear="left">
+
 MIT 开源。用 TypeScript、tmux 和 git 构建，没有运行时 npm 依赖。
