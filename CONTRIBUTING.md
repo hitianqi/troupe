@@ -7,6 +7,7 @@ Thanks for helping. Issues and pull requests are both welcome.
 - For a bug, open an issue with what you ran, what you expected and what
   happened. `troupe status --json` and the panel's `4 LOG` tab usually say a
   lot; paste what is relevant.
+- For a security problem, do not open an issue; see [SECURITY.md](SECURITY.md).
 - For a larger change (a new command, a new built-in agent, a change to the
   plan format), open an issue first so we can agree on the shape.
 - Read [ROADMAP.md](ROADMAP.md): the rule there decides what goes in code and
