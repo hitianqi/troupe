@@ -29,12 +29,12 @@
 68 秒，看一个任务从计划、分工、审查，一直做到收尾。
 
 <p align="center">
-  <a href="https://github.com/hitianqi/troupe/releases/download/troupe-video-v2/troupe-demo-v2-zh-web.mp4">
+  <a href="https://media.tianqiz.me/troupe/film-zh.mp4">
     <img src="docs/media/demo-zh.jpg" width="860" alt="打开中文演示：troupe 面板展示全队，并标出正在等你回答的 agent">
   </a>
   <br>
-  <a href="https://github.com/hitianqi/troupe/releases/download/troupe-video-v2/troupe-demo-v2-zh-web.mp4"><b>▶ 中文演示 · 1:08</b></a>
-  · <a href="https://github.com/hitianqi/troupe/releases/download/troupe-video-v2/troupe-demo-v2-en-web.mp4">English</a>
+  <a href="https://media.tianqiz.me/troupe/film-zh.mp4"><b>▶ 中文演示 · 1:08</b></a>
+  · <a href="https://media.tianqiz.me/troupe/film-en.mp4">English</a>
   · <a href="https://github.com/hitianqi/troupe/releases/tag/troupe-video-v2">下载 1080p 版</a>
 </p>
 

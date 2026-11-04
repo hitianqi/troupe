@@ -29,12 +29,12 @@
 A task from plan to review and cleanup, in 68 seconds.
 
 <p align="center">
-  <a href="https://github.com/hitianqi/troupe/releases/download/troupe-video-v2/troupe-demo-v2-en-web.mp4">
+  <a href="https://media.tianqiz.me/troupe/film-en.mp4">
     <img src="docs/media/demo-en.jpg" width="860" alt="Open the English demo: the troupe panel shows the team and highlights an agent waiting for you">
   </a>
   <br>
-  <a href="https://github.com/hitianqi/troupe/releases/download/troupe-video-v2/troupe-demo-v2-en-web.mp4"><b>▶ English demo · 1:08</b></a>
-  · <a href="https://github.com/hitianqi/troupe/releases/download/troupe-video-v2/troupe-demo-v2-zh-web.mp4">中文版</a>
+  <a href="https://media.tianqiz.me/troupe/film-en.mp4"><b>▶ English demo · 1:08</b></a>
+  · <a href="https://media.tianqiz.me/troupe/film-zh.mp4">中文版</a>
   · <a href="https://github.com/hitianqi/troupe/releases/tag/troupe-video-v2">1080p downloads</a>
 </p>
 
