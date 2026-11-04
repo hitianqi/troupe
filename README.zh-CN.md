@@ -52,16 +52,14 @@
 
 需要 **macOS、Linux 或 WSL2**，以及 **tmux**、**Node.js 20+**、**git** 和已经安装并登录的 **Claude Code 和／或 Codex**。
 
-npm 包尚未发布，目前从源码安装：
+安装：
 
 ```sh
-git clone https://github.com/hitianqi/troupe.git
-cd troupe
-npm ci
-npm run build
-npm link
+npm install -g troupe-cli
 troupe setup
 ```
+
+想用自己构建的版本，见[参与贡献](CONTRIBUTING.md)。
 
 `troupe setup` 会为找到的 agent 安装工作流 skill。
 

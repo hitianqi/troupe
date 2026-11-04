@@ -52,16 +52,14 @@ A task from plan to review and cleanup, in 68 seconds.
 
 You need **macOS, Linux or WSL2**, **tmux**, **Node.js 20+**, **git**, and **Claude Code and/or Codex**, installed and signed in.
 
-Install from source for now; the npm package is not published yet:
+Install:
 
 ```sh
-git clone https://github.com/hitianqi/troupe.git
-cd troupe
-npm ci
-npm run build
-npm link
+npm install -g troupe-cli
 troupe setup
 ```
+
+To run your own build instead, see [Contributing](CONTRIBUTING.md).
 
 `troupe setup` installs the workflow skill for the agents it finds.
 
