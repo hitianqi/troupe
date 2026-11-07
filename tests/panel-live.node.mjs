@@ -144,7 +144,7 @@ test('selection, tabs, detail, help, scrolling and hit-map actions are pure', t 
   assert.ok(row)
   const clicked = step(ui, { kind: 'click', row: row.row, col: row.col }, model, drawn.hits)
   assert.equal(clicked.ui.selected, 'web')
-  assert.equal(clicked.ui.tab, 1)
+  assert.equal(clicked.ui.tab, 2, 'a card selects its role and the page stays')
   assert.equal(hitAt(drawn.hits, 1, 27).kind, 'tab')
   const helped = step(ui, key('?'), model).ui
   assert.equal(helped.help, true)

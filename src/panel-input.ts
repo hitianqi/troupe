@@ -1,3 +1,4 @@
+import { diffFileOf, diffFiles } from './draw.ts'
 import type { Hit, Ui } from './draw.ts'
 import type { PanelModel } from './model.ts'
 
@@ -12,6 +13,7 @@ export const initialUi = (): PanelUi => ({ tab: 1, selected: '', scroll: 0 })
 const SEQUENCES: [string, string][] = [
   ['\x1b[A', 'up'], ['\x1bOA', 'up'], ['\x1b[B', 'down'], ['\x1bOB', 'down'],
   ['\x1b[5~', 'pageUp'], ['\x1b[6~', 'pageDown'],
+  ['\x1b[F', 'end'], ['\x1bOF', 'end'], ['\x1b[4~', 'end'], ['\x1b[8~', 'end'],
 ]
 const PASTE = '\x1b[200~'
 const END_PASTE = '\x1b[201~'
@@ -77,6 +79,15 @@ export const parseInput = (input: string): { actions: Input[]; rest: string } =>
   return { actions, rest }
 }
 
+/** The LOG event under the cursor opened to its fields, or closed again. */
+const openLine = (ui: PanelUi, model: PanelModel): PanelUi => {
+  const line = ui.line
+  if (line === undefined || line >= model.log.length) return ui
+  const open = ui.open ?? []
+
+  return { ...ui, open: open.includes(line) ? open.filter(one => one !== line) : [...open, line] }
+}
+
 export const hitAt = (hits: Hit[], row: number, col: number) =>
   [...hits].reverse().find(hit => row >= hit.row && row < hit.row + hit.height && col >= hit.col && col < hit.col + hit.width)?.target
 
@@ -118,16 +129,45 @@ export const transition = (ui: PanelUi, action: Input, model: PanelModel | undef
       return transition(selected, { kind: 'key', key: target.key }, model, hits, height, maxScroll)
     }
     if (target?.kind === 'tab') return { ui: { ...ui, tab: target.tab, scroll: 0 } }
-    if (target?.kind === 'role' && model.roles.some(role => role.name === target.name)) return { ui: { ...ui, selected: target.name, tab: 1, scroll: 0 } }
+    if (target?.kind === 'role' && model.roles.some(role => role.name === target.name)) return { ui: target.stay ? { ...ui, selected: target.name } : { ...ui, selected: target.name, tab: 1, scroll: 0 } }
+    if (target?.kind === 'scroll') return { ui: { ...ui, scroll: Math.max(0, Math.min(maxScroll, target.to)) } }
+    if (target?.kind === 'line') return { ui: openLine({ ...ui, line: target.index }, model) }
+    if (target?.kind === 'file' && model.roles.some(role => role.name === target.role)) return { ui: { ...ui, file: target.key, selected: target.role, scroll: 0 } }
 
     return { ui }
   }
   if (action.kind === 'text') return { ui }
   const by = action.kind === 'scroll' ? action.by : action.key === 'pageUp' ? -Math.max(1, height - 10) : action.key === 'pageDown' ? Math.max(1, height - 10) : 0
-  if (by !== 0) return { ui: { ...ui, scroll: Math.max(0, Math.min(maxScroll, (ui.scroll ?? 0) + by)) } }
+  if (by !== 0) {
+    const scroll = Math.max(0, Math.min(maxScroll, (ui.scroll ?? 0) + by))
+    // On LOG, scrolling up stops following the newest event; back at the bottom it follows again.
+    if (ui.tab === 4) return { ui: { ...ui, scroll, paused: scroll >= maxScroll ? undefined : ui.paused ?? model.log.length } }
+
+    return { ui: { ...ui, scroll } }
+  }
   if (action.kind !== 'key') return { ui }
   const { key } = action
   const selected = model.roles.find(role => role.name === ui.selected) ?? model.roles[0]
+  const step = key === 'up' || key === 'k' ? -1 : key === 'down' || key === 'j' ? 1 : 0
+  if (ui.tab === 3 && step !== 0) return { ui: { ...ui, scroll: Math.max(0, Math.min(maxScroll, (ui.scroll ?? 0) + step)) } }
+  if (ui.tab === 4) {
+    if (step !== 0 && model.log.length > 0) {
+      const line = Math.max(0, Math.min(model.log.length - 1, ui.line === undefined ? model.log.length - 1 : ui.line + step))
+      // Moving the cursor up from the newest event reads back: the log stops following.
+      const paused = line < model.log.length - 1 ? ui.paused ?? model.log.length : ui.paused
+
+      return { ui: { ...ui, line, ...(paused === undefined ? {} : { paused }) } }
+    }
+    if (key === 'enter') return { ui: ui.line === undefined ? ui : openLine(ui, model) }
+    if (key === 'G' || key === 'end') return { ui: { ...ui, paused: undefined } }
+  }
+  if (ui.tab === 5 && (step !== 0 || key === 'n' || key === 'N')) {
+    const files = diffFiles(model)
+    const at = files.findIndex(one => one.key === diffFileOf(model, ui)?.key)
+    const next = files[Math.max(0, Math.min(files.length - 1, at + (step || (key === 'n' ? 1 : -1))))]
+
+    return { ui: next === undefined ? ui : { ...ui, file: next.key, selected: next.role.name, scroll: 0 } }
+  }
   if (['up', 'down', 'j', 'k'].includes(key)) {
     const at = model.roles.findIndex(role => role.name === selected?.name)
     const to = Math.max(0, Math.min(model.roles.length - 1, at + (key === 'up' || key === 'k' ? -1 : 1)))
@@ -135,7 +175,8 @@ export const transition = (ui: PanelUi, action: Input, model: PanelModel | undef
     return { ui: { ...ui, selected: model.roles[to]?.name ?? '' } }
   }
   const tab = /^[1-5]$/.test(key) ? Number(key) : key === 'tab' ? ui.tab % 5 + 1 : key === 'd' ? 5 : key === 'v' ? 3 : key === 'enter' ? 1 : undefined
-  if (tab !== undefined) return { ui: { ...ui, tab, scroll: 0 } }
+  // `d` shows the selected role's first file.
+  if (tab !== undefined) return { ui: { ...ui, tab, scroll: 0, ...(key === 'd' && { file: undefined }) } }
   if (key === '?') return { ui: { ...ui, help: true } }
   if (key === 'f' && ui.tab === 3) return { ui: { ...ui, full: !ui.full, scroll: 0 } }
   if (key === 'escape') return { ui: { ...ui, message: undefined } }

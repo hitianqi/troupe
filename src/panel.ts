@@ -107,8 +107,8 @@ export const panel = async (r: Runtime, options: PanelOptions, terminal: Termina
       if (ui.message && r.now() >= messageUntil) ui = { ...ui, message: undefined }
       const { width, height } = dimensions()
       frame = frameOf(reading, ui, width, height)
-      ui = { ...ui, scroll: Math.max(0, Math.min(frame.maxScroll, ui.scroll ?? 0)) }
-      base = Screen.of(frame.lines, width, height, !!options.plain)
+      ui = { ...ui, scroll: frame.scroll ?? Math.max(0, Math.min(frame.maxScroll, ui.scroll ?? 0)) }
+      base = Screen.of(frame.lines, width, height, !!options.plain, motion?.background)
       stale = true
       // Input that arrives together is one frame, written once the queue drains.
       if (jobs === 0) render()
@@ -180,7 +180,10 @@ export const panel = async (r: Runtime, options: PanelOptions, terminal: Termina
       clearTimeout(escape)
       const parsed = parseInput(pending + (typeof chunk === 'string' ? chunk : decoder.write(chunk)))
       pending = parsed.rest
-      for (const action of parsed.actions) if (action.kind === 'colour') motion?.colour(action.which, action.rgb)
+      const colours = parsed.actions.filter(action => action.kind === 'colour')
+      for (const action of colours) motion?.colour(action.which, action.rgb)
+      // Washes sit on the paper, so the frame is drawn again once the terminal tells it.
+      if (colours.some(action => action.which === 'background')) enqueue(paintFrame)
       dispatchInput(parsed.actions.filter(action => action.kind !== 'colour'))
       if (pending === '\x1b') escape = setTimeout(() => { pending = ''; dispatchInput([{ kind: 'key', key: 'escape' }]) }, 40)
     }

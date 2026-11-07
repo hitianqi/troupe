@@ -1,4 +1,4 @@
-import { cellsOf } from './canvas.ts'
+import { cellsOf, coloursOf, PAPER as PAPER_HEX } from './canvas.ts'
 import { contextOf, count, effortOf, LOOK } from './draw.ts'
 import type { Drawn, Point, Rect, Scene } from './draw.ts'
 import type { PanelModel, RoleView } from './model.ts'
@@ -27,7 +27,7 @@ export const sample = (prev: Rates | undefined, output: number, at: number): Rat
 const levelOf = (rate: number) => rate / (rate + 40)
 
 // The panel's paper and its plain text, for fading towards them, until the terminal tells its own.
-const PAPER = rgbOf('#151821')
+const PAPER = rgbOf(PAPER_HEX)
 const TEXT = rgbOf('#c9cfdb')
 const clamp = (x: number) => Math.max(0, Math.min(1, x))
 const mix = (a: Rgb, b: Rgb, t: number): Rgb => [0, 1, 2].map(i => Math.round(a[i]! + (b[i]! - a[i]!) * clamp(t))) as unknown as Rgb
@@ -76,6 +76,10 @@ export class Motion {
   private readonly states = new Map<string, { state: RoleState; at: number }>()
   private model: PanelModel | undefined
   private fresh = { text: '', at: -Infinity }
+  /** When each log event was first read; those there as the panel opened count as old. */
+  private arrived: number[] = []
+  /** Whether the last page drawn still moves: its LIVE dot, or an event washing in. */
+  private pageMoves = false
   /** Each role's packet speed, eased towards its tokens/s, and how far its packets have moved. */
   private readonly level = new Map<string, number>()
   private readonly phase = new Map<string, number>()
@@ -93,6 +97,10 @@ export class Motion {
 
     return 0.2126 * r + 0.7152 * g + 0.0722 * b > 128 ? this.text : RGB.bright
   }
+  /** The paper the panel's washes and fades sit on. */
+  get background(): Rgb {
+    return this.paper
+  }
   /** The terminal's own text or background colour. */
   colour(which: 'text' | 'background', rgb: Rgb) {
     if (which === 'text') this.text = rgb
@@ -108,6 +116,8 @@ export class Motion {
     const newest = model.activity[0]
     const text = newest === undefined ? '' : `${newest.at} ${newest.text}`
     if (text !== this.fresh.text) this.fresh = { text, at: first ? -Infinity : now }
+    if (model.log.length < this.arrived.length || model.mission !== this.model?.mission) this.arrived = []
+    while (this.arrived.length < model.log.length) this.arrived.push(first || this.arrived.length < (this.model?.log.length ?? 0) ? -Infinity : now)
     this.model = model
   }
   /** Seconds since the role came to its state; Infinity when it was in it when the panel opened. */
@@ -166,6 +176,10 @@ export class Motion {
     }
     for (const row of scene.waits) tint(screen.at(row, 0), mix(mix(RGB.warn, this.paper, 0.5), RGB.warn, breath(t, 1.4, 0)))
     if (scene.gate !== undefined) tint(screen.at(...scene.gate), mix(mix(RGB.warn, this.paper, 0.4), RGB.warn, breath(t, 1.4, 0)))
+    // The gate's border breathes slowly between a faint and a full amber.
+    if (scene.gateBox !== undefined) for (const point of outline(scene.gateBox)) { const cell = screen.at(...point); if (cell !== undefined && /[─│╭╮╰╯]/.test(cell.ch)) cell.fg = mix(mix(this.paper, RGB.warn, 0.45), RGB.warn, breath(t, 2.2, 0)) }
+    this.pageMoves = false
+    if (scene.page !== undefined) this.page(screen, scene.page, now, { shimmer, spark, spin })
 
     const column = scene.column
     if (column === undefined) return screen
@@ -364,6 +378,47 @@ export class Motion {
       }
     }
   }
+  /** ROLES, PLAN, LOG and DIFF: spinners, sweeps, breathing borders and bands, tokens/s lines, the LIVE dot, events washing in. */
+  private page(screen: Screen, page: NonNullable<Scene['page']>, now: number, fx: { shimmer: (cells: (Cell | undefined)[], seed: number) => void; spark: (cells: (Cell | undefined)[], name: string) => void; spin: (name: string) => string }) {
+    const model = this.model
+    if (model === undefined) return
+    const t = now / 1000
+    const seedOf = (name: string) => model.roles.findIndex(role => role.name === name)
+    const span = (row: number, col: number, width: number) => Array.from({ length: Math.max(0, width) }, (_, i) => screen.at(row, col + i))
+    for (const one of page.spins) Object.assign(screen.at(...one.at) ?? {}, { ch: fx.spin(one.name) })
+    for (const one of page.shimmers) fx.shimmer(span(one.row, one.col, one.width), seedOf(one.name) + one.row)
+    for (const one of page.breathes) {
+      const tone = RGB[one.tone]
+      const level = mix(mix(this.paper, tone, one.bg ? 0.75 : 0.5), tone, breath(t, one.period, one.seed))
+      for (const point of one.cells) {
+        const cell = screen.at(...point)
+        if (cell === undefined) continue
+        if (one.bg) cell.bg = level
+        else if (cell.ch.trim() !== '' && /[─│╭╮╰╯═║╔╗╚╝]/.test(cell.ch)) cell.fg = level
+      }
+    }
+    // A working role's tokens line: its tokens/s, then the rate and what came in.
+    for (const one of page.sparks) {
+      if (!this.rates.has(one.name)) continue
+      const rate = this.rateOf(one.name)
+      fx.spark(span(one.row, one.col, 12), one.name)
+      const label = ` ${rate > 0 ? `${count(Math.round(rate))} tok/s` : 'idle'}`
+      span(one.row, one.col + 12, label.length).forEach((cell, i) => Object.assign(cell ?? {}, { ch: label[i], fg: rate > 0 ? RGB.ok : RGB.dim, bold: undefined }))
+      const tail = `  ${one.tail}`
+      span(one.row, one.col + 12 + label.length, tail.length).forEach((cell, i) => Object.assign(cell ?? {}, { ch: tail[i], fg: RGB.dim, bold: undefined }))
+    }
+    if (page.live !== undefined) {
+      Object.assign(screen.at(...page.live) ?? {}, { fg: mix(mix(this.paper, RGB.ok, 0.4), RGB.ok, breath(t, 1.2, 0)) })
+      this.pageMoves = true
+    }
+    // A new event's row washes in its lane's hue and fades.
+    for (const one of page.events) {
+      const age = (now - (this.arrived[one.index] ?? -Infinity)) / 1000
+      if (age < 0 || age >= 0.8) continue
+      this.pageMoves = true
+      for (const cell of span(one.row, one.col, one.width)) if (cell !== undefined) cell.bg = mix(cell.bg ?? this.paper, RGB[one.tone], 0.22 * (1 - age / 0.8))
+    }
+  }
   /** A role's box: its border breathes and flashes, its corners round, its state is a pill, its third row a sparkline. */
   private box(role: RoleView, box: Rect, selected: boolean, seed: number, t: number, arrived: number, at: (point: Point) => Cell | undefined, span: (row: number, col: number, width: number) => (Cell | undefined)[], fx: { shimmer: (cells: (Cell | undefined)[], seed: number) => void; spark: (cells: (Cell | undefined)[], name: string) => void; spin: (name: string) => string }) {
     const look = LOOK[role.state]
@@ -400,7 +455,7 @@ export class Motion {
       if (squares.length > 0 && cells >= 3) {
         span(row + 3, col + 2, width - 4).forEach(cell => Object.assign(cell ?? {}, { ch: ' ', fg: undefined }))
         let c = col + 2
-        for (const run of squares) for (const ch of run.text) Object.assign(at([row + 3, c++]) ?? {}, { ch, fg: RGB[run.tone ?? 'dim'] })
+        for (const run of squares) for (const ch of run.text) Object.assign(at([row + 3, c++]) ?? {}, { ch, fg: coloursOf(run).fg ?? RGB.dim })
         fx.spark(span(row + 3, c + 1, cells), role.name)
         span(row + 3, col + width - 2 - share.length, share.length).forEach((cell, i) => Object.assign(cell ?? {}, { ch: share[i], fg: RGB.dim }))
       }
@@ -417,7 +472,7 @@ export class Motion {
   moving(now: number): boolean {
     const model = this.model
     if (model === undefined) return false
-    if ((this.intro !== undefined && now < this.intro.end) || this.gradient) return true
+    if ((this.intro !== undefined && now < this.intro.end) || this.gradient || this.pageMoves) return true
 
     return model.gate !== undefined || (now - this.fresh.at) / 1000 < 4 || model.roles.some(role => role.state === 'working' || role.state === 'waits' || this.since(role.name, now) < 3)
   }
