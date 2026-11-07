@@ -1,16 +1,17 @@
-import { cellsOf, TONES } from './canvas.ts'
-import type { Line } from './canvas.ts'
+import { cellsOf, coloursOf, rgbOf, TONES } from './canvas.ts'
+import type { Line, Rgb } from './canvas.ts'
+
+export { rgbOf } from './canvas.ts'
+export type { Rgb } from './canvas.ts'
 
 // The live panel's screen as cells with their own colours, so effects can
 // shade any cell and give it a background. A screen is written whole only at
 // start and on resize; after that only the cells that changed since the last
 // one, and the panel wraps each write in a synchronized update.
 
-export type Rgb = readonly [number, number, number]
 /** `ch` is '' on the right half of a wide character. Without `fg` the terminal's own colour shows. */
 export type Cell = { ch: string; fg?: Rgb; bg?: Rgb; bold?: boolean }
 
-export const rgbOf = (hex: string): Rgb => [parseInt(hex.slice(1, 3), 16), parseInt(hex.slice(3, 5), 16), parseInt(hex.slice(5, 7), 16)]
 export const RGB = Object.fromEntries(Object.entries(TONES).map(([tone, hex]) => [tone, rgbOf(hex)])) as Record<keyof typeof TONES, Rgb>
 
 export class Screen {
@@ -22,14 +23,14 @@ export class Screen {
     this.height = height
     this.cells = cells ?? Array.from({ length: height }, () => Array.from({ length: width }, () => ({ ch: ' ' })))
   }
-  /** The drawn lines as cells; `plain` drops every style. Control characters never reach the terminal. */
-  static of(lines: Line[], width: number, height: number, plain = false): Screen {
+  /** The drawn lines as cells, washes and fades on `paper`; `plain` drops every style. Control characters never reach the terminal. */
+  static of(lines: Line[], width: number, height: number, plain = false, paper?: Rgb): Screen {
     const screen = new Screen(width, height)
     lines.slice(0, height).forEach((line, row) => {
       const cells = screen.cells[row] ?? []
       let col = 0
       for (const run of line) {
-        const style: Omit<Cell, 'ch'> = plain ? {} : { ...(run.tone && { fg: RGB[run.tone] }), ...(run.bold && { bold: true }) }
+        const style: Omit<Cell, 'ch'> = plain ? {} : { ...coloursOf(run, paper), ...(run.bold && { bold: true }) }
         for (const ch of run.text.replace(/[\x00-\x1f\x7f-\x9f]/g, '')) {
           const size = cellsOf(ch)
           const prev = cells[col - 1]

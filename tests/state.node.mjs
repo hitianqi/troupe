@@ -8,6 +8,8 @@ import { test } from 'node:test'
 
 import { append, fold, isApproved, logPath, readLog } from '../dist/log.js'
 import { paneOf, planHash, readResult, resultOf, roleState, waitingOn, workOf } from '../dist/state.js'
+import { pairsOf, parseDiff, wordDiff } from '../dist/diff.js'
+import { run } from '../dist/run.js'
 
 const temp = () => mkdtempSync(join(tmpdir(), 'troupe-state-'))
 
@@ -85,10 +87,49 @@ test("a role's work: commits since base, changed files, and those outside its to
   git('add', '.')
   git('-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-q', '-m', 'add a')
   writeFileSync(join(wt, 'README.md'), 'loose')
+  writeFileSync(join(wt, 'src/a.ts'), 'a\nb\n')
   const work = workOf(wt, base, ['src/'])
   assert.deepEqual(work.commits.map(c => c.subject), ['add a'])
   assert.deepEqual(work.changed, ['README.md', 'src/a.ts'])
   assert.deepEqual(work.outside, ['README.md'])
+  // Each file's hunks against base, in the same order: the untracked one read whole, the committed one with its edit on top.
+  assert.deepEqual(work.files.map(f => [f.path, f.status, f.add, f.del, !!f.untracked]), [['README.md', 'A', 1, 0, true], ['src/a.ts', 'A', 2, 0, false]])
+  assert.deepEqual(work.files[1].hunks[0].lines.map(l => `${l.sign}${l.new}:${l.text}`), ['+1:a', '+2:b'])
+  // A diff that cannot be read leaves the commits and files standing.
+  const failing = (command, args, options) => (args.includes('--no-ext-diff') ? { code: 1, out: '', err: 'diff exploded' } : run(command, args, options))
+  const partial = workOf(wt, base, ['src/'], failing)
+  assert.deepEqual(partial.changed, ['README.md', 'src/a.ts'])
+  assert.equal(partial.files, undefined)
+  assert.equal(partial.diffProblem, 'diff exploded')
+})
+
+test('a diff parsed per file: status, counts, line numbers on both sides, binary and mode-only files', () => {
+  const text = [
+    'diff --git a/src/x.ts b/src/x.ts', 'index 1..2 100644', '--- a/src/x.ts', '+++ b/src/x.ts',
+    '@@ -10,4 +10,5 @@ export const x', ' keep', '-const ttl = 30 * DAY', '+const ttl = 14 * DAY', '+const grace = 10', ' end', '-- a removed SQL comment', '\\ No newline at end of file',
+    'diff --git a/gone.ts b/gone.ts', 'deleted file mode 100644', '--- a/gone.ts', '+++ /dev/null', '@@ -1 +0,0 @@', '-bye',
+    'diff --git a/logo.png b/logo.png', 'new file mode 100644', 'Binary files /dev/null and b/logo.png differ',
+    'diff --git a/run.sh b/run.sh', 'old mode 100644', 'new mode 100755', '',
+  ].join('\n')
+  const files = parseDiff(text)
+  assert.deepEqual(files.map(f => [f.path, f.status, f.add, f.del, !!f.binary, f.hunks.length]), [['src/x.ts', 'M', 2, 2, false, 1], ['gone.ts', 'D', 0, 1, false, 1], ['logo.png', 'A', 0, 0, true, 0], ['run.sh', 'M', 0, 0, false, 0]])
+  const lines = files[0].hunks[0].lines
+  assert.deepEqual(lines.map(l => `${l.sign}${l.old ?? ''}/${l.new ?? ''}`), [' 10/10', '-11/', '+/11', '+/12', ' 12/13', '-13/'])
+  assert.equal(lines.at(-1).text, '- a removed SQL comment', 'a removed line that starts with -- is still a line')
+  assert.equal(files[0].hunks[0].head, '@@ -10,4 +10,5 @@ export const x')
+})
+
+test('word diff: a removed line pairs with the added line in its place; only the changed words are marked', () => {
+  const lines = [[' ', 'keep'], ['-', 'const ttl = 30'], ['-', 'const grace = 0'], ['+', 'const ttl = 14'], [' ', 'keep'], ['-', 'return issue(token.userId)'], ['+', 'await store.markUsed(token.id)'], ['+', 'return issue(token.userId, { family })']].map(([sign, text]) => ({ sign, text }))
+  assert.deepEqual([...pairsOf(lines)], [[1, 3], [5, 7]], 'each removed line pairs with the added line like it, past an inserted one; the rest stand alone')
+  const [before, after] = wordDiff('const TTL = 30 * DAY', 'const TTL = 14 * DAY')
+  assert.deepEqual(before.filter(p => p.changed).map(p => p.text), ['30'])
+  assert.deepEqual(after.filter(p => p.changed).map(p => p.text), ['14'])
+  assert.equal(after.map(p => p.text).join(''), 'const TTL = 14 * DAY')
+  const [, grown] = wordDiff('  return issue(token.userId)', '  return issue(token.userId, { family: token.family })')
+  assert.deepEqual(grown.filter(p => p.changed).map(p => p.text), [', { family: token.family }'])
+  assert.equal(wordDiff('if (!res.ok) return signOut()', 'throw new RefreshError(status, body, headers)'), undefined, 'lines that share little are not marked word by word')
+  assert.equal(wordDiff('x'.repeat(10) + ' y'.repeat(300), 'z' + ' y'.repeat(300)), undefined, 'too long to compare')
 })
 
 test('role state: planned, closed, the result first, gone, then the screen', () => {

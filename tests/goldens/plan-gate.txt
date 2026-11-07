@@ -2,57 +2,57 @@
   1 MISSION   2 ROLES   3 PLAN   4 LOG   5 DIFF
                                 Refresh tokens rotate on every use, and a reused one is refused
 ────────────────────────────────────────────────────────────────────────────────────────────────
-┌─ ◆ APPROVE THE PLAN ─────────────────────────────────────────────────────────────────────────┐
+╭─ ◆ APPROVE THE PLAN ─────────────────────────────────────────────────────────────────────────╮
 │ Goal   Refresh tokens rotate on every use, and a reused one is refused                       │
 │ Why    Stolen refresh tokens stay valid for 30 days today (issue #212)                       │
 │                                                                                              │
-│ ─ DONE WHEN ──────────────────────────────────────────────────────────────────────────────── │
-│   1  A refresh returns a new token; the old one then gets 401 reuse                          │
-│   2  A reused token revokes every token of its family                                        │
-│   3  The web app signs out on 401 reuse, and nowhere else                                    │
+│ ▍ Done when                                                                                  │
+│   ☐  A refresh returns a new token; the old one then gets 401 reuse                          │
+│   ☐  A reused token revokes every token of its family                                        │
+│   ☐  The web app signs out on 401 reuse, and nowhere else                                    │
 │                                                                                              │
-│ ─ ROLES ──────────────────────────────────────────────────────────────────────────────────── │
+│ ▍ Roles                                                                                      │
 │  ⬢ api        codex gpt-6.1-sol   ◼◼◼◻◻ high    starts at once                               │
 │    Rotate the token on refresh; refuse a reused one with 401 reuse                           │
 │    src/api/refresh.ts  src/api/errors.ts                                                     │
-│                                                                                              │
 │  ✻ store      claude opus         ◼◼◼◻◻ high    starts at once                               │
 │    Keep a token family and a used flag per token                                             │
 │    src/store/  migrations/                                                                   │
-│                                                                                              │
 │  ✻ web        claude sonnet       ◼◼◻◻◻ medium  after api                                    │
 │    Sign the user out when a refresh is refused                                               │
 │    web/src/session/                                                                          │
-│                                                                                              │
 │  ✻ review     claude sonnet       ◼◼◼◻◻ high    as each lands                                │
 │    Review each branch as it lands                                                            │
 │    changes nothing                                                                           │
 │                                                                                              │
-│ ─ DECISIONS ──────────────────────────────────────────────────────────────────────────────── │
-│   1  Grace period for a token used twice? → 10 s                                             │
+│ ▍ Decisions                                                                                  │
+│   1. Grace period for a token used twice? → 10 s                                             │
 │                                                                                              │
-│ ─ OUT OF SCOPE ───────────────────────────────────────────────────────────────────────────── │
-│  Access-token lifetime; the admin session list.                                              │
+│ ▍ Out of scope                                                                               │
+│   Access-token lifetime; the admin session list.                                             │
 │                                                                                              │
 │ docs/missions/auth-refresh/plan.md  ·  sha256:3f9a…  ·  checks clean                         │
 │                                                                                              │
-│  a Approve    c Change…    v Read the plan               approving takes the recommendations │
-└──────────────────────────────────────────────────────────────────────────────────────────────┘
+│  a  Approve    c  Change…    v  Read the plan            approving takes the recommendations │
+╰──────────────────────────────────────────────────────────────────────────────────────────────╯
 
 ─ ROLES ────────────────── │ ─ FLOW · scroll for more ↓ ────────────────────────────────────────
  build                     │ ┌────────────────────────┐
 ▸   ○ api         ⬢    —   │ │ ● orchestrator         │
-    ○ store       ✻    —   │ └─┬──────────────────────┘
-  └ ○ web         ✻    —   │   │
+  └ ○ web         ✻    —   │ └─┬──────────────────────┘
+    ○ store       ✻    —   │   │
  review                    │   │  ╔════════════════════════╗
     ○ review      ✻    —   │   │  ║ ○ api          planned ║
-                           │   ├─▶║ ⬢ codex gpt-6.1-sol    ║──┐
-─ STAGES ───────────────── │   │  ║ ◼◼◼◻◻ high             ║  │
-  ✓ Plan                   │   │  ╚════════════════════════╝  │
-  ◆ Plan OK?               │   │                              │
-  ○ Build             0/3  │   │                              │
-  ○ Review            0/1  │   │  ┌────────────────────────┐  │   ┌──────────────────────┐
-  ◇ MR OK?                 │   │  │ ○ store        planned │  │   │ ○ review     planned │
-  ○ Open MR                │   └─▶│ ✻ claude opus          │──┼──▶│ ✻ claude sonnet      │
+                           │   ├─▶║ ⬢ codex gpt-6.1-sol    ║──────┐
+─ STAGES ───────────────── │   │  ║ ◼◼◼◻◻ high             ║      │
+  ✓ Plan                   │   │  ╚════════════════════════╝      │
+  ◆ Plan OK?               │   │    ╎                             │
+  ○ Build             0/3  │   │    ╎ after api                   │
+  ○ Review            0/1  │   │    ╎ ┌────────────────────────┐  │   ┌──────────────────────┐
+  ◇ MR OK?                 │   │    ╎ │ ○ web          planned │  │   │ ○ review     planned │
+  ○ Open MR                │   │    └▶│ ✻ claude sonnet        │──┼──▶│ ✻ claude sonnet      │
+  ◇ Merged?                │   │      │ ◼◼◻◻◻ medium           │  │   │ ◼◼◼◻◻ high           │
+  ○ Teardown               │   │      └────────────────────────┘  │   └──────────────────────┘
+                           │   │                                  │
 
  a  approve   c  change   v  plan   ↑↓  role   1-5  tabs   ?  help

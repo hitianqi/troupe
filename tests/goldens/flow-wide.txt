@@ -10,16 +10,16 @@
     ○ review      ✻    —   │   │
                            │   │  ┌────────────────────────┐
 ─ STAGES ───────────────── │   │  │ ✓ lock            done │
-  ✓ Plan                   │   └─▶│ ⬢ codex gpt-6.1-sol    │──┐
-  ✓ Plan OK?        10:42  │      │ ◼◼◼◻◻ high             │  │
-  ● Build             0/3  │      └────────────────────────┘  │   ┌──────────────────────┐
-  ○ Review            0/1  │                   │              │   │ ○ review     planned │
-  ◇ MR OK?                 │                   ▼              ├──▶│ ✻ claude opus        │
-  ○ Open MR                │      ╔════════════════════════╗  │   │ ◼◼◼◻◻ high           │
-  ◇ Merged?                │      ║ ○ build        planned ║  │   └──────────────────────┘
-  ○ Teardown               │      ║ ⬢ codex gpt-6.1-sol    ║──┘
-                           │      ║ ◼◼◼◻◻ high             ║
-─ ACTIVITY ─────────────── │      ╚════════════════════════╝
+  ✓ Plan                   │   └─▶│ ⬢ codex gpt-6.1-sol    │──────┐
+  ✓ Plan OK?        10:42  │      │ ◼◼◼◻◻ high             │      │
+  ● Build             0/3  │      └────────────────────────┘      │   ┌──────────────────────┐
+  ○ Review            0/1  │        │                             │   │ ○ review     planned │
+  ◇ MR OK?                 │        │ after lock                  ├──▶│ ✻ claude opus        │
+  ○ Open MR                │        │ ╔════════════════════════╗  │   │ ◼◼◼◻◻ high           │
+  ◇ Merged?                │        │ ║ ○ build        planned ║  │   └──────────────────────┘
+  ○ Teardown               │        └▶║ ⬢ codex gpt-6.1-sol    ║──┘
+                           │          ║ ◼◼◼◻◻ high             ║
+─ ACTIVITY ─────────────── │          ╚════════════════════════╝
  12:07 dispatched store    │
  12:07 dispatched api      │
  10:42 stage: build        │ ─ ○ build · planned ─────────────────────────────────────────────────────────────────────────────────────────────────────

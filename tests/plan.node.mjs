@@ -8,7 +8,7 @@ import { test } from 'node:test'
 import { fileURLToPath } from 'node:url'
 
 import { findPlan } from '../dist/check.js'
-import { layersOf, readPlan, sectionsOf } from '../dist/plan.js'
+import { readPlan, sectionsOf, treeOf } from '../dist/plan.js'
 
 const TEMPLATE = fileURLToPath(new URL('../skills/troupe-mission/templates/plan.md', import.meta.url))
 const cli = fileURLToPath(new URL('../dist/cli.js', import.meta.url))
@@ -157,7 +157,15 @@ roles:
 test('a reviewer that changes nothing is grouped under review', () => {
   const read = readPlan(plan(`roles:\n  a:\n    ${CLAUDE}\n    touches: [a/]\n  r:\n    ${CLAUDE}\n    touches: []\n    reviews: [a]`, ['a', 'r']))
   assert.deepEqual(read.roles.map(role => role.group), ['build', 'review'])
-  assert.deepEqual(layersOf([{ name: 'b', dependsOn: ['a'] }, { name: 'a', dependsOn: [] }]).layers.map(layer => layer.map(r => r.name)), [['a'], ['b']])
+})
+
+test('the tree: depth-first from each root in plan order, a role after the last of its prerequisites, cycles last', () => {
+  const tree = roles => treeOf(roles.map(([name, ...dependsOn]) => ({ name, dependsOn }))).map(one => `${'  '.repeat(one.depth)}${one.role.name}${one.parent ? `<${one.parent.name}` : ''}`)
+  // A chain three deep, two dependents of one role, a role on two prerequisites, an unknown dependency ignored.
+  assert.deepEqual(tree([['web', 'api'], ['api'], ['store', 'nobody'], ['e2e', 'web'], ['mobile', 'api'], ['smoke', 'e2e'], ['both', 'api', 'store']]), [
+    'api', '  web<api', '    e2e<web', '      smoke<e2e', '  mobile<api', 'store', '  both<store',
+  ])
+  assert.deepEqual(tree([['a', 'b'], ['b', 'a'], ['c']]), ['c', 'a', '  b<a'], 'a cycle comes last; inside it the order still holds')
 })
 
 test("the mod's orders plans and plans without a roles block say so", () => {

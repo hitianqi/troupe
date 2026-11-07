@@ -3,43 +3,43 @@
                                               Refresh tokens rotate on every use, and a reused one is refused
 ──────────────────────────────────────────────────────────────────────────────────────────────────────────────
 
- docs/missions/auth-refresh/plan.md  ·  sha256:3f9a0c1e  ·  checks clean  ·  f summary
+  CONTENTS           │ docs/missions/auth-refresh/plan.md  ·  sha256:3f9a0c1e  ·  checks clean  ·  f summary
+                     │
+ ▍ Intent            │  A readable mission title
+   Role: api         │
+                     │ ▍ Intent ─────────────────────────────────────────────────────────────────────────────
+                     │
+                     │ A paragraph with bold emphasis and inline code that continues across source lines and
+                     │ wraps without dropping the final sentinelword.
+                     │
+                     │ • A list entry with enough words to wrap on a narrow screen while keeping its
+                     │   continuation indented. #17 regressions belong to the same item.
+                     │ 12. A numbered entry with enough words to wrap and keep its hanging indentation.
+                     │
+                     │ ▍ ⬢ Role: api ────────────────────────────────────────────────────────────────────────
+                     │
+                     │ Build the feature.
+                     │
+                     │
+                     │  roles:
+                     │    api:
+                     │      agent: codex # adapter
+                     │      goal: "keep # inside quotes"
+                     │
+                     │
+                     │
+                     │
+                     │
+                     │
+                     │
+                     │
+                     │
+                     │
+                     │
+                     │
+                     │
+                     │
+                     │
+                     │
 
- A readable mission title
-
- ─ Intent ───────────────────────────────────────────────────────────────────────────────────────────────────
-
- A paragraph with bold emphasis and inline code that continues across source lines and wraps without dropping
- the final sentinelword.
-
- - A list entry with enough words to wrap on a narrow screen while keeping its continuation indented. #17
-   regressions belong to the same item.
- 12. A numbered entry with enough words to wrap and keep its hanging indentation.
-
- ─ ⬢ Role: api ──────────────────────────────────────────────────────────────────────────────────────────────
-
- Build the feature.
-
- roles:
-   api:
-     agent: codex # adapter
-     goal: "keep # inside quotes"
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
- ↑↓  role   ⏎  detail   o  open   s  send   d  diff   1-5  tabs   ?  help
+ ↑↓ scroll   f summary                                                                      1-5 tabs   ? help

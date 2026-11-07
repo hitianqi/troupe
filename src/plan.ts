@@ -208,19 +208,23 @@ export const checkRoles = (roles: Role[], agents: Record<string, Agent>, keys = 
   return problems
 }
 
-/** Kahn's layering: each layer holds the roles whose known dependencies all sit in earlier layers. */
-export const layersOf = <R extends { name: string; dependsOn: string[] }>(roles: R[]): { layers: R[][]; stuck: R[] } => {
+/**
+ * Roles depth-first, as the FLOW and the ROLES list draw them: each root in plan order, then the roles
+ * that wait on it, each right after the last of its prerequisites to be placed (its `parent`, where its
+ * edge comes from) and one level deeper. Roles in a cycle come last, at the top level, with no parent.
+ */
+export const treeOf = <R extends { name: string; dependsOn: string[] }>(roles: R[]): { role: R; depth: number; parent?: R }[] => {
   const known = new Set(roles.map(role => role.name))
+  const deps = (role: R) => role.dependsOn.filter(dep => known.has(dep))
   const placed = new Set<string>()
-  const layers: R[][] = []
-  let left = roles
-  while (left.length > 0) {
-    const ready = left.filter(role => role.dependsOn.every(dep => placed.has(dep) || !known.has(dep)))
-    if (ready.length === 0) break
-    layers.push(ready)
-    for (const role of ready) placed.add(role.name)
-    left = left.filter(role => !ready.includes(role))
+  const out: { role: R; depth: number; parent?: R }[] = []
+  const visit = (role: R, depth: number, parent?: R) => {
+    placed.add(role.name)
+    out.push({ role, depth, ...(parent && { parent }) })
+    for (const next of roles) if (!placed.has(next.name) && deps(next).includes(role.name) && deps(next).every(dep => placed.has(dep))) visit(next, depth + 1, role)
   }
+  for (const role of roles) if (!placed.has(role.name) && deps(role).length === 0) visit(role, 0)
+  for (const role of roles) if (!placed.has(role.name)) visit(role, 0)
 
-  return { layers, stuck: left }
+  return out
 }
