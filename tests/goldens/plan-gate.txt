@@ -39,20 +39,20 @@
 ─ ROLES ────────────────── │ ─ FLOW · scroll for more ↓ ────────────────────────────────────────
  build                     │ ┌────────────────────────┐
 ▸   ○ api         ⬢    —   │ │ ● orchestrator         │
-    ○ store       ✻    —   │ └─┬──────────────────────┘
-  └ ○ web         ✻    —   │   │
+  └ ○ web         ✻    —   │ └─┬──────────────────────┘
+    ○ store       ✻    —   │   │
  review                    │   │  ╔════════════════════════╗
     ○ review      ✻    —   │   │  ║ ○ api          planned ║
-                           │   ├─▶║ ⬢ codex gpt-6.1-sol    ║──┐
-─ STAGES ───────────────── │   │  ║ ◼◼◼◻◻ high             ║  │
-  ✓ Plan                   │   │  ╚════════════════════════╝  │
-  ◆ Plan OK?               │   │                              │
-  ○ Build             0/3  │   │                              │
-  ○ Review            0/1  │   │  ┌────────────────────────┐  │   ┌──────────────────────┐
-  ◇ MR OK?                 │   │  │ ○ store        planned │  │   │ ○ review     planned │
-  ○ Open MR                │   └─▶│ ✻ claude opus          │──┼──▶│ ✻ claude sonnet      │
-  ◇ Merged?                │      │ ◼◼◼◻◻ high             │  │   │ ◼◼◼◻◻ high           │
-  ○ Teardown               │      └────────────────────────┘  │   └──────────────────────┘
-                           │                                  │
+                           │   ├─▶║ ⬢ codex gpt-6.1-sol    ║──────┐
+─ STAGES ───────────────── │   │  ║ ◼◼◼◻◻ high             ║      │
+  ✓ Plan                   │   │  ╚════════════════════════╝      │
+  ◆ Plan OK?               │   │    ╎                             │
+  ○ Build             0/3  │   │    ╎ after api                   │
+  ○ Review            0/1  │   │    ╎ ┌────────────────────────┐  │   ┌──────────────────────┐
+  ◇ MR OK?                 │   │    ╎ │ ○ web          planned │  │   │ ○ review     planned │
+  ○ Open MR                │   │    └▶│ ✻ claude sonnet        │──┼──▶│ ✻ claude sonnet      │
+  ◇ Merged?                │   │      │ ◼◼◻◻◻ medium           │  │   │ ◼◼◼◻◻ high           │
+  ○ Teardown               │   │      └────────────────────────┘  │   └──────────────────────┘
+                           │   │                                  │
 
  a  approve   c  change   v  plan   ↑↓  role   1-5  tabs   ?  help

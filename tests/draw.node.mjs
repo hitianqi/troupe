@@ -224,12 +224,13 @@ test('FLOW: a trunk into the root, a stem to its dependent, the reviewer in a si
   const find = name => boxes.find(box => box.target.name === name)
   const lines = plain(drawn)
   const [lock, build, review] = ['lock', 'build', 'review'].map(find)
-  // Stacked in dependency order, the dependent right under its parent, joined by a stem and an arrow.
-  assert.equal(lock.col, build.col)
+  // The dependent right under its prerequisite, indented four, joined by an edge from under its box: │ down, then └▶.
+  assert.equal(build.col, lock.col + 4)
   assert.ok(lock.row + lock.height < build.row)
-  const centre = cellsOf(drawn.lines[build.row - 1]).findIndex((cell, col) => col >= lock.col && cell.text === '▼')
-  assert.ok(centre > lock.col && centre < lock.col + lock.width)
-  assert.equal(cellsOf(drawn.lines[build.row - 2])[centre].text, '│')
+  const stem = lock.col + 2
+  for (let row = lock.row + lock.height; row < build.row + 2; row++) assert.equal(cellsOf(drawn.lines[row])[stem].text, '│', `edge row ${row}`)
+  assert.deepEqual(cellsOf(drawn.lines[build.row + 2]).slice(stem, stem + 2).map(cell => cell.text), ['└', '▶'])
+  assert.equal(cellsOf(drawn.lines[build.row - 1]).slice(build.col, build.col + 10).map(cell => cell.text).join(''), 'after lock', 'the label beside the edge, above the box')
   // One root: the trunk comes down from the orchestrator and ends in └─▶ at lock.
   assert.ok(lines.some(line => /└─▶│/.test(line)))
   assert.ok(!lines.some(line => line.includes('├─▶')))
@@ -247,6 +248,34 @@ test('FLOW: a trunk into the root, a stem to its dependent, the reviewer in a si
   closed(drawn, 150 - 29)
 })
 
+test('FLOW tree: each level indents four, two dependents share their prerequisite\'s edge, an edge is dashed until it is done, and deep chains stop indenting at the width', () => {
+  const roles = [role('api', { state: 'done' }), role('web', { dependsOn: ['api'] }), role('e2e', { dependsOn: ['web'] }), role('mobile', { dependsOn: ['api'] }), role('store')]
+  const drawn = draw(scenario(roles), { tab: 1, selected: 'store' }, 150, 70)
+  const [api, web, e2e, mobile, store] = ['api', 'web', 'e2e', 'mobile', 'store'].map(name => boxesOf(drawn).find(box => box.target.name === name))
+  assert.deepEqual([api, web, e2e, mobile, store].map(box => box.row).sort((a, b) => a - b), [api.row, web.row, e2e.row, mobile.row, store.row], 'depth-first: a role, then what waits on it, then the next root')
+  assert.deepEqual([web.col, e2e.col, mobile.col, store.col].map(col => col - api.col), [4, 8, 4, 0])
+  const cell = (row, col) => cellsOf(drawn.lines[row])[col]
+  // api's edge runs past web and e2e to mobile: a ├ where web branches off, └▶ into mobile.
+  assert.equal(cell(web.row + 2, api.col + 2).text, '├')
+  assert.equal(cell(e2e.row + 2, api.col + 2).text, '│')
+  assert.deepEqual([cell(mobile.row + 2, api.col + 2).text, cell(mobile.row + 2, api.col + 3).text], ['└', '▶'])
+  assert.equal(cell(mobile.row + 2, api.col + 2).fade, undefined, 'api is done: its edges are solid')
+  // web is not done: its edge to e2e is dashed and faint, the joint keeps its shape.
+  assert.deepEqual([cell(web.row + web.height, web.col + 2).text, cell(e2e.row + 2, web.col + 2).text, cell(e2e.row + 2, web.col + 3).text], ['╎', '└', '▶'])
+  assert.equal(cell(e2e.row + 2, web.col + 2).fade, 0.75)
+  const trunks = drawn.scene.column.trunks
+  assert.deepEqual(trunks.find(one => one.name === 'e2e').path.at(-1), [e2e.row + 2 - drawn.scene.column.row, e2e.col - 1 - drawn.scene.column.col], 'packets for a dependent run along its own edge')
+  assert.ok(drawn.scene.column.links.some(link => link.to === 'e2e' && link.edge.from === 'web'))
+  // A chain eight deep at 60 columns: the boxes stop moving right before they leave the width.
+  const chain = Array.from({ length: 8 }, (_, i) => role(`r${i}`, { dependsOn: i === 0 ? [] : [`r${i - 1}`] }))
+  const deep = draw(scenario(chain), { tab: 1, selected: 'r0' }, 60, 80)
+  closed(deep, 60)
+  const cols = boxesOf(deep).map(box => box.col)
+  assert.ok(cols.every((col, i) => i === 0 || col >= cols[i - 1]))
+  assert.ok(plain(deep).every(line => line.length <= 60))
+  assert.equal(plain(deep).filter(line => line.includes('▶')).length, 8, 'each still has its arrow')
+})
+
 test('FLOW narrow: the reviewer goes below, says what it reviews, and stays selectable', () => {
   const drawn = draw(scenario(flowRoles()), { tab: 1, selected: 'review' }, 78, 52)
   golden('flow-narrow', plain(drawn))
@@ -254,10 +283,11 @@ test('FLOW narrow: the reviewer goes below, says what it reviews, and stays sele
   const boxes = boxesOf(drawn)
   const review = boxes.find(box => box.target.name === 'review')
   const build = boxes.find(box => box.target.name === 'build')
-  assert.ok(review && build)
-  assert.ok(review.row >= build.row + build.height && review.col === build.col, 'below the builders, not in a lane')
+  const lock = boxes.find(box => box.target.name === 'lock')
+  assert.ok(review && build && lock)
+  assert.ok(review.row >= build.row + build.height && review.col === lock.col, 'below the builders, not in a lane')
   assert.match(text, /reviews lock, build/)
-  assert.equal(text.split('▶').length - 1, 1, 'only the trunk arrow; no edge into the reviewer')
+  assert.equal(text.split('▶').length - 1, 2, 'the trunk arrow and the dependency edge; no edge into the reviewer')
   assert.deepEqual(hitAt(drawn.hits, review.row + 1, review.col + 2), { kind: 'role', name: 'review' })
   closed(drawn, 78)
 })

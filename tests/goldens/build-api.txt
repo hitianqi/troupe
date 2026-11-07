@@ -7,26 +7,26 @@
 ─ ROLES ────────────────── │ ─ FLOW ────────────────────────────────────────────────────────────
  build                     │ ┌────────────────────────┐
 ▸   ◆ api         ⬢    —   │ │ ● orchestrator         │
-    ● store       ✻    —   │ └─┬──────────────────────┘
-  └ ○ web         ✻    —   │   │
+  └ ○ web         ✻    —   │ └─┬──────────────────────┘
+    ● store       ✻    —   │   │
  review                    │   │  ╔════════════════════════╗
     ○ review      ✻    —   │   │  ║ ◆ api     waits on you ║
-                           │   ├─▶║ ⬢ codex gpt-6.1-sol    ║──┐
-─ STAGES ───────────────── │   │  ║ ◼◼◼◻◻ high             ║  │
-  ✓ Plan                   │   │  ╚════════════════════════╝  │
-  ✓ Plan OK?        10:42  │   │                              │
-  ● Build             0/3  │   │                              │
-  ○ Review            0/1  │   │  ┌────────────────────────┐  │   ┌──────────────────────┐
-  ◇ MR OK?                 │   │  │ ● store        working │  │   │ ○ review     planned │
-  ○ Open MR                │   └─▶│ ✻ claude opus          │──┼──▶│ ✻ claude sonnet      │
-  ◇ Merged?                │      │ ◼◼◼◻◻ high             │  │   │ ◼◼◼◻◻ high           │
-  ○ Teardown               │      └────────────────────────┘  │   └──────────────────────┘
-                           │                                  │
-─ ACTIVITY ─────────────── │        after api                 │
- 12:07 dispatched store    │      ┌────────────────────────┐  │
- 12:07 dispatched api      │      │ ○ web          planned │  │
- 10:42 stage: build        │      │ ✻ claude sonnet        │──┘
- 10:42 plan approved       │      │ ◼◼◻◻◻ medium           │
+                           │   ├─▶║ ⬢ codex gpt-6.1-sol    ║──────┐
+─ STAGES ───────────────── │   │  ║ ◼◼◼◻◻ high             ║      │
+  ✓ Plan                   │   │  ╚════════════════════════╝      │
+  ✓ Plan OK?        10:42  │   │    ╎                             │
+  ● Build             0/3  │   │    ╎ after api                   │
+  ○ Review            0/1  │   │    ╎ ┌────────────────────────┐  │   ┌──────────────────────┐
+  ◇ MR OK?                 │   │    ╎ │ ○ web          planned │  │   │ ○ review     planned │
+  ○ Open MR                │   │    └▶│ ✻ claude sonnet        │──┼──▶│ ✻ claude sonnet      │
+  ◇ Merged?                │   │      │ ◼◼◻◻◻ medium           │  │   │ ◼◼◼◻◻ high           │
+  ○ Teardown               │   │      └────────────────────────┘  │   └──────────────────────┘
+                           │   │                                  │
+─ ACTIVITY ─────────────── │   │                                  │
+ 12:07 dispatched store    │   │  ┌────────────────────────┐      │
+ 12:07 dispatched api      │   │  │ ● store        working │      │
+ 10:42 stage: build        │   └─▶│ ✻ claude opus          │──────┘
+ 10:42 plan approved       │      │ ◼◼◼◻◻ high             │
  10:41 plan gate opened    │      └────────────────────────┘
                            │
                            │

@@ -45,6 +45,8 @@ const SPIN = '⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏'
 const HEAVY: Record<string, string> = { '─': '━', '│': '┃', '├': '┣', '└': '┗', '┬': '┳', '┐': '┓', '┘': '┛', '┼': '╋', '┤': '┫', '┴': '┻', '┌': '┏' }
 /** Cells a second the finishing light runs along a lane. */
 const SPEED = 30
+/** Seconds the front takes down a dependency edge. */
+const UNLOCK = 0.8
 const RAMP = ' ·:-=+*#'
 const BAYER = [[0, 8, 2, 10], [12, 4, 14, 6], [3, 11, 1, 9], [15, 7, 13, 5]]
 const GRADIENT = [RGB.accent, RGB.cyan, RGB.accentBright, RGB.ok, RGB.accent]
@@ -86,6 +88,8 @@ export class Motion {
   private tick = -Infinity
   private intro: { at: number; end: number } | undefined
   private readonly gradient: boolean
+  /** Whether the last frame drew the selected box, whose gradient turns. */
+  private turning = false
   private paper: Rgb = PAPER
   private text: Rgb = TEXT
   constructor(options: { gradient?: boolean } = {}) {
@@ -131,6 +135,7 @@ export class Motion {
   decorate(base: Screen, drawn: Drawn, selected: string, now: number): Screen {
     const scene = drawn.scene
     const model = this.model
+    this.turning = false
     if (scene === undefined || model === undefined) return base
     const screen = base.clone()
     const t = now / 1000
@@ -182,6 +187,7 @@ export class Motion {
     if (scene.page !== undefined) this.page(screen, scene.page, now, { shimmer, spark, spin })
 
     const column = scene.column
+    this.turning = this.gradient && column !== undefined && column.boxes.some(box => box.name === selected && column.row + box.row < column.bottom && column.row + box.row + box.height > column.top)
     if (column === undefined) return screen
     /** A cell of the right column, if it is on screen. */
     const at = ([row, col]: Point): Cell | undefined => {
@@ -244,6 +250,21 @@ export class Motion {
         if (d === 0) heads.push({ point, fg: RGB.ok })
       })
     }
+    // A prerequisite done: a green front runs down its edge to the role waiting on it.
+    const unlocked = new Map<string, number>()
+    for (const link of column.links) {
+      const edge = link.edge
+      if (edge === undefined || roles.get(edge.from)?.state !== 'done') continue
+      const age = this.since(edge.from, now)
+      unlocked.set(link.to, age - UNLOCK)
+      const front = (age / UNLOCK) * edge.path.length
+      edge.path.forEach((point, i) => {
+        const d = front - i
+        if (d < 0 || d >= 3) return
+        offer(point, true, mix(RGB.ok, this.strong(), 1 - d / 3), 3)
+        if (d < 1) heads.push({ point, fg: RGB.ok })
+      })
+    }
     for (const { point, ch, fg } of offers.values()) Object.assign(at(point) ?? {}, { ch, fg })
     // What joins a role to the ones it waits for lights up as the last of them finishes.
     for (const link of column.links) {
@@ -254,7 +275,7 @@ export class Motion {
 
     for (const box of column.boxes) {
       const role = roles.get(box.name)
-      const arrived = box.name === reviewer?.name ? arrivals.reduce((sum, age) => sum + decay(age, 0.4), 0) : 0
+      const arrived = (box.name === reviewer?.name ? arrivals.reduce((sum, age) => sum + decay(age, 0.4), 0) : 0) + decay(unlocked.get(box.name) ?? -1, 0.4)
       if (role !== undefined) this.box(role, box, box.name === selected, seedOf(box.name), t, arrived, at, span, { shimmer, spark, spin })
     }
 
@@ -472,7 +493,7 @@ export class Motion {
   moving(now: number): boolean {
     const model = this.model
     if (model === undefined) return false
-    if ((this.intro !== undefined && now < this.intro.end) || this.gradient || this.pageMoves) return true
+    if ((this.intro !== undefined && now < this.intro.end) || this.turning || this.pageMoves) return true
 
     return model.gate !== undefined || (now - this.fresh.at) / 1000 < 4 || model.roles.some(role => role.state === 'working' || role.state === 'waits' || this.since(role.name, now) < 3)
   }
