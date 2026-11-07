@@ -180,7 +180,8 @@ export const panel = async (r: Runtime, options: PanelOptions, terminal: Termina
       clearTimeout(escape)
       const parsed = parseInput(pending + (typeof chunk === 'string' ? chunk : decoder.write(chunk)))
       pending = parsed.rest
-      dispatchInput(parsed.actions)
+      for (const action of parsed.actions) if (action.kind === 'colour') motion?.colour(action.which, action.rgb)
+      dispatchInput(parsed.actions.filter(action => action.kind !== 'colour'))
       if (pending === '\x1b') escape = setTimeout(() => { pending = ''; dispatchInput([{ kind: 'key', key: 'escape' }]) }, 40)
     }
     const onResize = () => enqueue(() => { clear = true; paintFrame() })
@@ -193,7 +194,8 @@ export const panel = async (r: Runtime, options: PanelOptions, terminal: Termina
       input.setRawMode(true)
       raw = true
       entered = true
-      r.write(ENTER_PANEL)
+      // Asking the terminal its colours lets effects fade towards its own paper; the answer arrives as input.
+      r.write(motion === undefined ? ENTER_PANEL : `${ENTER_PANEL}\x1b]10;?\x1b\\\x1b]11;?\x1b\\`)
       paintFrame()
       timer = setInterval(() => enqueue(refresh), 2000)
       input.resume()

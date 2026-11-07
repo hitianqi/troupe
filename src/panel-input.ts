@@ -1,7 +1,8 @@
 import type { Hit, Ui } from './draw.ts'
 import type { PanelModel } from './model.ts'
 
-export type Input = { kind: 'key'; key: string } | { kind: 'text'; text: string } | { kind: 'click'; row: number; col: number } | { kind: 'scroll'; by: number }
+/** `colour` is the terminal's answer to the panel asking its text (10) or background (11) colour. */
+export type Input = { kind: 'key'; key: string } | { kind: 'text'; text: string } | { kind: 'click'; row: number; col: number } | { kind: 'scroll'; by: number } | { kind: 'colour'; which: 'text' | 'background'; rgb: [number, number, number] }
 export type GateTarget = { id: string; isPlan: boolean; hash: string; stamp: string }
 export type Effect = { kind: 'open'; role: string } | { kind: 'send'; role: string; text: string } | { kind: 'answer'; gate: GateTarget; answer: 'approve' | 'change'; text?: string }
 type Entry = { label: string; text: string } & ({ kind: 'send'; role: string } | { kind: 'change'; gate: GateTarget })
@@ -39,6 +40,21 @@ export const parseInput = (input: string): { actions: Input[]; rest: string } =>
       rest = rest.slice(mouse[0].length)
       continue
     }
+    if (rest.startsWith('\x1b]')) {
+      const osc = /^\x1b\](\d+);([^\x07\x1b]*)(?:\x07|\x1b\\)/.exec(rest)
+      if (osc === null) {
+        if (/^\x1b\][^\x07]*\x1b?$/.test(rest) && rest.length < 64) break
+        rest = rest.slice(2)
+        continue
+      }
+      const parts = /^rgb:([0-9a-f]{1,4})\/([0-9a-f]{1,4})\/([0-9a-f]{1,4})$/i.exec(osc[2] ?? '')
+      if (parts !== null && (osc[1] === '10' || osc[1] === '11')) {
+        const rgb = parts.slice(1, 4).map(hex => Math.round((parseInt(hex, 16) / (16 ** hex.length - 1)) * 255)) as [number, number, number]
+        actions.push({ kind: 'colour', which: osc[1] === '10' ? 'text' : 'background', rgb })
+      }
+      rest = rest.slice(osc[0].length)
+      continue
+    }
     const sequence = SEQUENCES.find(([text]) => rest.startsWith(text))
     if (sequence !== undefined) {
       actions.push({ kind: 'key', key: sequence[1] })
@@ -74,6 +90,7 @@ export const gateTarget = (model: PanelModel): GateTarget | undefined => {
 
 const typed = (text: string): string => text.replace(/[\r\n]+/g, ' ').replace(/[\x00-\x1f\x7f-\x9f]/g, '')
 export const transition = (ui: PanelUi, action: Input, model: PanelModel | undefined, hits: Hit[], height: number, maxScroll: number): { ui: PanelUi; effect?: Effect; quit?: true } => {
+  if (action.kind === 'colour') return { ui }
   if (action.kind === 'key' && action.key === 'quit') return { ui, quit: true }
   if (ui.input !== undefined) {
     if (action.kind === 'text') return { ui: { ...ui, input: { ...ui.input, text: ui.input.text + typed(action.text) } } }

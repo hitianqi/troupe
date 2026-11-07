@@ -26,7 +26,7 @@ export const sample = (prev: Rates | undefined, output: number, at: number): Rat
 /** tokens/s as 0..1: 40 tok/s is half. */
 const levelOf = (rate: number) => rate / (rate + 40)
 
-// The panel's paper and its plain text, for fading towards them.
+// The panel's paper and its plain text, for fading towards them, until the terminal tells its own.
 const PAPER = rgbOf('#151821')
 const TEXT = rgbOf('#c9cfdb')
 const clamp = (x: number) => Math.max(0, Math.min(1, x))
@@ -82,8 +82,21 @@ export class Motion {
   private tick = -Infinity
   private intro: { at: number; end: number } | undefined
   private readonly gradient: boolean
+  private paper: Rgb = PAPER
+  private text: Rgb = TEXT
   constructor(options: { gradient?: boolean } = {}) {
     this.gradient = !!options.gradient
+  }
+  /** What light moves towards: bright on a dark paper, the text colour on a light one. */
+  private strong(): Rgb {
+    const [r, g, b] = this.paper
+
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b > 128 ? this.text : RGB.bright
+  }
+  /** The terminal's own text or background colour. */
+  colour(which: 'text' | 'background', rgb: Rgb) {
+    if (which === 'text') this.text = rgb
+    else this.paper = rgb
   }
   /** Remembers each role's tokens/s and when its state last changed. */
   observe(model: PanelModel, now: number) {
@@ -131,7 +144,7 @@ export class Motion {
       const x = ((t + seed * 0.7) % period) * speed - 6
       cells.forEach((cell, i) => {
         const a = clamp(1 - Math.abs(i - x) / 3.2)
-        if (cell !== undefined && a > 0) cell.fg = mix(cell.fg ?? TEXT, RGB.bright, a * 0.9)
+        if (cell !== undefined && a > 0) cell.fg = mix(cell.fg ?? this.text, this.strong(), a * 0.9)
       })
     }
     /** A braille sparkline of a role's last tokens/s, two reads a cell. */
@@ -149,10 +162,10 @@ export class Motion {
     if (scene.activity !== undefined && scene.activity.text === this.fresh.text) {
       const glow = decay((now - this.fresh.at) / 1000, 0.6)
       const { row, col, width } = scene.activity
-      if (glow > 0) for (let c = col; c < col + width; c++) tint(screen.at(row, c), mix(TEXT, RGB.accentBright, glow))
+      if (glow > 0) for (let c = col; c < col + width; c++) tint(screen.at(row, c), mix(this.text, RGB.accentBright, glow))
     }
-    for (const row of scene.waits) tint(screen.at(row, 0), mix(mix(RGB.warn, PAPER, 0.5), RGB.warn, breath(t, 1.4, 0)))
-    if (scene.gate !== undefined) tint(screen.at(...scene.gate), mix(mix(RGB.warn, PAPER, 0.4), RGB.warn, breath(t, 1.4, 0)))
+    for (const row of scene.waits) tint(screen.at(row, 0), mix(mix(RGB.warn, this.paper, 0.5), RGB.warn, breath(t, 1.4, 0)))
+    if (scene.gate !== undefined) tint(screen.at(...scene.gate), mix(mix(RGB.warn, this.paper, 0.4), RGB.warn, breath(t, 1.4, 0)))
 
     const column = scene.column
     if (column === undefined) return screen
@@ -203,7 +216,7 @@ export class Motion {
       lane.path.forEach((point, i) => {
         if (i > front) return offer(point, false, RGB.chrome, 0)
         const d = front - i
-        offer(point, true, d < 3 ? mix(RGB.ok, RGB.bright, 1 - d / 3) : RGB.ok, d < 3 ? 3 : 1)
+        offer(point, true, d < 3 ? mix(RGB.ok, this.strong(), 1 - d / 3) : RGB.ok, d < 3 ? 3 : 1)
         if (d < 1) heads.push({ point, fg: RGB.ok })
       })
       if (reviewer?.state !== 'working' || front < lane.path.length) continue
@@ -213,7 +226,7 @@ export class Motion {
       lane.path.forEach((point, i) => {
         const d = (((k - i) % 8) + 8) % 8
         if (hash(Math.floor((k - i) / 8), 7, 5) > 0.2 + 0.8 * level) return
-        if (d < 2) offer(point, true, mix(RGB.ok, RGB.bright, 0.55 - d * 0.25), 2)
+        if (d < 2) offer(point, true, mix(RGB.ok, this.strong(), 0.55 - d * 0.25), 2)
         if (d === 0) heads.push({ point, fg: RGB.ok })
       })
     }
@@ -249,8 +262,8 @@ export class Motion {
           if (v > level) [level, fg] = [v, RGB.ok]
         }
         const q = Math.max(0, Math.min(7, Math.floor(level + (BAYER[row % 4]?.[col % 4] ?? 0) / 16 - 0.5)))
-        if (q > 0) Object.assign(cell, { ch: RAMP[q], fg: mix(PAPER, fg, 0.35 + q * 0.08) })
-        else if (col % 4 === 1 && row % 2 === 1) Object.assign(cell, { ch: '·', fg: mix(PAPER, RGB.chrome, 0.32) })
+        if (q > 0) Object.assign(cell, { ch: RAMP[q], fg: mix(this.paper, fg, 0.35 + q * 0.08) })
+        else if (col % 4 === 1 && row % 2 === 1) Object.assign(cell, { ch: '·', fg: mix(this.paper, RGB.chrome, 0.32) })
       }
     }
 
@@ -333,7 +346,7 @@ export class Motion {
       if (e < at) Object.assign(cell, { ch: cell.ch === '' ? '' : ' ', fg: undefined, bg: undefined, bold: undefined })
       else {
         if (e - at < 0.06) cell.ch = HEAVY[cell.ch] ?? cell.ch
-        cell.fg = mix(cell.fg ?? TEXT, RGB.bright, decay(e - at, 0.12))
+        cell.fg = mix(cell.fg ?? this.text, this.strong(), decay(e - at, 0.12))
       }
     }
     for (let row = 0; row < screen.height; row++) {
@@ -345,8 +358,8 @@ export class Motion {
         if (at !== undefined) arrive(cell, at)
         else if (flow >= 0 && flow < column.flow && row >= column.top && row < column.bottom && col >= column.col) arrive(cell, last + hash(row, col) * 0.4)
         else if (e < 0.35) {
-          cell.fg = mix(PAPER, cell.fg ?? TEXT, e / 0.35)
-          if (cell.bg !== undefined) cell.bg = mix(PAPER, cell.bg, e / 0.35)
+          cell.fg = mix(this.paper, cell.fg ?? this.text, e / 0.35)
+          if (cell.bg !== undefined) cell.bg = mix(this.paper, cell.bg, e / 0.35)
         }
       }
     }
@@ -357,9 +370,9 @@ export class Motion {
     const tone = RGB[look.tone]
     const moving = role.state === 'working' || role.state === 'waits'
     let border = selected || role.state !== 'planned' ? tone : RGB.chrome
-    if (moving) border = mix(mix(tone, PAPER, 0.6), tone, breath(t, role.state === 'waits' ? 1.4 : 2.8, seed))
+    if (moving) border = mix(mix(tone, this.paper, 0.6), tone, breath(t, role.state === 'waits' ? 1.4 : 2.8, seed))
     const flash = this.flash(role.name, t * 1000) + arrived
-    border = mix(border, RGB.bright, flash)
+    border = mix(border, this.strong(), flash)
     const ring = outline(box)
     ring.forEach((point, p) => {
       const cell = at(point)
@@ -367,7 +380,7 @@ export class Motion {
       // The selected box's double line can carry a turning gradient instead.
       const u = ((p / ring.length + t * 0.18) % 1) * (GRADIENT.length - 1)
       const i = Math.floor(u)
-      const fg = selected && this.gradient ? mix(mix(GRADIENT[i] ?? RGB.accent, GRADIENT[i + 1] ?? RGB.accent, u - i), RGB.bright, flash) : border
+      const fg = selected && this.gradient ? mix(mix(GRADIENT[i] ?? RGB.accent, GRADIENT[i + 1] ?? RGB.accent, u - i), this.strong(), flash) : border
       Object.assign(cell, { ch: selected ? cell.ch : ROUND[cell.ch] ?? cell.ch, fg })
     })
     const { row, col, width } = box
@@ -377,7 +390,7 @@ export class Motion {
     }
     if (role.state !== 'planned') {
       const pill = ` ${look.text} `
-      const wash = mix(PAPER, tone, role.state === 'waits' ? 0.2 + 0.1 * breath(t, 1.4, seed) : 0.16)
+      const wash = mix(this.paper, tone, role.state === 'waits' ? 0.2 + 0.1 * breath(t, 1.4, seed) : 0.16)
       span(row + 1, col + width - 1 - pill.length, pill.length).forEach((cell, i) => Object.assign(cell ?? {}, { ch: pill[i], fg: tone, bg: wash, bold: undefined }))
       // The effort squares, then the sparkline, then the context share flush right.
       const squares = effortOf(role.effort).filter(run => run.text.startsWith('◼') || run.text.startsWith('◻'))

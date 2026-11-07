@@ -49,3 +49,14 @@ test('tokens/s comes from the output count between reads, at least a second apar
   for (let at = 10000; at < 200000; at += 2000) rates = sample(rates, rates.output + 10, at)
   assert.equal(rates.rates.length, 64)
 })
+
+test("the terminal's colour answers are read, never typed as keys, and may arrive split", async () => {
+  const { parseInput } = await import('../dist/panel-input.js')
+  assert.deepEqual(parseInput('\x1b]11;rgb:ffff/8080/0000\x1b\\\x1b]10;rgb:00/00/00\x07q').actions, [
+    { kind: 'colour', which: 'background', rgb: [255, 128, 0] }, { kind: 'colour', which: 'text', rgb: [0, 0, 0] }, { kind: 'key', key: 'q' },
+  ])
+  const half = parseInput('\x1b]11;rgb:1515/1818')
+  assert.deepEqual(half.actions, [])
+  assert.deepEqual(parseInput(`${half.rest}/2121\x1b\\`).actions, [{ kind: 'colour', which: 'background', rgb: [21, 24, 33] }])
+  assert.deepEqual(parseInput('\x1b]4;1;rgb:ff/00/00\x071').actions, [{ kind: 'key', key: '1' }])
+})
