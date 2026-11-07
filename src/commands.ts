@@ -19,7 +19,7 @@ import { createPanel, openPanel } from './panel-open.ts'
 
 const OPTIONS: Record<string, string[]> = {
   setup: ['remove'], open: ['planning'], up: ['orch'], mission: ['base'], check: [], approve: [], gate: ['no-wait'], stage: [],
-  dispatch: [], status: ['json', 'watch'], send: [], wait: ['role', 'gate', 'timeout', 'ready'], teardown: ['force'], close: ['all'], panel: ['once', 'plain', 'width', 'height'],
+  dispatch: [], status: ['json', 'watch'], send: [], wait: ['role', 'gate', 'timeout', 'ready'], teardown: ['force'], close: ['all'], panel: ['once', 'plain', 'width', 'height', 'no-anim'],
 }
 
 const parsed = (command: string, args: string[]) => {
@@ -32,7 +32,7 @@ const parsed = (command: string, args: string[]) => {
       ready: { type: 'boolean' }, force: { type: 'boolean' },
       planning: { type: 'boolean' }, base: { type: 'string' },
       role: { type: 'string' }, gate: { type: 'string' }, timeout: { type: 'string' }, all: { type: 'boolean' },
-      once: { type: 'boolean' }, plain: { type: 'boolean' }, width: { type: 'string' }, height: { type: 'string' },
+      once: { type: 'boolean' }, plain: { type: 'boolean' }, 'no-anim': { type: 'boolean' }, width: { type: 'string' }, height: { type: 'string' },
     } })
   } catch (error) {
     throw new Usage((error as Error).message)
@@ -193,7 +193,7 @@ export const execute = async (command: string, args: string[], overrides: Partia
     const { values, positionals: pos } = parsed(command, args)
     const want = values.mission ?? ''
     if (command === 'panel') {
-      count(pos, 0, 0, 'panel [-m mission] [--once] [--plain] [--width N --height N]')
+      count(pos, 0, 0, 'panel [-m mission] [--once] [--plain] [--no-anim] [--width N --height N]')
       const size = (value: string | undefined, name: string): number | undefined => {
         if (value === undefined) return undefined
         const n = Number(value)
@@ -202,7 +202,7 @@ export const execute = async (command: string, args: string[], overrides: Partia
         return n
       }
 
-      return await panel(r, { mission: want, once: values.once, plain: values.plain, width: size(values.width, 'width'), height: size(values.height, 'height') })
+      return await panel(r, { mission: want, once: values.once, plain: values.plain, width: size(values.width, 'width'), height: size(values.height, 'height'), noAnim: values['no-anim'] })
     }
     if (command === 'setup') {
       count(pos, 0, 0, 'setup [--remove]')
