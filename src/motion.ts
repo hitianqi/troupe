@@ -1,6 +1,6 @@
 import { cellsOf } from './canvas.ts'
 import { contextOf, count, effortOf, LOOK } from './draw.ts'
-import type { Drawn, Point, Rect } from './draw.ts'
+import type { Drawn, Point, Rect, Scene } from './draw.ts'
 import type { PanelModel, RoleView } from './model.ts'
 import { RGB, rgbOf } from './screen.ts'
 import type { Cell, Rgb, Screen } from './screen.ts'
@@ -35,7 +35,19 @@ const breath = (t: number, period: number, seed: number) => 0.5 + 0.5 * Math.sin
 /** 1 at `age` 0, falling with time constant `tau`; 0 before it and once it has faded. */
 const decay = (age: number, tau: number) => (age >= 0 && age < tau * 6 ? Math.exp(-age / tau) : 0)
 
+const hash = (a: number, b: number, c = 0) => {
+  const x = Math.sin(a * 127.1 + b * 311.7 + c * 74.7) * 43758.5453
+
+  return x - Math.floor(x)
+}
+
 const SPIN = '⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏'
+const HEAVY: Record<string, string> = { '─': '━', '│': '┃', '├': '┣', '└': '┗', '┬': '┳', '┐': '┓', '┘': '┛', '┼': '╋', '┤': '┫', '┴': '┻', '┌': '┏' }
+/** Cells a second the finishing light runs along a lane. */
+const SPEED = 30
+const RAMP = ' ·:-=+*#'
+const BAYER = [[0, 8, 2, 10], [12, 4, 14, 6], [3, 11, 1, 9], [15, 7, 13, 5]]
+const GRADIENT = [RGB.accent, RGB.cyan, RGB.accentBright, RGB.ok, RGB.accent]
 const ROUND: Record<string, string> = { '┌': '╭', '┐': '╮', '└': '╰', '┘': '╯' }
 const LEFT_DOTS = [0x40, 0x04, 0x02, 0x01]
 const RIGHT_DOTS = [0x80, 0x20, 0x10, 0x08]
@@ -48,6 +60,10 @@ const brailleOf = (a: number, b: number) => {
   return String.fromCharCode(0x2800 + bits)
 }
 /** Each cell of a rectangle's outline, clockwise from its top left. */
+const inside = (row: number, col: number, rect: Rect) => row >= rect.row && row < rect.row + rect.height && col >= rect.col && col < rect.col + rect.width
+/** Distance from a cell to a rectangle, rows counted about twice as tall as columns. */
+const distance = (row: number, col: number, rect: Rect) =>
+  Math.hypot(Math.max(rect.col - col, 0, col - (rect.col + rect.width - 1)), Math.max(rect.row - row, 0, row - (rect.row + rect.height - 1)) * 2.1)
 const outline = ({ row, col, width, height }: Rect): Point[] => [
   ...Array.from({ length: width }, (_, i) => [row, col + i] as Point),
   ...Array.from({ length: height - 2 }, (_, i) => [row + 1 + i, col + width - 1] as Point),
@@ -60,6 +76,15 @@ export class Motion {
   private readonly states = new Map<string, { state: RoleState; at: number }>()
   private model: PanelModel | undefined
   private fresh = { text: '', at: -Infinity }
+  /** Each role's packet speed, eased towards its tokens/s, and how far its packets have moved. */
+  private readonly level = new Map<string, number>()
+  private readonly phase = new Map<string, number>()
+  private tick = -Infinity
+  private intro: { at: number; end: number } | undefined
+  private readonly gradient: boolean
+  constructor(options: { gradient?: boolean } = {}) {
+    this.gradient = !!options.gradient
+  }
   /** Remembers each role's tokens/s and when its state last changed. */
   observe(model: PanelModel, now: number) {
     const first = this.model === undefined
@@ -86,6 +111,15 @@ export class Motion {
     if (scene === undefined || model === undefined) return base
     const screen = base.clone()
     const t = now / 1000
+    const dt = Math.max(0, Math.min(0.1, (now - this.tick) / 1000))
+    this.tick = now
+    for (const role of model.roles) {
+      const target = role.state === 'working' ? levelOf(this.rateOf(role.name)) : 0
+      const level = this.level.get(role.name) ?? target
+      const next = level + (target - level) * (1 - Math.exp(-dt / 0.6))
+      this.level.set(role.name, next)
+      this.phase.set(role.name, (this.phase.get(role.name) ?? 0) + dt * (4 + 22 * next))
+    }
     const roles = new Map(model.roles.map(role => [role.name, role]))
     const seedOf = (name: string) => model.roles.findIndex(role => role.name === name)
     const tint = (cell: Cell | undefined, fg: Rgb) => { if (cell !== undefined) cell.fg = fg }
@@ -137,9 +171,87 @@ export class Motion {
     Object.assign(at([1, 2]) ?? {}, { ch: '◉', fg: RGB.accentBright })
     for (const cell of span(1, 4, 12)) if (cell !== undefined) Object.assign(cell, { fg: RGB.bright, bold: true })
 
+    // The edges: each cell takes the strongest of what is offered to it, and moving light leaves heads that light the floor.
+    const offers = new Map<string, { point: Point; ch: string; fg: Rgb; rank: number }>()
+    const heads: { point: Point; fg: Rgb }[] = []
+    const offer = (point: Point, heavy: boolean, fg: Rgb, rank: number) => {
+      const ch = at(point)?.ch ?? ''
+      const old = offers.get(`${point}`)
+      if (old === undefined || rank >= old.rank) offers.set(`${point}`, { point, ch: heavy ? HEAVY[ch] ?? ch : ch, fg, rank })
+    }
+    for (const trunk of column.trunks) {
+      if (roles.get(trunk.name)?.state !== 'working') continue
+      // A packet leaves every 6 cells, fewer and slower as the role's tokens/s falls.
+      const level = this.level.get(trunk.name) ?? 0
+      const x = this.phase.get(trunk.name) ?? 0
+      const tail = 1.5 + 2 * level
+      trunk.path.forEach((point, i) => {
+        const n = Math.floor((x - i) / 6)
+        const d = x - i - n * 6
+        if (hash(n, seedOf(trunk.name), 5) > 0.2 + 0.8 * level) return
+        if (d < tail) offer(point, d < 1, mix(RGB.chrome, RGB.accentBright, 1 - d / tail), 2)
+        if (d < 1) heads.push({ point, fg: RGB.accentBright })
+      })
+    }
+    const reviewer = model.roles.find(role => role.touches.length === 0 && role.reviews.length > 0)
+    const arrivals: number[] = []
+    for (const lane of column.lanes) {
+      if (roles.get(lane.name)?.state !== 'done') continue
+      // A landed branch: green light runs to the reviewer and leaves a heavy green line.
+      const front = this.since(lane.name, now) * SPEED
+      arrivals.push(this.since(lane.name, now) - lane.path.length / SPEED)
+      lane.path.forEach((point, i) => {
+        if (i > front) return offer(point, false, RGB.chrome, 0)
+        const d = front - i
+        offer(point, true, d < 3 ? mix(RGB.ok, RGB.bright, 1 - d / 3) : RGB.ok, d < 3 ? 3 : 1)
+        if (d < 1) heads.push({ point, fg: RGB.ok })
+      })
+      if (reviewer?.state !== 'working' || front < lane.path.length) continue
+      // The reviewer reading it: green packets along the line, at the reviewer's tokens/s.
+      const level = this.level.get(reviewer.name) ?? 0
+      const k = Math.floor((this.phase.get(reviewer.name) ?? 0) * 0.6)
+      lane.path.forEach((point, i) => {
+        const d = (((k - i) % 8) + 8) % 8
+        if (hash(Math.floor((k - i) / 8), 7, 5) > 0.2 + 0.8 * level) return
+        if (d < 2) offer(point, true, mix(RGB.ok, RGB.bright, 0.55 - d * 0.25), 2)
+        if (d === 0) heads.push({ point, fg: RGB.ok })
+      })
+    }
+    for (const { point, ch, fg } of offers.values()) Object.assign(at(point) ?? {}, { ch, fg })
+    // What joins a role to the ones it waits for lights up as the last of them finishes.
+    for (const link of column.links) {
+      if (!link.from.every(name => roles.get(name)?.state === 'done')) continue
+      const glow = decay(Math.min(...link.from.map(name => this.since(name, now))), 0.4) * 1.4
+      if (glow > 0) for (const point of link.cells) { const cell = at(point); if (cell !== undefined) cell.fg = mix(cell.fg ?? RGB.dim, RGB.ok, glow) }
+    }
+
     for (const box of column.boxes) {
       const role = roles.get(box.name)
-      if (role !== undefined) this.box(role, box, box.name === selected, seedOf(box.name), t, at, span, { shimmer, spark, spin })
+      const arrived = box.name === reviewer?.name ? arrivals.reduce((sum, age) => sum + decay(age, 0.4), 0) : 0
+      if (role !== undefined) this.box(role, box, box.name === selected, seedOf(box.name), t, arrived, at, span, { shimmer, spark, spin })
+    }
+
+    // The floor: faint dots under the FLOW, lit through :-=+ near moving light, and a ring rippling out from a box that just finished.
+    const rects = [column.orchestrator, ...column.boxes]
+    const waves = column.boxes.map(box => ({ box, age: this.since(box.name, now) })).filter(({ box, age }) => roles.get(box.name)?.state === 'done' && age < 1.6)
+    for (let row = 0; row < column.flow; row++) {
+      for (let col = 0; col < column.width; col++) {
+        const cell = at([row, col])
+        if (cell === undefined || cell.ch !== ' ' || cell.bg !== undefined || rects.some(rect => inside(row, col, rect))) continue
+        let level = 0
+        let fg = RGB.chrome
+        for (const head of heads) {
+          const v = 7 * 0.55 * Math.max(0, 1 - Math.hypot(col - head.point[1], (row - head.point[0]) * 2.1) / 4.2) ** 1.5
+          if (v > level) [level, fg] = [v, head.fg]
+        }
+        for (const { box, age } of waves) {
+          const v = 7 * (1 - age / 1.6) * Math.max(0, 1 - Math.abs(distance(row, col, box) - age * 24) / 2.4)
+          if (v > level) [level, fg] = [v, RGB.ok]
+        }
+        const q = Math.max(0, Math.min(7, Math.floor(level + (BAYER[row % 4]?.[col % 4] ?? 0) / 16 - 0.5)))
+        if (q > 0) Object.assign(cell, { ch: RAMP[q], fg: mix(PAPER, fg, 0.35 + q * 0.08) })
+        else if (col % 4 === 1 && row % 2 === 1) Object.assign(cell, { ch: '·', fg: mix(PAPER, RGB.chrome, 0.32) })
+      }
     }
 
     const detail = column.detail
@@ -173,20 +285,91 @@ export class Motion {
       }
     }
 
+    if (this.intro === undefined && column.boxes.length > 0) this.intro = { at: now, end: Infinity }
+    if (this.intro !== undefined && now < this.intro.end) this.dispatch(screen, column, (now - this.intro.at) / 1000, model)
+
     return screen
   }
+  /**
+   * The intro, once as the panel opens: the orchestrator draws itself, light runs down the trunk,
+   * each role's box draws itself where the light lands, the reviewer's lanes last. What has not
+   * arrived yet is hidden; the rest of the screen fades in.
+   */
+  private dispatch(screen: Screen, column: NonNullable<Scene['column']>, e: number, model: PanelModel) {
+    const when = new Map<string, number>()
+    const set = ([row, col]: Point, time: number) => {
+      const key = `${column.row + row},${column.col + col}`
+      if ((when.get(key) ?? Infinity) > time) when.set(key, time)
+    }
+    const draws = (rect: Rect, t0: number) => {
+      const ring = outline(rect)
+      ring.forEach((point, i) => set(point, t0 + (i / ring.length) * 0.35))
+      for (let row = rect.row + 1; row < rect.row + rect.height - 1; row++) for (let col = rect.col + 1; col < rect.col + rect.width - 1; col++) set([row, col], t0 + 0.3 + (col - rect.col) * 0.012)
+    }
+    draws(column.orchestrator, 0.15)
+    const times = new Map<string, number>()
+    for (const trunk of column.trunks) {
+      trunk.path.forEach((point, i) => set(point, 0.5 + i / 32))
+      times.set(trunk.name, 0.5 + trunk.path.length / 32)
+    }
+    const lanes = new Set(column.lanes.length > 0 ? model.roles.filter(role => role.touches.length === 0 && role.reviews.length > 0).map(role => role.name) : [])
+    for (const box of column.boxes.filter(one => !lanes.has(one.name))) {
+      if (!times.has(box.name)) {
+        const link = column.links.find(one => one.to === box.name)
+        // After the boxes it waits for, or after all so far when nothing joins it.
+        const time = Math.max(0.66, ...(link === undefined ? times.values() : link.from.map(name => times.get(name) ?? 0.66))) + 0.6
+        times.set(box.name, time)
+        link?.cells.forEach((point, i) => set(point, time - 0.15 + i * 0.02))
+      }
+      draws(box, times.get(box.name) ?? 0)
+    }
+    const start = Math.max(0.66, ...times.values()) + 0.25
+    for (const lane of column.lanes) lane.path.forEach((point, i) => set(point, start + i / 32))
+    for (const box of column.boxes.filter(one => lanes.has(one.name))) draws(box, start + Math.max(0, ...column.lanes.map(lane => lane.path.length)) / 32)
+    const last = Math.max(...when.values()) + 0.2
+    const intro = this.intro
+    if (intro !== undefined && intro.end === Infinity) intro.end = intro.at + (last + 0.55) * 1000
+    const arrive = (cell: Cell, at: number) => {
+      if (e < at) Object.assign(cell, { ch: cell.ch === '' ? '' : ' ', fg: undefined, bg: undefined, bold: undefined })
+      else {
+        if (e - at < 0.06) cell.ch = HEAVY[cell.ch] ?? cell.ch
+        cell.fg = mix(cell.fg ?? TEXT, RGB.bright, decay(e - at, 0.12))
+      }
+    }
+    for (let row = 0; row < screen.height; row++) {
+      for (let col = 0; col < screen.width; col++) {
+        const cell = screen.at(row, col)
+        if (cell === undefined) continue
+        const flow = row - column.row
+        const at = when.get(`${row},${col}`)
+        if (at !== undefined) arrive(cell, at)
+        else if (flow >= 0 && flow < column.flow && row >= column.top && row < column.bottom && col >= column.col) arrive(cell, last + hash(row, col) * 0.4)
+        else if (e < 0.35) {
+          cell.fg = mix(PAPER, cell.fg ?? TEXT, e / 0.35)
+          if (cell.bg !== undefined) cell.bg = mix(PAPER, cell.bg, e / 0.35)
+        }
+      }
+    }
+  }
   /** A role's box: its border breathes and flashes, its corners round, its state is a pill, its third row a sparkline. */
-  private box(role: RoleView, box: Rect, selected: boolean, seed: number, t: number, at: (point: Point) => Cell | undefined, span: (row: number, col: number, width: number) => (Cell | undefined)[], fx: { shimmer: (cells: (Cell | undefined)[], seed: number) => void; spark: (cells: (Cell | undefined)[], name: string) => void; spin: (name: string) => string }) {
+  private box(role: RoleView, box: Rect, selected: boolean, seed: number, t: number, arrived: number, at: (point: Point) => Cell | undefined, span: (row: number, col: number, width: number) => (Cell | undefined)[], fx: { shimmer: (cells: (Cell | undefined)[], seed: number) => void; spark: (cells: (Cell | undefined)[], name: string) => void; spin: (name: string) => string }) {
     const look = LOOK[role.state]
     const tone = RGB[look.tone]
     const moving = role.state === 'working' || role.state === 'waits'
     let border = selected || role.state !== 'planned' ? tone : RGB.chrome
     if (moving) border = mix(mix(tone, PAPER, 0.6), tone, breath(t, role.state === 'waits' ? 1.4 : 2.8, seed))
-    border = mix(border, RGB.bright, this.flash(role.name, t * 1000))
-    for (const point of outline(box)) {
+    const flash = this.flash(role.name, t * 1000) + arrived
+    border = mix(border, RGB.bright, flash)
+    const ring = outline(box)
+    ring.forEach((point, p) => {
       const cell = at(point)
-      if (cell !== undefined) Object.assign(cell, { ch: selected ? cell.ch : ROUND[cell.ch] ?? cell.ch, fg: border })
-    }
+      if (cell === undefined) return
+      // The selected box's double line can carry a turning gradient instead.
+      const u = ((p / ring.length + t * 0.18) % 1) * (GRADIENT.length - 1)
+      const i = Math.floor(u)
+      const fg = selected && this.gradient ? mix(mix(GRADIENT[i] ?? RGB.accent, GRADIENT[i + 1] ?? RGB.accent, u - i), RGB.bright, flash) : border
+      Object.assign(cell, { ch: selected ? cell.ch : ROUND[cell.ch] ?? cell.ch, fg })
+    })
     const { row, col, width } = box
     if (role.state === 'working') {
       Object.assign(at([row + 1, col + 2]) ?? {}, { ch: fx.spin(role.name) })
@@ -221,6 +404,8 @@ export class Motion {
   moving(now: number): boolean {
     const model = this.model
     if (model === undefined) return false
+    if ((this.intro !== undefined && now < this.intro.end) || this.gradient) return true
+
     return model.gate !== undefined || (now - this.fresh.at) / 1000 < 4 || model.roles.some(role => role.state === 'working' || role.state === 'waits' || this.since(role.name, now) < 3)
   }
 }

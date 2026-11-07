@@ -80,7 +80,7 @@ export const panel = async (r: Runtime, options: PanelOptions, terminal: Termina
     let clear = true
     let stale = false
     let jobs = 0
-    const motion = options.plain || options.noAnim || !!r.env.NO_COLOR ? undefined : new Motion()
+    const motion = options.plain || options.noAnim || !!r.env.NO_COLOR ? undefined : new Motion({ gradient: r.env.TROUPE_PANEL_GRADIENT === '1' })
     if (motion !== undefined && 'model' in reading) motion.observe(reading.model, r.now())
     let queue = Promise.resolve()
     const finish = (code = 0, out = '') => {
