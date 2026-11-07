@@ -15,7 +15,36 @@ export const TABS = ['MISSION', 'ROLES', 'PLAN', 'LOG', 'DIFF'] as const
 export type Ui = { tab: number; selected: string; input?: { label: string; text: string }; scroll?: number; message?: string; help?: boolean; full?: boolean }
 export type Target = { kind: 'role'; name: string } | { kind: 'tab'; tab: number } | { kind: 'key'; key: string; role?: string }
 export type Hit = { row: number; col: number; width: number; height: number; target: Target }
-export type Drawn = { lines: Line[]; hits: Hit[]; maxScroll: number }
+export type Point = [row: number, col: number]
+export type Rect = { row: number; col: number; width: number; height: number }
+/**
+ * Where the drawn parts sit, for the live panel's effects; the lines never depend on it.
+ * The MISSION tab's right column scrolls: its row r is on screen row `row + r`, shown when
+ * `top <= row + r < bottom`, and its column c at `col + c`.
+ */
+export type Scene = {
+  column?: {
+    row: number; col: number; top: number; bottom: number; width: number
+    /** Rows of the FLOW; the detail starts below it. */
+    flow: number
+    orchestrator: Rect
+    boxes: (Rect & { name: string })[]
+    /** From the orchestrator to each role that starts at once, the arrow last. */
+    trunks: { name: string; path: Point[] }[]
+    /** From a role's box to the reviewer's arrow. */
+    lanes: { name: string; path: Point[] }[]
+    /** What joins a role to the ones it waits for. */
+    links: { from: string[]; to: string; cells: Point[] }[]
+    detail?: { name: string; row: number; spare: number; window?: { row: number; rows: number } }
+  }
+  /** Each role's glyph in the left column, on screen. */
+  list: { name: string; row: number; col: number }[]
+  activity?: { row: number; col: number; width: number; text: string }
+  /** Rows of the waiting roles' lines, each starting with `▌`. */
+  waits: number[]
+  gate?: Point
+}
+export type Drawn = { lines: Line[]; hits: Hit[]; maxScroll: number; scene?: Scene }
 
 const LEFT = 27
 const BOX = 26
@@ -60,7 +89,7 @@ const shareOf = (role: RoleView): number | undefined => {
 }
 
 /** `62%`, or `—` while it cannot be read. */
-const contextOf = (role: RoleView) => {
+export const contextOf = (role: RoleView) => {
   const share = shareOf(role)
 
   return share === undefined ? '—' : `${Math.round(share * 100)}%`
@@ -77,7 +106,7 @@ const contextBar = (role: RoleView, cells: number): Line => {
 }
 
 /** 1234 → 1.2k, 1234567 → 1.2M. */
-const count = (n: number) => (n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : n >= 1e3 ? `${(n / 1e3).toFixed(n >= 1e4 ? 0 : 1)}k` : String(n))
+export const count = (n: number) => (n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : n >= 1e3 ? `${(n / 1e3).toFixed(n >= 1e4 ? 0 : 1)}k` : String(n))
 
 const tokensOf = (role: RoleView) => (role.tokens === undefined ? '—' : `${count(role.tokens.input)} in · ${count(role.tokens.output)} out`)
 
@@ -292,7 +321,8 @@ const askGate = (ask: string, inner: number): { lines: Line[]; buttons: number }
  * reviews by an edge that lights once that role is done; without room for the
  * lane it sits below with a line saying so.
  */
-const flow = (m: PanelModel, ui: Ui, width: number): { canvas: Canvas; boxes: { name: string; row: number; col: number; width: number; height: number }[] } => {
+type Flow = { canvas: Canvas } & Pick<NonNullable<Scene['column']>, 'orchestrator' | 'boxes' | 'trunks' | 'lanes' | 'links'>
+const flow = (m: PanelModel, ui: Ui, width: number): Flow => {
   const reviewers = m.roles.filter(role => role.touches.length === 0 && role.reviews.length > 0)
   const builders = m.roles.filter(role => !reviewers.includes(role))
   const known = new Set(builders.map(role => role.name))
@@ -305,7 +335,10 @@ const flow = (m: PanelModel, ui: Ui, width: number): { canvas: Canvas; boxes: { 
   const side = reviewers.length === 1 && order.length > 0 && width >= INDENT + box + 6 + lane
   const below = side ? [] : reviewers
   const canvas = new Canvas(width, 3 + order.length * (HEIGHT + 2) + below.length * (HEIGHT + 4))
-  const boxes: { name: string; row: number; col: number; width: number; height: number }[] = []
+  const boxes: Flow['boxes'] = []
+  const trunks: Flow['trunks'] = []
+  const lanes: Flow['lanes'] = []
+  const links: Flow['links'] = []
   const roleBox = (role: RoleView, row: number, col: number, w: number, note = '') => {
     const look = LOOK[role.state]
     const selected = role.name === ui.selected
@@ -335,13 +368,22 @@ const flow = (m: PanelModel, ui: Ui, width: number): { canvas: Canvas; boxes: { 
       const center = INDENT + Math.floor(box / 2)
       canvas.put(row - 2, center, '│', { tone: 'chrome' })
       canvas.put(row - 1, center, '▼', { tone: 'chrome' })
-    } else canvas.put(row - 1, INDENT + 2, fit(`after ${role.dependsOn.join(', ')}`, box - 2), { tone: 'dim' })
+      links.push({ from: [order[index - 1]?.name ?? ''], to: role.name, cells: [[row - 2, center], [row - 1, center]] })
+    } else {
+      const label = fit(`after ${role.dependsOn.join(', ')}`, box - 2)
+      canvas.put(row - 1, INDENT + 2, label, { tone: 'dim' })
+      links.push({ from: role.dependsOn, to: role.name, cells: Array.from({ length: cellsOf(label.trimEnd()) }, (_, i) => [row - 1, INDENT + 2 + i] as Point) })
+    }
   })
   // The trunk: from under the orchestrator down to the last role that starts at once.
   if (roots.length > 0) {
     wire(canvas, 2, 2, '┬')
     for (let row = 3; row < Math.max(...roots); row += 1) wire(canvas, row, 2, '│')
     for (const row of roots) wire(canvas, row, 2, `${row === Math.max(...roots) ? '└' : '├'}─`), canvas.put(row, INDENT - 1, '▶', { tone: 'chrome' })
+    order.forEach(role => {
+      const at = mids.get(role.name) ?? 0
+      if (roots.includes(at)) trunks.push({ name: role.name, path: [...Array.from({ length: at - 2 }, (_, i) => [2 + i, 2] as Point), [at, 2], [at, 3], [at, INDENT - 1]] })
+    })
   }
 
   const reviewer = reviewers[0]
@@ -361,13 +403,19 @@ const flow = (m: PanelModel, ui: Ui, width: number): { canvas: Canvas; boxes: { 
       if (at !== mid) wire(canvas, mid, spine, at < mid ? '└' : '┌', tone)
       wire(canvas, mid, spine + 1, '──', tone)
       canvas.put(mid, spine + 3, '▶', { tone })
+      const step = at < mid ? 1 : -1
+      lanes.push({ name: one.name, path: [
+        ...Array.from({ length: spine - INDENT - box + 1 }, (_, i) => [at, INDENT + box + i] as Point),
+        ...Array.from({ length: Math.max(0, Math.abs(mid - at) - 1) }, (_, i) => [at + step * (i + 1), spine] as Point),
+        ...(at === mid ? [] : [[mid, spine] as Point]), [mid, spine + 1], [mid, spine + 2], [mid, spine + 3],
+      ] })
     }
     roleBox(reviewer, Math.max(0, mid - 2), spine + 4, Math.min(lane, width - spine - 4))
   }
   let row = 3 + order.length * (HEIGHT + 2)
   for (const role of below) row = roleBox(role, row, INDENT, box, `reviews ${role.reviews.join(', ')} as each lands`) + 1
 
-  return { canvas, boxes }
+  return { canvas, orchestrator: { row: 0, col: 0, width: Math.min(BOX, width), height: 3 }, boxes, trunks, lanes, links }
 }
 
 /** Three rows from the parents' centres down to the children's: a stem, a bus with its joints, arrows. */
@@ -403,7 +451,7 @@ const wire = (canvas: Canvas, row: number, col: number, text: string, tone: Tone
 }
 
 /** The selected role's detail: goal, agent and flags, branch and commits, touches, diff, result; then its window's last lines, live. */
-const detail = (role: RoleView, width: number, room: number): { lines: Line[]; keys: number } => {
+const detail = (role: RoleView, width: number, room: number): { lines: Line[]; keys: number; spare: number; window?: { row: number; rows: number } } => {
   const look = LOOK[role.state]
   const lines: Line[] = [[{ text: '─ ', tone: 'chrome' }, { text: `${look.glyph} ${role.name} · ${look.text}`, tone: look.tone }, { text: ` ${'─'.repeat(Math.max(0, width - role.name.length - look.text.length - 8))}`, tone: 'chrome' }]]
   const field = (name: string, text: string, tone?: Tone) =>
@@ -422,7 +470,9 @@ const detail = (role: RoleView, width: number, room: number): { lines: Line[]; k
     else field('diff', `${files} · outside touches: ${role.work.outside.join(' ')}`, 'error')
   }
   if (role.result !== undefined) field('result', `${role.result.status || '?'} · ${role.result.summary}`, role.result.status === 'done' ? 'ok' : 'warn')
+  const spare = lines.length
   lines.push([])
+  let window: { row: number; rows: number } | undefined
   if (role.state === 'planned') lines.push([{ text: ` not opened yet · ${startOf(role)}`, tone: 'dim' }])
   else {
     // The live screen takes the rows left, less the key line.
@@ -430,6 +480,7 @@ const detail = (role: RoleView, width: number, room: number): { lines: Line[]; k
     const title = ' its window, live '
     lines.push([{ text: `┌─${title}${'─'.repeat(Math.max(0, width - title.length - 3))}┐`, tone: 'chrome' }])
     const shown = role.screen.length === 0 ? [''] : role.screen.slice(-inner)
+    window = { row: lines.length - 1, rows: shown.length }
     for (const one of shown) lines.push([{ text: '│ ', tone: 'chrome' }, { text: fit(one, width - 4) }, { text: ' │', tone: 'chrome' }])
     lines.push([{ text: `└${'─'.repeat(width - 2)}┘`, tone: 'chrome' }])
   }
@@ -437,7 +488,7 @@ const detail = (role: RoleView, width: number, room: number): { lines: Line[]; k
   const waits = role.state === 'waits'
   lines.push([{ text: ' o Open window    ' }, { text: 's Send…', tone: waits ? 'dim' : undefined }, { text: '    d Diff' }, ...(waits ? [{ text: '    answer it first', tone: 'dim' as const }] : [])])
 
-  return { lines, keys }
+  return { lines, keys, spare, ...(window && { window }) }
 }
 
 // ---- the screen ----------------------------------------------------------------
@@ -450,6 +501,7 @@ export const draw = (m: PanelModel, ui: Ui, width: number, height: number): Draw
   }
   const waiting = m.roles.filter(role => role.state === 'waits')
   const needs = waiting.length + (m.gate === undefined ? 0 : 1)
+  const scene: Scene = { list: [], waits: [] }
 
   // Title bar, tabs, goal, rule.
   const right = `${needs > 0 ? `◆ ${needs} needs you  ·  ` : ''}${m.clock}`
@@ -481,6 +533,7 @@ export const draw = (m: PanelModel, ui: Ui, width: number, height: number): Draw
     c.box(row, 0, width, size, 'warn')
     const cue = maxScroll > 0 ? ` ${from + 1}-${Math.min(from + room, lines.length)}/${lines.length} · PgUp/PgDn/wheel ` : ''
     c.put(row, 1, cue ? fit(`─${title}`, width - 2 - cue.length) : `─${title}`, { tone: 'warn', bold: true })
+    scene.gate = [row, 3]
     if (cue) c.put(row, width - cue.length - 1, cue, { tone: 'warn' })
     lines.slice(from, from + room).forEach((line, index) => c.runs(row + 1 + index, 2, line))
     if (buttons >= from && buttons < from + room) {
@@ -493,6 +546,7 @@ export const draw = (m: PanelModel, ui: Ui, width: number, height: number): Draw
   if (m.gate !== undefined && ui.tab !== 1) {
     const label = `◆ ${m.gate.label} · `
     c.put(row, 1, fit(`${label}a Approve · c Change · v Plan`, width - 2), { tone: 'warn' })
+    scene.gate = [row, 1]
     for (const [offset, size, key] of [[0, 9, 'a'], [12, 8, 'c'], [23, 6, 'v']] as const) {
       const col = 1 + label.length + offset
       if (col + size < width) hit(row, col, size, 1, { kind: 'key', key })
@@ -504,6 +558,7 @@ export const draw = (m: PanelModel, ui: Ui, width: number, height: number): Draw
     c.put(row, 0, spread(`▌ ◆ ${fit(role.name, 7)}waits on you${role.waitsOn ? ` · ${role.waitsOn}` : ''}`, 'o Open window', width - 1), { tone: 'warn' })
     hit(row, 0, width, 1, { kind: 'role', name: role.name })
     hit(row, width - 14, 13, 1, { kind: 'key', key: 'o', role: role.name })
+    scene.waits.push(row)
     row += 1
   }
   row += 1
@@ -515,7 +570,7 @@ export const draw = (m: PanelModel, ui: Ui, width: number, height: number): Draw
   const keys = m.gate !== undefined ? ' a  approve   c  change   v  plan   ↑↓  role   1-5  tabs   ?  help' : ' ↑↓  role   ⏎  detail   o  open   s  send   d  diff   1-5  tabs   ?  help'
   c.put(height - 1, 0, fit(keys, width), { tone: 'dim' })
 
-  if (row < bottom) maxScroll = ui.tab === 1 ? mission(c, m, ui, row, bottom, hit) : other(c, m, ui, row, bottom, hit)
+  if (row < bottom) maxScroll = ui.tab === 1 ? mission(c, m, ui, row, bottom, hit, scene) : other(c, m, ui, row, bottom, hit)
   if (ui.help) {
     const lines = ['↑↓ / j k  select role     Enter  detail', '1-5 / Tab  tabs           o  open role pane', 's  send to role           d  diff    v  plan', 'PgUp/PgDn / wheel  scroll content', 'a  approve gate           c  type a change', 'Enter  submit input       Esc  cancel input', '? / Esc  close help       q / Ctrl-C  quit']
     const w = Math.min(60, width - 4)
@@ -528,11 +583,11 @@ export const draw = (m: PanelModel, ui: Ui, width: number, height: number): Draw
     hits.length = 0
   }
 
-  return { lines: c.lines(), hits, maxScroll }
+  return { lines: c.lines(), hits, maxScroll, ...(!ui.help && { scene }) }
 }
 
 /** The MISSION tab: the left column, then FLOW and the detail on the right. */
-const mission = (c: Canvas, m: PanelModel, ui: Ui, top: number, bottom: number, hit: (row: number, col: number, w: number, h: number, target: Target) => void): number => {
+const mission = (c: Canvas, m: PanelModel, ui: Ui, top: number, bottom: number, hit: (row: number, col: number, w: number, h: number, target: Target) => void, scene: Scene): number => {
   const left: { line: Line; role?: string }[] = [{ line: rule('ROLES', LEFT - 1) }]
   const groups = [...new Set(m.roles.map(role => role.group))]
   for (const group of groups) {
@@ -559,10 +614,16 @@ const mission = (c: Canvas, m: PanelModel, ui: Ui, top: number, bottom: number, 
   }
   left.push({ line: [] }, { line: rule('ACTIVITY', LEFT - 1) })
   for (const one of m.activity) left.push({ line: [{ text: ` ${one.at} `, tone: 'dim' }, { text: fit(one.text, LEFT - 8) }] })
+  const activity = left.length - m.activity.length
   left.slice(0, bottom - top).forEach((one, index) => {
     c.runs(top + index, 0, one.line)
-    if (one.role !== undefined) hit(top + index, 0, LEFT, 1, { kind: 'role', name: one.role })
+    if (one.role !== undefined) {
+      hit(top + index, 0, LEFT, 1, { kind: 'role', name: one.role })
+      scene.list.push({ name: one.role, row: top + index, col: 4 })
+    }
   })
+  const newest = m.activity[0]
+  if (newest !== undefined && activity < bottom - top) scene.activity = { row: top + activity, col: 7, width: LEFT - 8, text: `${newest.at} ${newest.text}` }
   for (let row = top; row < bottom; row += 1) c.put(row, LEFT, '│', { tone: 'chrome' })
 
   const col = LEFT + 2
@@ -581,6 +642,11 @@ const mission = (c: Canvas, m: PanelModel, ui: Ui, top: number, bottom: number, 
   column.slice(from, from + view).forEach((line, index) => c.runs(top + 1 + index, col, line))
   const visible = (row: number, height = 1) => row >= from && row + height <= from + view
   for (const box of drawn.boxes) if (visible(box.row, box.height)) hit(top + 1 + box.row - from, col + box.col, box.width, box.height, { kind: 'role', name: box.name })
+  const { canvas: _, ...parts } = drawn
+  scene.column = {
+    row: top + 1 - from, col, top: top + 1, bottom: top + 1 + view, width, flow: flowLines.length, ...parts,
+    ...(selected !== undefined && shown !== undefined && { detail: { name: selected.name, row: flowLines.length + 1, spare: flowLines.length + 1 + shown.spare, ...(shown.window && { window: { row: flowLines.length + 1 + shown.window.row, rows: shown.window.rows } }) } }),
+  }
   if (shown !== undefined) {
     const keys = flowLines.length + 1 + shown.keys
     if (visible(keys)) {

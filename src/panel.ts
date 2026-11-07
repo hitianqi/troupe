@@ -1,10 +1,11 @@
 import { StringDecoder } from 'node:string_decoder'
 
-import { fit, paint, textOf } from './canvas.ts'
+import { cellsOf, fit, paint, textOf } from './canvas.ts'
 import type { Line } from './canvas.ts'
 import type { Reply, Runtime } from './command-context.ts'
 import { draw } from './draw.ts'
 import type { Drawn } from './draw.ts'
+import { Motion } from './motion.ts'
 import { deliverNotices } from './notices.ts'
 import { flushAnswers } from './orchestrator.ts'
 import { panelEffect } from './panel-actions.ts'
@@ -12,8 +13,9 @@ import { initialUi, parseInput, transition } from './panel-input.ts'
 import type { Input, PanelUi } from './panel-input.ts'
 import { readPanel } from './panel-model.ts'
 import type { Reading } from './panel-model.ts'
+import { diff, full, Screen } from './screen.ts'
 
-export type PanelOptions = { mission: string; once?: boolean; plain?: boolean; width?: number; height?: number }
+export type PanelOptions = { mission: string; once?: boolean; plain?: boolean; width?: number; height?: number; noAnim?: boolean }
 export type Terminal = {
   input: Pick<NodeJS.ReadStream, 'on' | 'off' | 'resume' | 'pause' | 'readableFlowing' | 'setRawMode' | 'isRaw'>
   output: Pick<NodeJS.WriteStream, 'on' | 'off' | 'columns' | 'rows'>
@@ -37,7 +39,9 @@ const lineOf = (line: Line, plain: boolean): string => {
 }
 
 /** Every row is addressed and cleared before writing; no newline can scroll it. */
-export const terminalFrame = (drawn: Drawn, plain = false): string => '\x1b[?25l\x1b[?7l\x1b[H\x1b[2J' + drawn.lines.map((line, index) => `\x1b[${index + 1};1H\x1b[2K${lineOf(line, plain)}`).join('')
+export const terminalFrame = (drawn: Drawn, plain = false): string => full(Screen.of(drawn.lines, Math.max(0, ...drawn.lines.map(line => cellsOf(textOf(line)))), drawn.lines.length, plain))
+/** 25 frames a second while something moves. */
+const FRAME = 40
 
 export const panel = async (r: Runtime, options: PanelOptions, terminal: Terminal = { input: process.stdin, output: process.stdout }): Promise<Reply> => {
   const { input, output } = terminal
@@ -62,6 +66,7 @@ export const panel = async (r: Runtime, options: PanelOptions, terminal: Termina
     const wasRaw = !!input.isRaw
     const wasFlowing = input.readableFlowing === true
     let timer: ReturnType<typeof setInterval> | undefined
+    let tick: ReturnType<typeof setTimeout> | undefined
     let escape: ReturnType<typeof setTimeout> | undefined
     let pending = ''
     let finished = false
@@ -69,11 +74,20 @@ export const panel = async (r: Runtime, options: PanelOptions, terminal: Termina
     let entered = false
     let messageUntil = 0
     let frame: Drawn = { lines: [], hits: [], maxScroll: 0 }
+    // The drawn frame before effects, what the terminal shows now, and whether the next write starts from a clear screen.
+    let base: Screen | undefined
+    let shown: Screen | undefined
+    let clear = true
+    let stale = false
+    let jobs = 0
+    const motion = options.plain || options.noAnim || !!r.env.NO_COLOR ? undefined : new Motion({ gradient: r.env.TROUPE_PANEL_GRADIENT === '1' })
+    if (motion !== undefined && 'model' in reading) motion.observe(reading.model, r.now())
     let queue = Promise.resolve()
     const finish = (code = 0, out = '') => {
       if (finished) return
       finished = true
       clearInterval(timer)
+      clearTimeout(tick)
       clearTimeout(escape)
       input.off('data', onData).off('end', onEnd).off('close', onEnd).off('error', onError)
       output.off('resize', onResize).off('close', onEnd).off('error', onError)
@@ -94,7 +108,23 @@ export const panel = async (r: Runtime, options: PanelOptions, terminal: Termina
       const { width, height } = dimensions()
       frame = frameOf(reading, ui, width, height)
       ui = { ...ui, scroll: Math.max(0, Math.min(frame.maxScroll, ui.scroll ?? 0)) }
-      r.write(terminalFrame(frame, !!options.plain))
+      base = Screen.of(frame.lines, width, height, !!options.plain)
+      stale = true
+      // Input that arrives together is one frame, written once the queue drains.
+      if (jobs === 0) render()
+    }
+    /** One synchronized write: the whole screen after a clear, else only the cells that changed. */
+    const render = () => {
+      clearTimeout(tick)
+      if (finished || base === undefined) return
+      const now = r.now()
+      const next = motion === undefined ? base : motion.decorate(base, frame, ui.selected, now)
+      const out = clear || shown === undefined || shown.width !== next.width || shown.height !== next.height ? full(next) : diff(shown, next)
+      clear = false
+      stale = false
+      shown = next
+      if (out !== '') r.write(`\x1b[?2026h${out}\x1b[?2026l`)
+      if (motion?.moving(now)) tick = setTimeout(render, FRAME)
     }
     const refresh = () => {
       reading = readPanel(r, options.mission)
@@ -108,11 +138,16 @@ export const panel = async (r: Runtime, options: PanelOptions, terminal: Termina
         missionName = nextMission
       }
       if ('mission' in reading) { flushAnswers(r, reading.mission); deliverNotices(r, reading.mission) }
+      if ('model' in reading) motion?.observe(reading.model, r.now())
       normalize()
       paintFrame()
     }
     const enqueue = (job: () => Promise<void> | void) => {
-      queue = queue.then(async () => { if (!finished) await job() }).catch(error => finish(1, `${(error as Error).message}\n`))
+      jobs += 1
+      queue = queue.then(async () => { if (!finished) await job() }).catch(error => finish(1, `${(error as Error).message}\n`)).finally(() => {
+        jobs -= 1
+        if (jobs === 0 && stale) render()
+      })
     }
     const dispatchInput = (actions: Input[]) => {
       // Bind a packet's clicks and approvals to the frame the person saw.
@@ -145,10 +180,11 @@ export const panel = async (r: Runtime, options: PanelOptions, terminal: Termina
       clearTimeout(escape)
       const parsed = parseInput(pending + (typeof chunk === 'string' ? chunk : decoder.write(chunk)))
       pending = parsed.rest
-      dispatchInput(parsed.actions)
+      for (const action of parsed.actions) if (action.kind === 'colour') motion?.colour(action.which, action.rgb)
+      dispatchInput(parsed.actions.filter(action => action.kind !== 'colour'))
       if (pending === '\x1b') escape = setTimeout(() => { pending = ''; dispatchInput([{ kind: 'key', key: 'escape' }]) }, 40)
     }
-    const onResize = () => enqueue(paintFrame)
+    const onResize = () => enqueue(() => { clear = true; paintFrame() })
     const onEnd = () => finish()
     const onError = (error: Error) => finish(1, `${error.message}\n`)
     try {
@@ -158,7 +194,8 @@ export const panel = async (r: Runtime, options: PanelOptions, terminal: Termina
       input.setRawMode(true)
       raw = true
       entered = true
-      r.write(ENTER_PANEL)
+      // Asking the terminal its colours lets effects fade towards its own paper; the answer arrives as input.
+      r.write(motion === undefined ? ENTER_PANEL : `${ENTER_PANEL}\x1b]10;?\x1b\\\x1b]11;?\x1b\\`)
       paintFrame()
       timer = setInterval(() => enqueue(refresh), 2000)
       input.resume()

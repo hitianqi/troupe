@@ -39,7 +39,7 @@ const usage = () =>
     '  gate <id> ["question"] [--no-wait] · stage <id>',
     '  dispatch <role> · send <role> <text…> (or stdin)',
     '  status [--json] [--watch] · close <role> | --all',
-    '  panel [--once] [--plain] [--width N --height N]',
+    '  panel [--once] [--plain] [--no-anim] [--width N --height N]',
     '  wait (--role <r> [--ready] | --gate <id>) [--timeout <seconds>]',
     '  teardown [--force] (finished missions require -m)',
     '  -v, --version  print the version',
