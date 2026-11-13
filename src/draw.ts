@@ -320,14 +320,32 @@ const planFull = (m: PanelModel, width: number): { lines: Line[]; heads: Head[] 
 const checksOf = (m: PanelModel): Run =>
   m.problems.length === 0 ? { text: t('checks clean'), tone: 'ok' } : { text: plural(m.problems.length, '{0} problem', '{0} problems'), tone: 'error' }
 
-/** When the reviewer passed every branch it reviews: its result says PASS and they are all done. */
-const passedAt = (m: PanelModel): string | undefined => {
+/**
+ * When each done-when criterion passed (HH:MM, '' with no time), undefined
+ * while it has not: the first of the reviewer's PASS results whose
+ * `done_when` lists it. A reviewer that lists none passes them all at once,
+ * at its PASS once every branch it reviews is done.
+ */
+const passedAt = (m: PanelModel): (string | undefined)[] => {
+  const none = m.doneWhen.map(() => undefined)
   const reviewer = m.roles.find(role => role.touches.length === 0 && role.reviews.length > 0)
-  const result = reviewer?.result
-  if (reviewer === undefined || result?.status !== 'done' || !/^PASS\b/i.test(result.summary)) return undefined
-  if (!reviewer.reviews.every(name => m.roles.find(role => role.name === name)?.state === 'done')) return undefined
+  if (reviewer === undefined) return none
+  const passes = [...reviewer.earlier ?? [], ...(reviewer.result ? [reviewer.result] : [])].filter(one => one.status === 'done' && /^PASS\b/i.test(one.summary))
+  const when = (at: string | undefined) => (at === undefined ? '' : clockOf(at))
+  if (passes.some(one => one.doneWhen !== undefined)) return m.doneWhen.map((_, i) => passes.find(one => one.doneWhen?.includes(i + 1))).map(one => (one === undefined ? undefined : when(one.at)))
+  const result = reviewer.result
+  if (result === undefined || !passes.includes(result) || !reviewer.reviews.every(name => m.roles.find(role => role.name === name)?.state === 'done')) return none
 
-  return result.at === undefined ? '' : clockOf(result.at)
+  return m.doneWhen.map(() => when(result.at))
+}
+
+/** What an unpassed criterion waits on once roles are out: the builders not done yet, else the review. */
+const waitsFor = (m: PanelModel): string => {
+  if (!m.roles.some(role => role.dispatchedAt !== undefined)) return ''
+  const reviewer = m.roles.find(role => role.touches.length === 0 && role.reviews.length > 0)
+  const open = m.roles.filter(role => role !== reviewer && role.state !== 'done').map(role => role.name)
+
+  return open.length > 0 ? open.join(', ') : reviewer?.name ?? ''
 }
 
 /**
@@ -423,12 +441,14 @@ const planSummary = (m: PanelModel, width: number, tone: Tone, page: boolean): {
   field('Goal', [{ text: m.goal || m.title, tone: 'bright' }])
   if (m.why !== '') field('Why', inline(m.why))
   if (m.doneWhen.length > 0) head('Done when')
-  // Each criterion as a box, ticked once the reviewer passed the mission.
+  // Each criterion as a box, ticked as the reviewer passes it; the others say what they wait on.
   const passed = passedAt(m)
-  for (const one of m.doneWhen) {
-    const runs = [...inline(one, passed !== undefined), ...(passed === undefined ? [] : [{ text: `  ✓ PASS${passed ? ` ${passed}` : ''}`, tone: 'ok' as const }])]
-    lines.push(...reflow(runs, width, { text: passed === undefined ? '  ☐  ' : '  ☒  ', tone: passed === undefined ? 'dim' : 'ok' }, '     '))
-  }
+  const waits = waitsFor(m)
+  m.doneWhen.forEach((one, i) => {
+    const at = passed[i]
+    const tag: Run[] = at !== undefined ? [{ text: `  ✓ PASS${at ? ` ${at}` : ''}`, tone: 'ok' }] : waits ? [{ text: `  ${t('waits on {0}', waits)}`, tone: 'dim' }] : []
+    lines.push(...reflow([...inline(one, at !== undefined), ...tag], width, { text: at === undefined ? '  ☐  ' : '  ☒  ', tone: at === undefined ? 'dim' : 'ok' }, '     '))
+  })
   head('Roles')
   const shape = shapeOf(m, width)
   if (shape.length > 0) lines.push(...shape, [])

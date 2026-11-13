@@ -503,6 +503,14 @@ test('PLAN: done-when boxes tick at the reviewer\'s PASS once every branch it re
   assert.match(plain(draw(ticked, { tab: 3, selected: 'api' }, 110, 40)).join('\n'), /☒ {2}A reused token revokes every token of its family {2}✓ PASS 12:31/)
   const early = model(APPROVED, new Map([['api', done], ['store', done], ['review', pass]]))
   assert.ok(!plain(draw(early, { tab: 3, selected: 'api' }, 110, 40)).join('\n').includes('☒'), 'web has not landed yet')
+  // With done_when, each criterion ticks at the first PASS that lists it; a FAIL ticks none; the rest wait.
+  const first = { status: 'done', summary: 'PASS', body: '', at: '2026-10-24T12:10:00.000Z', doneWhen: [2] }
+  const failed = { status: 'done', summary: 'FAIL: 1 act-on', body: '', at: '2026-10-24T12:20:00.000Z', doneWhen: [1] }
+  const partway = model(APPROVED, new Map([['api', done], ['web', { state: 'working' }], ['review', { state: 'working', earlier: [first], result: failed }]]))
+  const page = plain(draw(partway, { tab: 3, selected: 'api' }, 160, 40)).join('\n')
+  assert.equal(page.match(/☒/g)?.length, 1)
+  assert.match(page, /☒ {2}A reused token revokes every token of its family {2}✓ PASS 12:10/)
+  assert.equal(page.match(/☐ .* waits on store, web/g)?.length, 2, page)
   const drawn = draw(ticked, { tab: 3, selected: 'api' }, 110, 20)
   const roles = drawn.hits.find(hit => hit.target.kind === 'scroll' && plain(drawn)[hit.row].includes('Roles'))
   const jumped = transition({ tab: 3, selected: 'api' }, { kind: 'click', row: roles.row, col: 3 }, ticked, drawn.hits, 20, drawn.maxScroll).ui

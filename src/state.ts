@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto'
-import { existsSync, readFileSync, statSync } from 'node:fs'
+import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 
 import type { Screen } from './agents.ts'
@@ -27,7 +27,8 @@ export const planHash = (plan: string | Uint8Array, texts: { ref: string; bytes:
 /** The file a role writes in its worktree when it stops: front matter `status` and `summary`, then free text. */
 export const RESULT_FILE = '.troupe/result.md'
 export type ResultStatus = 'done' | 'blocked' | 'failed'
-export type Result = { status: ResultStatus | ''; summary: string; body: string; problem?: string; at?: string }
+/** `doneWhen`: a reviewer's `done_when`, the plan's done-when criteria (from 1) this review found met. */
+export type Result = { status: ResultStatus | ''; summary: string; body: string; problem?: string; at?: string; doneWhen?: number[] }
 const STATUSES: string[] = ['done', 'blocked', 'failed']
 
 export const resultOf = (text: string): Result => {
@@ -41,13 +42,27 @@ export const resultOf = (text: string): Result => {
   }
   const field = (key: string) => (typeof data === 'object' && data !== null && !Array.isArray(data) && typeof data[key] === 'string' ? data[key] : '')
   const status = field('status')
+  const met = typeof data === 'object' && data !== null && !Array.isArray(data) ? data.done_when : undefined
+  const doneWhen = Array.isArray(met) ? met.flatMap(one => (typeof one === 'string' && /^[1-9]\d*$/.test(one) ? [Number(one)] : [])) : undefined
 
   return {
     status: STATUSES.includes(status) ? (status as ResultStatus) : '',
     summary: field('summary'),
     body: (match[2] ?? '').trim(),
+    ...(doneWhen && { doneWhen }),
     ...(status !== '' && !STATUSES.includes(status) ? { problem: `status "${status}" is not done, blocked or failed` } : {}),
   }
+}
+
+/** The results `troupe send` put aside for a role (`result-<role>-<uuid>.md` beside the log), oldest first. */
+export const earlierResults = (dir: string, role: string): Result[] => {
+  if (!existsSync(dir)) return []
+  // Role names are plain (NAME), so the role needs no escaping here.
+  const name = new RegExp(`^result-${role}-[0-9a-f-]{36}\\.md$`)
+
+  return readdirSync(dir).filter(file => name.test(file)).map(file => join(dir, file))
+    .map(path => ({ ...resultOf(readFileSync(path, 'utf8')), at: statSync(path).mtime.toISOString() }))
+    .sort((a, b) => a.at.localeCompare(b.at))
 }
 
 /** The role's result, or undefined while it has written none. */

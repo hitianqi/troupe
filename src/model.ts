@@ -25,6 +25,8 @@ export type Live = {
   result?: Result
   /** The last lines of its pane. */
   screen?: string[]
+  /** A reviewer's results put aside before its current one, oldest first. */
+  earlier?: Result[]
 }
 export type RoleView = Role & Live & { branch: string; screen: string[]; badge?: Badge; dispatchedAt?: string; elapsed?: string; seconds?: number }
 export type StageMark = 'done' | 'now' | 'open' | 'gate' | 'todo'

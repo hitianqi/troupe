@@ -14,7 +14,7 @@ import type { Live } from './model.ts'
 import { boundTo, markedPanes, mission, missionTree, orchestratorsOf, unbind } from './missions.ts'
 import { createPane, ownedPane, rolesName, rolesWindow } from './panes.ts'
 import type { Role } from './plan.ts'
-import { readResult, RESULT_FILE, roleState, waitingOn, workOf } from './state.ts'
+import { earlierResults, readResult, RESULT_FILE, roleState, waitingOn, workOf } from './state.ts'
 import { shellOf, tmux } from './run.ts'
 import { CONTEXT_FILE, statusLineCommand } from './statusline.ts'
 import { codexTurn, tokensOf } from './usage.ts'
@@ -86,10 +86,12 @@ export const liveOf = (r: Runtime, m: Mission, role: Role): Live & { problem?: s
   while (lines.at(-1)?.trim() === '') lines.pop()
   const waitsOn = pane === undefined || agent === undefined ? undefined : waitsOnOf(agent, pane.screen)
   const tokens = opened?.worktree && agent?.usage ? tokensOf(agent.usage, opened.worktree, opened.at, r.home) : undefined
+  // A reviewer's earlier results say when each done-when criterion first passed.
+  const earlier = opened !== undefined && role.touches.length === 0 && role.reviews.length > 0 ? earlierResults(dirname(m.log), role.name) : []
 
   return {
     state: roleState({ opened: opened !== undefined, closed: opened?.closed, result, pane, screen }),
-    work, result, screen: lines.slice(-20), waitsOn, ...(problem ? { problem } : {}), ...(tokens === undefined ? {} : { tokens }),
+    work, result, screen: lines.slice(-20), waitsOn, ...(problem ? { problem } : {}), ...(tokens === undefined ? {} : { tokens }), ...(earlier.length > 0 && { earlier }),
   }
 }
 

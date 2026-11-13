@@ -55,7 +55,7 @@ const ZH = {
   '{0} commit': '{0} 个提交', '{0} commits': '{0} 个提交', '{0} file': '{0} 个文件', '{0} files': '{0} 个文件',
   '{0} file changed': '改了 {0} 个文件', '{0} files changed': '改了 {0} 个文件',
   'inside touches ✓': '都在范围内 ✓', 'outside touches: {0}': '超出范围：{0}', '✗ {0} outside': '✗ {0} 个超出范围', '✓ inside': '✓ 都在范围内',
-  'not opened yet · {0}': '尚未打开 · {0}', 'its window, live': '它的窗口 · 实时', 'a dialog in its window': '它窗口里的对话框',
+  'not opened yet · {0}': '尚未打开 · {0}', 'waits on {0}': '等待 {0}', 'its window, live': '它的窗口 · 实时', 'a dialog in its window': '它窗口里的对话框',
   // The plan
   'checks clean': '检查通过', '{0} problem': '{0} 个问题', '{0} problems': '{0} 个问题',
   '{0} window': '{0} 个窗口', '{0} windows': '{0} 个窗口', "touches don't overlap ✓": '范围互不重叠 ✓', '✗ {0} and {1} overlap': '✗ {0} 和 {1} 范围重叠',

@@ -162,7 +162,7 @@ test('polling unchanged files reads no bytes; Codex tails and Claude appends sta
 test('live and JSON status use the launched adapter, worktree and dispatch time', t => {
   const { home, put } = temporary(t)
   put('codex')
-  const role = { name: 'api', agent: 'claude', touches: [], dependsOn: [] }
+  const role = { name: 'api', agent: 'claude', touches: [], dependsOn: [], reviews: [] }
   const opened = { role: 'api', agent: 'custom', worktree: cwd, at: started, base: 'main', pane: '%9', session: 'test', window: '@9', branch: 'role/m1/api' }
   const m = { name: 'm1', plan: { roles: [role] }, agents: { ...AGENTS, custom: { ...AGENTS.codex } }, folded: { roles: new Map([['api', opened]]), gates: new Map(), stage: 'work' }, problems: [] }
   const r = { home, env: {}, run: () => ({ code: 0, out: '', err: '' }) }
