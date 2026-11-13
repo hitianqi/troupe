@@ -3,8 +3,8 @@ import { StringDecoder } from 'node:string_decoder'
 import { cellsOf, fit, paint, textOf } from './canvas.ts'
 import type { Line } from './canvas.ts'
 import type { Reply, Runtime } from './command-context.ts'
-import { draw, langSwitch } from './draw.ts'
-import type { Drawn } from './draw.ts'
+import { draw, drafting, langSwitch } from './draw.ts'
+import type { Drawn, Point } from './draw.ts'
 import { known, langOf, setLang, t } from './i18n.ts'
 import { Motion } from './motion.ts'
 import { deliverNotices } from './notices.ts'
@@ -12,7 +12,7 @@ import { flushAnswers } from './orchestrator.ts'
 import { panelEffect } from './panel-actions.ts'
 import { initialUi, parseInput, transition } from './panel-input.ts'
 import type { Input, PanelUi } from './panel-input.ts'
-import { PLANNING, readPanel } from './panel-model.ts'
+import { readPanel } from './panel-model.ts'
 import type { Reading } from './panel-model.ts'
 import { diff, full, Screen } from './screen.ts'
 
@@ -26,23 +26,20 @@ export const LEAVE_PANEL = '\x1b[?2004l\x1b[?1006l\x1b[?1000l\x1b[0m\x1b[?7h\x1b
 
 const usable = (width: number, height: number) => width >= 40 && height >= 10
 export const frameOf = (reading: Reading, ui: PanelUi, width: number, height: number): Drawn => {
-  // While the orchestrator drafts the plan, its own pane shows the work; the panel only says so.
-  if ('missing' in reading && reading.missing === PLANNING && usable(width, height)) {
+  // While the orchestrator drafts the plan before naming its mission, its own pane shows the work; the panel only says so.
+  if ('missing' in reading && reading.drafting !== undefined && usable(width, height)) {
     const top = Math.max(0, Math.floor(height / 2) - 2)
     const centre = (text: string): string => `${' '.repeat(Math.max(0, Math.floor((width - cellsOf(text)) / 2)))}${text}`
     // The language switch sits top right, as on every other screen: the plan is written in it.
     const toggle = langSwitch()
     const col = width - cellsOf(textOf(toggle)) - 1
     const lines: Line[] = [[{ text: ' '.repeat(col) }, ...toggle], ...Array.from({ length: Math.max(0, top - 1) }, () => [])]
-    lines.push(
-      [{ text: centre(known(PLANNING)), tone: 'bright', bold: true }],
-      [{ text: centre(t("in the orchestrator's pane, beside this one")), tone: 'dim' }],
-      [],
-      [{ text: fit(centre(t('The plan comes here for approval once it is written.')), width).trimEnd(), tone: 'dim' }],
-    )
+    const shown = drafting(undefined, reading.drafting.since, reading.drafting.now, width)
+    const spin: Point = [lines.length + shown.spin[0], shown.spin[1]]
+    lines.push(...shown.lines)
     if (ui.message) lines.push([], [{ text: centre(ui.message), tone: 'accent' }])
 
-    return { lines, hits: [{ row: 0, col, width: cellsOf(textOf(toggle)), height: 1, target: { kind: 'key', key: 'L' } }], maxScroll: 0 }
+    return { lines, hits: [{ row: 0, col, width: cellsOf(textOf(toggle)), height: 1, target: { kind: 'key', key: 'L' } }], maxScroll: 0, spin }
   }
   if ('missing' in reading || !usable(width, height)) return {
     lines: [[{ text: fit('missing' in reading ? known(reading.missing) : t('Panel needs 40 columns and 10 rows.'), width).trimEnd() }]], hits: [], maxScroll: 0,

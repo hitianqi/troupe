@@ -45,7 +45,7 @@ test('real scratch tmux: open marks one panel, keeps focus, and is a no-op the s
     if (firstFrame) break
     await new Promise(resolve => setTimeout(resolve, 20))
   }
-  assert.ok(firstFrame.includes('Orch is planning…'), firstFrame)
+  assert.ok(firstFrame.includes('Orch is drafting the plan'), firstFrame)
 
   assert.equal(tmux(['display', '-p', '-t', 'agent', '#{pane_id}'], undefined, env).out.trim(), pane)
   const plain = await execute('open', [], r)

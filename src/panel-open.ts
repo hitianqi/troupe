@@ -17,7 +17,7 @@ export const createPanel = (r: Runtime, repo: Repository, name: string, orchestr
     mux(r, ['set-option', '-p', '-t', opened.pane, '@troupe-panel', repo.root])
     if (orchestrator !== undefined) mux(r, ['set-option', '-p', '-t', opened.pane, '@troupe-panel-orchestrator', orchestrator])
     if (name !== '') markMission(r, repo, opened.pane, name)
-    if (planning) mux(r, ['set-option', '-p', '-t', opened.pane, '@troupe-planning', '1'])
+    if (planning) mux(r, ['set-option', '-p', '-t', opened.pane, '@troupe-planning', String(r.now())])
   } catch (error) {
     if (ownedPane(r, opened).alive) tmux(['kill-pane', '-t', opened.pane], r.run, r.env)
     throw error
@@ -48,6 +48,13 @@ const besideInHerdr = (r: Runtime, herdrPane: string, attach: string): string | 
   } catch { /* herdr can be unavailable or answer oddly; the session remains attachable. */ }
 
   return undefined
+}
+
+/** Marks a panel as showing the orchestrator drafting a plan from now; one already marked keeps its start. */
+const markPlanning = (r: Runtime, pane: string): void => {
+  const mark = tmux(['display', '-p', '-t', pane, '#{@troupe-planning}'], r.run, r.env)
+  if (mark.code === 0 && /^\d+$/.test(mark.out.trim()) && mark.out.trim() !== '1') return
+  mux(r, ['set-option', '-p', '-t', pane, '@troupe-planning', String(r.now())])
 }
 
 /** Opens the panel of the caller's mission beside the caller; one panel per mission. */
@@ -85,7 +92,7 @@ export const openPanel = (r: Runtime, want: string, planning = false): Reply => 
   if (existing !== undefined) {
     if (owner !== undefined && existing.orchestrator !== owner) mux(r, ['set-option', '-p', '-t', existing.pane, '@troupe-panel-orchestrator', owner])
     if (name !== '' && (existing.mission !== name || existing.repo !== repo.common)) markMission(r, repo, existing.pane, name)
-    if (planning) mux(r, ['set-option', '-p', '-t', existing.pane, '@troupe-planning', '1'])
+    if (planning) markPlanning(r, existing.pane)
     // Attaching to the panel's pane opens its session at its window.
     const pane = herdrPane === undefined ? undefined : besideInHerdr(r, herdrPane, attachTo(existing.pane))
     if (pane !== undefined) return { code: 0, out: `Opened panel beside your agent in herdr pane ${pane} (${existing.pane}).\n` }

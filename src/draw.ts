@@ -5,7 +5,7 @@ import { pairsOf, wordDiff } from './diff.ts'
 import type { FileDiff } from './diff.ts'
 import { known, lang, plural, t } from './i18n.ts'
 import type { Phrase } from './i18n.ts'
-import { clockOf } from './model.ts'
+import { clockOf, durationOf } from './model.ts'
 import type { PanelModel, RoleView, StageMark } from './model.ts'
 import { clashesOf, sectionsOf, treeOf } from './plan.ts'
 import type { RoleState } from './state.ts'
@@ -75,7 +75,7 @@ export type Page = {
   events: { index: number; row: number; col: number; width: number; tone: Tone }[]
 }
 /** `scroll` is where the frame scrolled to, when the page chose it (the LOG following its newest line). */
-export type Drawn = { lines: Line[]; hits: Hit[]; maxScroll: number; scroll?: number; scene?: Scene }
+export type Drawn = { lines: Line[]; hits: Hit[]; maxScroll: number; scroll?: number; scene?: Scene; spin?: Point }
 
 const LEFT = 27
 const BOX = 26
@@ -99,6 +99,21 @@ const MARK: Record<StageMark, { glyph: string; tone: Tone }> = {
   open: { glyph: '◆', tone: 'warn' },
   gate: { glyph: '◇', tone: 'dim' },
   todo: { glyph: '○', tone: 'dim' },
+}
+
+/** While the orchestrator drafts the plan: that it does and for how long, where to watch it, and what comes here; centred, the spinner's cell with it. */
+export const drafting = (planPath: string | undefined, since: number | undefined, now: number, width: number): { lines: Line[]; spin: Point } => {
+  const took = since === undefined ? '' : ` · ${durationOf(Math.max(0, Math.floor((now - since) / 1000)))}`
+  const next: Line = planPath === undefined
+    ? [{ text: t('The plan comes here for approval when it is written.'), tone: 'dim' }]
+    : [{ text: planPath }, { text: t(' comes here for approval when it is written'), tone: 'dim' }]
+  const centre = (line: Line): Line => [{ text: ' '.repeat(Math.max(0, Math.floor((width - cellsOf(textOf(line))) / 2))) }, ...line]
+  const title = centre([{ text: '⠋', tone: 'accent' }, { text: ' ' }, { text: t('Orch is drafting the plan'), tone: 'bright', bold: true }, { text: took, tone: 'dim' }])
+
+  return {
+    lines: [title, centre([{ text: t("in the orchestrator's pane, beside this one"), tone: 'dim' }]), [], ...reflow(next, width).map(centre)],
+    spin: [0, cellsOf(title[0]?.text ?? '')],
+  }
 }
 
 /** `left` and `right` in `width` cells, `right` flush with the edge; `left` cut first. */
@@ -305,14 +320,32 @@ const planFull = (m: PanelModel, width: number): { lines: Line[]; heads: Head[] 
 const checksOf = (m: PanelModel): Run =>
   m.problems.length === 0 ? { text: t('checks clean'), tone: 'ok' } : { text: plural(m.problems.length, '{0} problem', '{0} problems'), tone: 'error' }
 
-/** When the reviewer passed every branch it reviews: its result says PASS and they are all done. */
-const passedAt = (m: PanelModel): string | undefined => {
+/**
+ * When each done-when criterion passed (HH:MM, '' with no time), undefined
+ * while it has not: the first of the reviewer's PASS results whose
+ * `done_when` lists it. A reviewer that lists none passes them all at once,
+ * at its PASS once every branch it reviews is done.
+ */
+const passedAt = (m: PanelModel): (string | undefined)[] => {
+  const none = m.doneWhen.map(() => undefined)
   const reviewer = m.roles.find(role => role.touches.length === 0 && role.reviews.length > 0)
-  const result = reviewer?.result
-  if (reviewer === undefined || result?.status !== 'done' || !/^PASS\b/i.test(result.summary)) return undefined
-  if (!reviewer.reviews.every(name => m.roles.find(role => role.name === name)?.state === 'done')) return undefined
+  if (reviewer === undefined) return none
+  const passes = [...reviewer.earlier ?? [], ...(reviewer.result ? [reviewer.result] : [])].filter(one => one.status === 'done' && /^PASS\b/i.test(one.summary))
+  const when = (at: string | undefined) => (at === undefined ? '' : clockOf(at))
+  if (passes.some(one => one.doneWhen !== undefined)) return m.doneWhen.map((_, i) => passes.find(one => one.doneWhen?.includes(i + 1))).map(one => (one === undefined ? undefined : when(one.at)))
+  const result = reviewer.result
+  if (result === undefined || !passes.includes(result) || !reviewer.reviews.every(name => m.roles.find(role => role.name === name)?.state === 'done')) return none
 
-  return result.at === undefined ? '' : clockOf(result.at)
+  return m.doneWhen.map(() => when(result.at))
+}
+
+/** What an unpassed criterion waits on once roles are out: the builders not done yet, else the review. */
+const waitsFor = (m: PanelModel): string => {
+  if (!m.roles.some(role => role.dispatchedAt !== undefined)) return ''
+  const reviewer = m.roles.find(role => role.touches.length === 0 && role.reviews.length > 0)
+  const open = m.roles.filter(role => role !== reviewer && role.state !== 'done').map(role => role.name)
+
+  return open.length > 0 ? open.join(', ') : reviewer?.name ?? ''
 }
 
 /**
@@ -408,12 +441,14 @@ const planSummary = (m: PanelModel, width: number, tone: Tone, page: boolean): {
   field('Goal', [{ text: m.goal || m.title, tone: 'bright' }])
   if (m.why !== '') field('Why', inline(m.why))
   if (m.doneWhen.length > 0) head('Done when')
-  // Each criterion as a box, ticked once the reviewer passed the mission.
+  // Each criterion as a box, ticked as the reviewer passes it; the others say what they wait on.
   const passed = passedAt(m)
-  for (const one of m.doneWhen) {
-    const runs = [...inline(one, passed !== undefined), ...(passed === undefined ? [] : [{ text: `  ✓ PASS${passed ? ` ${passed}` : ''}`, tone: 'ok' as const }])]
-    lines.push(...reflow(runs, width, { text: passed === undefined ? '  ☐  ' : '  ☒  ', tone: passed === undefined ? 'dim' : 'ok' }, '     '))
-  }
+  const waits = waitsFor(m)
+  m.doneWhen.forEach((one, i) => {
+    const at = passed[i]
+    const tag: Run[] = at !== undefined ? [{ text: `  ✓ PASS${at ? ` ${at}` : ''}`, tone: 'ok' }] : waits ? [{ text: `  ${t('waits on {0}', waits)}`, tone: 'dim' }] : []
+    lines.push(...reflow([...inline(one, at !== undefined), ...tag], width, { text: at === undefined ? '  ☐  ' : '  ☒  ', tone: at === undefined ? 'dim' : 'ok' }, '     '))
+  })
   head('Roles')
   const shape = shapeOf(m, width)
   if (shape.length > 0) lines.push(...shape, [])
@@ -799,8 +834,9 @@ export const draw = (m: PanelModel, ui: Ui, width: number, height: number): Draw
   else c.runs(height - 1, 0, hints(m, ui, width))
 
   let scroll: number | undefined
+  let spin: Point | undefined
   if (row < bottom && ui.tab === 1) maxScroll = mission(c, m, ui, row, bottom, hit, scene)
-  else if (row < bottom) ({ maxScroll, scroll } = other(c, m, ui, row, bottom, hit, scene))
+  else if (row < bottom) ({ maxScroll, scroll, spin } = other(c, m, ui, row, bottom, hit, scene))
   if (ui.help) {
     const keys: [string, Phrase][] = [
       ['↑↓ / j k', 'select role'], ['Enter', 'detail'], ['1-5 / Tab', 'tabs'], ['o', 'open role pane'], ['s', 'send to role'], ['d', 'diff'],
@@ -823,7 +859,7 @@ export const draw = (m: PanelModel, ui: Ui, width: number, height: number): Draw
     hits.length = 0
   }
 
-  return { lines: c.lines(), hits, maxScroll, ...(scroll !== undefined && { scroll }), ...(!ui.help && { scene }) }
+  return { lines: c.lines(), hits, maxScroll, ...(scroll !== undefined && { scroll }), ...(!ui.help && { scene, ...(spin && { spin }) }) }
 }
 
 /** The MISSION tab: the left column, then FLOW and the detail on the right. */
@@ -902,7 +938,7 @@ const mission = (c: Canvas, m: PanelModel, ui: Ui, top: number, bottom: number, 
 type HitFn = (row: number, col: number, w: number, h: number, target: Target) => void
 /** A page draws between `top` and `bottom` and says how far it scrolls; `scroll` when it chose where. */
 type PageArgs = { c: Canvas; m: PanelModel; ui: Ui; top: number; bottom: number; hit: HitFn; page: Page }
-type Paged = { maxScroll: number; scroll?: number }
+type Paged = { maxScroll: number; scroll?: number; spin?: Point }
 
 const toHex = (rgb: readonly number[]): Hex => `#${rgb.map(x => x.toString(16).padStart(2, '0')).join('')}`
 const mixTone = (a: Tone, b: Tone, t: number): Hex => toHex(blend(rgbOf(TONES[a]), rgbOf(TONES[b]), t))
@@ -1048,6 +1084,14 @@ const rolesPage = ({ c, m, ui, top, bottom, hit, page }: PageArgs): Paged => {
 const TOC = 20
 /** PLAN: the summary or the whole plan as markdown, its sections listed on the left when there is room; a click on one jumps to it. */
 const planPage = ({ c, m, ui, top, bottom, hit }: PageArgs): Paged => {
+  // The draft is the orchestrator's to show, in its own pane; this page says so until the plan gate opens.
+  if (m.drafting !== undefined) {
+    const shown = drafting(m.planPath, m.drafting.since, m.now, c.width - 2)
+    const row = top + Math.max(0, Math.floor((bottom - top - shown.lines.length) / 2))
+    shown.lines.forEach((line, index) => { if (row + index < bottom) c.runs(row + index, 1, line) })
+
+    return { maxScroll: 0, spin: [row + shown.spin[0], 1 + shown.spin[1]] }
+  }
   const bodyOf = (width: number) => (ui.full ? planFull(m, width) : planSummary(m, width, 'accent', true))
   // The contents column, when there is room and more than one section to list.
   const toc = c.width >= 90 && bodyOf(c.width - TOC - 4).heads.length >= 2
@@ -1379,7 +1423,7 @@ const HINTS: Record<number, [string, Phrase][]> = {
   5: [['↑↓', 'file'], ['PgUp PgDn', 'scroll'], ['o', 'open window']],
 }
 const hints = (m: PanelModel, ui: Ui, width: number): Line => {
-  const keys = [...(m.gate === undefined ? [] : [['a', 'approve'], ['c', 'change']] as [string, Phrase][]), ...(HINTS[ui.tab] ?? []).map(([key, what]): [string, Phrase] => (key === 'f' && ui.full ? [key, 'summary'] : [key, what]))]
+  const keys = [...(m.gate === undefined ? [] : [['a', 'approve'], ['c', 'change']] as [string, Phrase][]), ...(ui.tab === 3 && m.drafting !== undefined ? [] : HINTS[ui.tab] ?? []).map(([key, what]): [string, Phrase] => (key === 'f' && ui.full ? [key, 'summary'] : [key, what]))]
   const left: Line = [{ text: ' ' }, ...keys.flatMap(([key, what]): Line => [{ text: key, tone: 'accentBright', bold: true }, { text: ` ${t(what)}   `, tone: 'dim' }])]
   const right: Line = [{ text: '1-5', tone: 'accentBright', bold: true }, { text: ` ${t('tabs')}   `, tone: 'dim' }, { text: '?', tone: 'accentBright', bold: true }, { text: ` ${t('help')} `, tone: 'dim' }]
   const room = width - cellsOf(textOf(right))

@@ -30,7 +30,10 @@ For each branch:
    it covers.
 4. Write the review to `.troupe/reviews/<role>.md` in your worktree and the
    result file as your brief says, with `status: done` and a summary that
-   starts with the verdict (`PASS` or `FAIL: <n> act-on`). Findings:
+   starts with the verdict (`PASS` or `FAIL: <n> act-on`). On a PASS, add
+   `done_when: [1, 3]` to the front matter: the numbers, from 1 in the plan's
+   order, of the done-when criteria you checked on this branch and found met;
+   the panel ticks each as it first passes. Findings:
    - **Act on**: breaks a done-when criterion, loses data, opens a security
      hole, or breaks what worked; each with a reproduction.
    - **Consider**: a real problem that does not block this mission.

@@ -251,6 +251,7 @@ test('send dead key and effects use command refusals; open selects only a logged
 
 test('message/help rendering, bounded scroll and addressed painting need no golden changes', t => {
   const w = world(t)
+  w.openGate()
   const reading = w.read()
   const drawn = frameOf(reading, { ...initialUi(), selected: 'api', message: 'Sent successfully' }, 96, 40)
   assert.equal(textOf(drawn.lines[38]).trim(), 'Sent successfully')
@@ -317,11 +318,12 @@ test('planning polling discovers a plan, and abort/pane close restore the termin
   const output = new OutputStream()
   w.planning.active = true
   const running = panel({ ...w.r, env: { ...w.r.env, TMUX_PANE: '%panel' }, signal: stop.signal }, { mission: 'm1' }, { input, output })
-  assert.ok(w.output.some(text => text.includes('Orch is planning…')))
+  assert.ok(w.output.some(text => text.includes('Orch is drafting the plan')))
   w.write(w.path, PLAN)
   await new Promise(resolve => setTimeout(resolve, 2100))
   assert.ok(w.output.at(-1).includes('Build the endpoint'))
-  assert.equal(w.planning.active, false)
+  // Its mark stays until the plan gate opens: it holds when drafting began.
+  assert.equal(w.planning.active, true)
   stop.abort()
   assert.equal((await running).code, 0)
   assert.equal(w.output.at(-1), LEAVE_PANEL)
