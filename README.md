@@ -82,19 +82,23 @@ You can also run `troupe up -m <mission>` in your target repository to start the
 4. **Approve the handoff.** You approve opening the pull request, merge it yourself, and confirm. The workflow then closes its terminals and removes its temporary worktrees.
 
 <details>
-<summary><b>See the plan approval, the panel's pages and the final handoff</b></summary>
+<summary><b>See it run, step by step</b></summary>
+<br>
 
-**Change the plan, or approve it.**
-
-![Reviewing and approving a plan](docs/media/plan-review.gif)
-
-**One panel, five pages: the team, each role, the plan, the log and the changes.**
-
-![The panel's five pages, one after another](docs/media/tabs-tour.gif)
-
-**Each criterion is ticked as the review passes it; then you approve the pull request.**
-
-![Done-when criteria ticked as the review passes, then the pull request approval](docs/media/mr-gate.gif)
+<table>
+<tr>
+<td width="50%" valign="top"><img src="docs/media/step-1-plan.gif" alt="The orchestrator drafts the plan, you approve it, and the roles are dispatched"><br><b>1. Approve the plan.</b> The orchestrator drafts it; once you approve, each role is dispatched.</td>
+<td width="50%" valign="top"><img src="docs/media/step-2-flow.gif" alt="The FLOW: roles working, a branch landing and lighting the way to review"><br><b>2. Watch the work flow.</b> Each role works in its own window; a finished branch lights the way to review.</td>
+</tr>
+<tr>
+<td width="50%" valign="top"><img src="docs/media/step-3-waits.gif" alt="A role stops at a trust prompt and the panel shows it waits on you"><br><b>3. Step in when asked.</b> When an agent waits on you, the panel says so and shows its window.</td>
+<td width="50%" valign="top"><img src="docs/media/step-4-pages.gif" alt="The panel's five pages, one after another"><br><b>4. Look closer.</b> Five pages: the team, each role, the plan, the log and the changes.</td>
+</tr>
+<tr>
+<td width="50%" valign="top"><img src="docs/media/step-5-mr.gif" alt="Review passes every branch and the pull request waits for your approval"><br><b>5. Approve the pull request.</b> Review passes every branch; the pull request opens only when you say so.</td>
+<td></td>
+</tr>
+</table>
 
 </details>
 

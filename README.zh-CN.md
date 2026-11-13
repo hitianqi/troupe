@@ -82,19 +82,23 @@ troupe setup
 4. **批准交付。** 你批准开 PR，自己合并，再确认。工作流随后关闭它开的终端，移除临时 worktree。
 
 <details>
-<summary><b>展开看：批准计划、面板的各个页面和最后的交付</b></summary>
+<summary><b>一步一步看它跑起来</b></summary>
+<br>
 
-**可以改计划，也可以直接批准。**
-
-![阅读、修改和批准计划](docs/media/plan-review.zh.gif)
-
-**一个面板，五个页面：全队、每个角色、计划、日志和改动。**
-
-![依次切换面板的五个页面](docs/media/tabs-tour.zh.gif)
-
-**审查通过一条，完成标准就勾一条；最后由你批准开 PR。**
-
-![审查逐条通过完成标准，然后批准开 PR](docs/media/mr-gate.zh.gif)
+<table>
+<tr>
+<td width="50%" valign="top"><img src="docs/media/step-1-plan.zh.gif" alt="编排者起草计划，你批准后，各角色被派发"><br><b>1. 批准计划。</b> 编排者起草计划，你批准后，各个角色随即派发。</td>
+<td width="50%" valign="top"><img src="docs/media/step-2-flow.zh.gif" alt="流程图：角色在工作，做完的分支一路亮到审查"><br><b>2. 看工作流动。</b> 每个角色在自己的窗口里干活；做完的分支一路亮到审查。</td>
+</tr>
+<tr>
+<td width="50%" valign="top"><img src="docs/media/step-3-waits.zh.gif" alt="一个角色停在信任提示上，面板显示它在等你"><br><b>3. 需要你时再插手。</b> agent 等你时，面板会告诉你，并显示它的窗口。</td>
+<td width="50%" valign="top"><img src="docs/media/step-4-pages.zh.gif" alt="依次切换面板的五个页面"><br><b>4. 再看细一点。</b> 五个页面：全队、每个角色、计划、日志和改动。</td>
+</tr>
+<tr>
+<td width="50%" valign="top"><img src="docs/media/step-5-mr.zh.gif" alt="审查通过所有分支，PR 等你批准"><br><b>5. 批准 PR。</b> 审查通过所有分支；你点头之后才开 PR。</td>
+<td></td>
+</tr>
+</table>
 
 </details>
 

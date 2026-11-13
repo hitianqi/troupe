@@ -1,6 +1,6 @@
 {
   "name": "troupe-cli",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "license": "MIT",
   "type": "module",
   "description": "One command calls up an agent troupe: each role in its own tmux window and git worktree",
