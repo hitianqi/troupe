@@ -1,8 +1,10 @@
 import { createHash } from 'node:crypto'
-import { existsSync, readFileSync } from 'node:fs'
+import { existsSync, readFileSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 
 import type { Screen } from './agents.ts'
+import { addedFile, parseDiff } from './diff.ts'
+import type { FileDiff } from './diff.ts'
 import { overlaps } from './plan.ts'
 import type { Role } from './plan.ts'
 import { run, tmux } from './run.ts'
@@ -25,7 +27,7 @@ export const planHash = (plan: string | Uint8Array, texts: { ref: string; bytes:
 /** The file a role writes in its worktree when it stops: front matter `status` and `summary`, then free text. */
 export const RESULT_FILE = '.troupe/result.md'
 export type ResultStatus = 'done' | 'blocked' | 'failed'
-export type Result = { status: ResultStatus | ''; summary: string; body: string; problem?: string }
+export type Result = { status: ResultStatus | ''; summary: string; body: string; problem?: string; at?: string }
 const STATUSES: string[] = ['done', 'blocked', 'failed']
 
 export const resultOf = (text: string): Result => {
@@ -52,7 +54,8 @@ export const resultOf = (text: string): Result => {
 export const readResult = (worktree: string): Result | undefined => {
   const path = join(worktree, RESULT_FILE)
 
-  return existsSync(path) ? resultOf(readFileSync(path, 'utf8')) : undefined
+  // When it was written: the panel ticks the done-when criteria at the reviewer's PASS.
+  return existsSync(path) ? { ...resultOf(readFileSync(path, 'utf8')), at: statSync(path).mtime.toISOString() } : undefined
 }
 
 const git = (cwd: string, args: string[], runner: Run): string => {
@@ -68,6 +71,30 @@ export type Work = {
   changed: string[]
   /** The changed files no entry of the role's touches covers. */
   outside: string[]
+  /** Each changed file's hunks, in `changed` order; absent when the diff could not be read. */
+  files?: FileDiff[]
+  diffProblem?: string
+}
+
+/** A new file is shown whole up to this size. */
+const UNTRACKED = 64 * 1024
+
+/** The change against `base` as hunks: tracked files from `git diff`, new files read whole. */
+const filesOf = (worktree: string, base: string, untracked: string[], runner: Run): FileDiff[] => {
+  const tracked = parseDiff(git(worktree, ['-c', 'core.quotePath=false', 'diff', '--no-color', '--no-ext-diff', '--no-renames', '-U3', base, '--'], runner))
+  const added = untracked.map(path => {
+    try {
+      const file = join(worktree, path)
+      if (statSync(file).size > UNTRACKED) return { path, status: 'A' as const, add: 0, del: 0, hunks: [], untracked: true as const, cut: true as const }
+      const text = readFileSync(file, 'utf8')
+
+      return text.includes('\0') ? { path, status: 'A' as const, add: 0, del: 0, hunks: [], untracked: true as const, binary: true as const } : addedFile(path, text)
+    } catch {
+      return { path, status: 'A' as const, add: 0, del: 0, hunks: [], untracked: true as const }
+    }
+  })
+
+  return [...tracked, ...added]
 }
 
 /** The role's commits since `base` and the files it changed, against its touches. */
@@ -80,13 +107,19 @@ export const workOf = (worktree: string, base: string, touches: string[], runner
 
       return { sha, subject: subject.join('\t') }
     })
-  const changed = [
-    ...new Set([...git(worktree, ['diff', '--name-only', base], runner).split('\n'), ...git(worktree, ['ls-files', '--others', '--exclude-standard'], runner).split('\n')]),
-  ]
+  const untracked = git(worktree, ['ls-files', '--others', '--exclude-standard'], runner).split('\n').filter(file => file !== '')
+  const changed = [...new Set([...git(worktree, ['diff', '--name-only', base], runner).split('\n'), ...untracked])]
     .filter(file => file !== '')
     .sort()
+  const outside = changed.filter(file => !touches.some(touch => overlaps(touch, file)))
+  // The hunks are extra: a diff too large or unreadable leaves the commits and files standing.
+  try {
+    const byPath = new Map(filesOf(worktree, base, untracked, runner).map(file => [file.path, file]))
 
-  return { commits, changed, outside: changed.filter(file => !touches.some(touch => overlaps(touch, file))) }
+    return { commits, changed, outside, files: changed.map(path => byPath.get(path) ?? { path, status: 'M', add: 0, del: 0, hunks: [] }) }
+  } catch (error) {
+    return { commits, changed, outside, diffProblem: (error as Error).message }
+  }
 }
 
 export type Pane = { alive: boolean; dead: boolean; screen: string }

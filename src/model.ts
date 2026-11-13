@@ -25,7 +25,7 @@ export type Live = {
   /** The last lines of its pane. */
   screen?: string[]
 }
-export type RoleView = Role & Live & { branch: string; screen: string[]; badge?: Badge; dispatchedAt?: string; elapsed?: string }
+export type RoleView = Role & Live & { branch: string; screen: string[]; badge?: Badge; dispatchedAt?: string; elapsed?: string; seconds?: number }
 export type StageMark = 'done' | 'now' | 'open' | 'gate' | 'todo'
 export type StageView = Stage & { mark: StageMark; note: string }
 export type GateView = { id: string; label: string; ask: string; isPlan: boolean }
@@ -49,6 +49,8 @@ export type PanelModel = {
   activity: Activity[]
   log: Logged[]
   clock: string
+  /** When it was read, in ms. */
+  now: number
 }
 
 /** HH:MM, local time. */
@@ -117,7 +119,7 @@ export const modelOf = (input: ModelInput): PanelModel => {
     const seconds = opened === undefined ? NaN : Math.max(0, Math.floor((input.now.getTime() - Date.parse(opened.at)) / 1000))
     const elapsed = !Number.isFinite(seconds) ? undefined : seconds < 60 ? `${seconds}s` : seconds < 3600 ? `${Math.floor(seconds / 60)}m ${seconds % 60}s` : `${Math.floor(seconds / 3600)}h ${Math.floor(seconds % 3600 / 60)}m`
 
-    return { ...role, ...live, badge: badgeOf(role.agent, input.agents?.[role.agent]), branch: opened?.branch ?? `role/${input.mission}/${role.name}`, screen: live.screen ?? [], ...(opened && { dispatchedAt: opened.at }), ...(elapsed && { elapsed }) }
+    return { ...role, ...live, badge: badgeOf(role.agent, input.agents?.[role.agent]), branch: opened?.branch ?? `role/${input.mission}/${role.name}`, screen: live.screen ?? [], ...(opened && { dispatchedAt: opened.at }), ...(elapsed && { elapsed, seconds }) }
   })
   const planGate = folded.gates.get(PLAN_GATE)
   // The plan gate stands open while the plan as it is now is not approved and someone asked for it.
@@ -166,5 +168,6 @@ export const modelOf = (input: ModelInput): PanelModel => {
     activity: [...input.log].reverse().map(e => ({ at: clockOf(e.at), text: describe(e, labelOf) })),
     log: input.log,
     clock: clockOf(input.now),
+    now: input.now.getTime(),
   }
 }

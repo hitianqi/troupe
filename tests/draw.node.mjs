@@ -14,6 +14,7 @@ import { readPlan } from '../dist/plan.js'
 import { AGENTS } from '../dist/agents.js'
 import { hitAt, transition } from '../dist/panel-input.js'
 import { DEFAULT_STAGES, readStages } from '../dist/stages.js'
+import { parseDiff } from '../dist/diff.js'
 
 const here = path => fileURLToPath(new URL(path, import.meta.url))
 const PLAN = readFileSync(here('fixtures/auth-refresh/plan.md'), 'utf8')
@@ -60,10 +61,10 @@ test('the plan gate: goal, why, one line per done-when, each role with its start
   const log = APPROVED.slice(0, 1)
   const lines = plain(draw(model(log, new Map()), { tab: 1, selected: 'api' }, 96, 58))
   golden('plan-gate', lines)
-  for (const heading of ['DONE WHEN', 'ROLES', 'DECISIONS', 'OUT OF SCOPE']) assert.ok(lines.some(line => line.includes(`─ ${heading} ─`)), heading)
+  for (const heading of ['Done when', 'Roles', 'Decisions', 'Out of scope']) assert.ok(lines.some(line => line.includes(`▍ ${heading}`)), heading)
   assert.ok(lines.some(line => /Goal {3}Refresh tokens rotate/.test(line)))
   assert.ok(lines.some(line => /Why {4}Stolen refresh tokens/.test(line)))
-  assert.equal(lines.filter(line => /^│ {3}\d {2}A /.test(line) || /^│ {3}\d {2}The /.test(line)).length, 3, 'one line per done-when item')
+  assert.equal(lines.filter(line => /^│ {3}☐ {2}A /.test(line) || /^│ {3}☐ {2}The /.test(line)).length, 3, 'one line per done-when item')
   assert.ok(lines.some(line => line.includes('web') && line.includes('after api')))
   assert.ok(lines.some(line => line.includes('src/api/refresh.ts  src/api/errors.ts')))
   assert.ok(lines.some(line => line.includes('Grace period for a token used twice?') && line.includes('→ 10 s')))
@@ -106,12 +107,13 @@ test('clicks: tabs, role rows and boxes, and the gate buttons are targets', () =
 test('the other tabs: roles table, plan summary, log, diff; and the input line', () => {
   const m = model(APPROVED, BUILDING)
   const tab = (n, selected = 'store') => plain(draw(m, { tab: n, selected }, 96, 30))
-  assert.ok(tab(2).some(line => /─ ⬢ api · ◆ waits on you/.test(line)))
-  assert.ok(tab(2).some(line => /waits on +Trust this folder\?/.test(line)))
+  assert.ok(tab(2).some(line => /╭─ ◆ api ─.* waits on you +╮/.test(line)))
+  assert.ok(tab(2).some(line => /◆ waits on you · Trust this folder\? +o open/.test(line)))
   assert.ok(tab(3).some(line => line.includes('auth-refresh: rotate refresh tokens')))
-  assert.ok(tab(3).some(line => line.includes('─ DONE WHEN ─')))
+  assert.ok(tab(3).some(line => line.includes('▍ Done when ─')))
   assert.ok(tab(4).some(line => line.includes('gate-answer')))
-  assert.ok(tab(5).some(line => line.includes('✓ src/store/tokens.ts')))
+  assert.ok(tab(5).some(line => line.includes('└ M tokens.ts')))
+  assert.ok(tab(5).some(line => line.includes('▍ M migrations/0042_token_family.sql')), 'the selected role\'s first file')
   const typing = plain(draw(m, { tab: 1, selected: 'store', input: { label: 'send to store', text: 'also add a test' } }, 96, 30))
   assert.equal(typing[28], ' send to store › also add a test▏')
   assert.deepEqual(decisionsOf(PLAN), [{ n: '1', ask: 'Grace period for a token used twice?', recommended: '10 s' }])
@@ -170,24 +172,26 @@ test('PLAN reflows paragraphs and hanging lists, renders headings, inline styles
   const m = { ...model(APPROVED, new Map()), planText: markdown }
   for (const [width, name] of [[56, 'plan-narrow'], [110, 'plan-wide']]) {
     const drawn = draw(m, { tab: 3, selected: 'api', full: true }, width, 45)
-    const lines = plain(drawn)
-    golden(name, lines)
+    golden(name, plain(drawn))
+    // Wide, the contents column takes the first 22 cells; the plan starts after it.
+    const lines = plain(drawn).map(line => (width >= 90 ? line.slice(22) : line))
     assert.ok(lines.slice(5, -2).every(line => !line.includes('…')))
     const text = lines.join('\n')
+    if (width >= 90) assert.match(plain(drawn).join('\n'), /CONTENTS[\s\S]*▍ Intent[\s\S]*Role: api/)
     // The path line is one row: narrow screens cut it, wide ones keep the checks and the toggle.
     if (width === 110) assert.match(text, /checks clean {2}· {2}f summary/)
     assert.match(text, /sentinelword/)
-    assert.match(text, /─ ⬢ Role: api/)
+    assert.match(text, /▍ ⬢ Role: api ─/)
     assert.ok(!text.includes('**') && !text.includes('`'))
     assert.ok(lines.some(line => /^   \w/.test(line)), 'bullet continuation is indented')
     if (width === 56) assert.ok(lines.some(line => /^     \w/.test(line)), 'number continuation is indented')
     const runs = drawn.lines.flat()
     assert.ok(runs.some(run => run.text.includes('bold emphasis') && run.bold))
-    assert.ok(runs.some(run => run.text.includes('inline code') && run.tone === 'accent'))
-    assert.ok(runs.some(run => run.text.includes('A readable mission title') && run.bold && run.tone === 'bright'))
-    assert.ok(runs.some(run => run.text.includes('agent:') && run.tone === 'dim'))
-    assert.ok(runs.some(run => run.text.includes('# adapter') && run.tone === 'chrome'))
-    assert.ok(runs.some(run => run.text.includes('keep # inside quotes') && run.tone === undefined))
+    assert.ok(runs.some(run => run.text.includes('inline code') && run.tone === 'cyan' && run.bg === 'cyan'))
+    assert.ok(runs.some(run => run.text.includes('A readable mission title') && run.bold && run.bg === 'accent'))
+    assert.ok(runs.some(run => run.text === 'agent' && run.tone === 'accentBright' && run.bg === 'chrome'))
+    assert.ok(runs.some(run => run.text.includes('# adapter') && run.tone === 'dim'))
+    assert.ok(runs.some(run => run.text.includes('"keep # inside quotes"') && run.tone === 'ok'), 'a # inside quotes is not a comment')
     const ansi = drawn.lines.map(paint).join('\n')
     assert.match(ansi, /\x1b\[1m/)
     assert.ok(ansi.includes('38;2;111;168;255m'))
@@ -199,7 +203,7 @@ test('a role\'s own problems and its overlap sit under it; the others still foll
   const plan = readPlan(source)
   const problems = [...plan.problems, 'role web: no text', 'a problem of no role']
   const m = modelOf({ mission: 'auth-refresh', planPath: 'p', planText: source, plan: { ...plan, problems }, hash: HASH, folded: fold([]), log: [], live: new Map(), stages: DEFAULT_STAGES, now: new Date(at('12:07')) })
-  const text = plain(draw(m, { tab: 3, selected: 'api' }, 110, 80)).join('\n')
+  const text = plain(draw(m, { tab: 3, selected: 'api' }, 88, 80)).join('\n')
   assert.match(text, /src\/store\/  ✗ src\/api\/errors\.ts\n +✗ overlaps api on src\/api\/errors\.ts · neither depends on the other/)
   assert.match(text, /web\/src\/session\/\n +✗ no text/)
   assert.match(text, /✗ api and store overlap/)
@@ -233,12 +237,13 @@ test('FLOW: a trunk into the root, a stem to its dependent, the reviewer in a si
   const find = name => boxes.find(box => box.target.name === name)
   const lines = plain(drawn)
   const [lock, build, review] = ['lock', 'build', 'review'].map(find)
-  // Stacked in dependency order, the dependent right under its parent, joined by a stem and an arrow.
-  assert.equal(lock.col, build.col)
+  // The dependent right under its prerequisite, indented four, joined by an edge from under its box: │ down, then └▶.
+  assert.equal(build.col, lock.col + 4)
   assert.ok(lock.row + lock.height < build.row)
-  const centre = cellsOf(drawn.lines[build.row - 1]).findIndex((cell, col) => col >= lock.col && cell.text === '▼')
-  assert.ok(centre > lock.col && centre < lock.col + lock.width)
-  assert.equal(cellsOf(drawn.lines[build.row - 2])[centre].text, '│')
+  const stem = lock.col + 2
+  for (let row = lock.row + lock.height; row < build.row + 2; row++) assert.equal(cellsOf(drawn.lines[row])[stem].text, '│', `edge row ${row}`)
+  assert.deepEqual(cellsOf(drawn.lines[build.row + 2]).slice(stem, stem + 2).map(cell => cell.text), ['└', '▶'])
+  assert.equal(cellsOf(drawn.lines[build.row - 1]).slice(build.col, build.col + 10).map(cell => cell.text).join(''), 'after lock', 'the label beside the edge, above the box')
   // One root: the trunk comes down from the orchestrator and ends in └─▶ at lock.
   assert.ok(lines.some(line => /└─▶│/.test(line)))
   assert.ok(!lines.some(line => line.includes('├─▶')))
@@ -256,6 +261,34 @@ test('FLOW: a trunk into the root, a stem to its dependent, the reviewer in a si
   closed(drawn, 150 - 29)
 })
 
+test('FLOW tree: each level indents four, two dependents share their prerequisite\'s edge, an edge is dashed until it is done, and deep chains stop indenting at the width', () => {
+  const roles = [role('api', { state: 'done' }), role('web', { dependsOn: ['api'] }), role('e2e', { dependsOn: ['web'] }), role('mobile', { dependsOn: ['api'] }), role('store')]
+  const drawn = draw(scenario(roles), { tab: 1, selected: 'store' }, 150, 70)
+  const [api, web, e2e, mobile, store] = ['api', 'web', 'e2e', 'mobile', 'store'].map(name => boxesOf(drawn).find(box => box.target.name === name))
+  assert.deepEqual([api, web, e2e, mobile, store].map(box => box.row).sort((a, b) => a - b), [api.row, web.row, e2e.row, mobile.row, store.row], 'depth-first: a role, then what waits on it, then the next root')
+  assert.deepEqual([web.col, e2e.col, mobile.col, store.col].map(col => col - api.col), [4, 8, 4, 0])
+  const cell = (row, col) => cellsOf(drawn.lines[row])[col]
+  // api's edge runs past web and e2e to mobile: a ├ where web branches off, └▶ into mobile.
+  assert.equal(cell(web.row + 2, api.col + 2).text, '├')
+  assert.equal(cell(e2e.row + 2, api.col + 2).text, '│')
+  assert.deepEqual([cell(mobile.row + 2, api.col + 2).text, cell(mobile.row + 2, api.col + 3).text], ['└', '▶'])
+  assert.equal(cell(mobile.row + 2, api.col + 2).fade, undefined, 'api is done: its edges are solid')
+  // web is not done: its edge to e2e is dashed and faint, the joint keeps its shape.
+  assert.deepEqual([cell(web.row + web.height, web.col + 2).text, cell(e2e.row + 2, web.col + 2).text, cell(e2e.row + 2, web.col + 3).text], ['╎', '└', '▶'])
+  assert.equal(cell(e2e.row + 2, web.col + 2).fade, 0.75)
+  const trunks = drawn.scene.column.trunks
+  assert.deepEqual(trunks.find(one => one.name === 'e2e').path.at(-1), [e2e.row + 2 - drawn.scene.column.row, e2e.col - 1 - drawn.scene.column.col], 'packets for a dependent run along its own edge')
+  assert.ok(drawn.scene.column.links.some(link => link.to === 'e2e' && link.edge.from === 'web'))
+  // A chain eight deep at 60 columns: the boxes stop moving right before they leave the width.
+  const chain = Array.from({ length: 8 }, (_, i) => role(`r${i}`, { dependsOn: i === 0 ? [] : [`r${i - 1}`] }))
+  const deep = draw(scenario(chain), { tab: 1, selected: 'r0' }, 60, 80)
+  closed(deep, 60)
+  const cols = boxesOf(deep).map(box => box.col)
+  assert.ok(cols.every((col, i) => i === 0 || col >= cols[i - 1]))
+  assert.ok(plain(deep).every(line => line.length <= 60))
+  assert.equal(plain(deep).filter(line => line.includes('▶')).length, 8, 'each still has its arrow')
+})
+
 test('FLOW narrow: the reviewer goes below, says what it reviews, and stays selectable', () => {
   const drawn = draw(scenario(flowRoles()), { tab: 1, selected: 'review' }, 78, 52)
   golden('flow-narrow', plain(drawn))
@@ -263,10 +296,11 @@ test('FLOW narrow: the reviewer goes below, says what it reviews, and stays sele
   const boxes = boxesOf(drawn)
   const review = boxes.find(box => box.target.name === 'review')
   const build = boxes.find(box => box.target.name === 'build')
-  assert.ok(review && build)
-  assert.ok(review.row >= build.row + build.height && review.col === build.col, 'below the builders, not in a lane')
+  const lock = boxes.find(box => box.target.name === 'lock')
+  assert.ok(review && build && lock)
+  assert.ok(review.row >= build.row + build.height && review.col === lock.col, 'below the builders, not in a lane')
   assert.match(text, /reviews lock, build/)
-  assert.equal(text.split('▶').length - 1, 1, 'only the trunk arrow; no edge into the reviewer')
+  assert.equal(text.split('▶').length - 1, 2, 'the trunk arrow and the dependency edge; no edge into the reviewer')
   assert.deepEqual(hitAt(drawn.hits, review.row + 1, review.col + 2), { kind: 'role', name: 'review' })
   closed(drawn, 78)
 })
@@ -299,54 +333,159 @@ const cardRoles = () => [
   role('review', { agent: 'claude', badge: AGENTS.claude.badge, touches: [], reviews: ['panel', 'commands'], dependsOn: [] }),
 ]
 
-test('ROLES: each role under its own rule, one fact per line', () => {
+test('ROLES: a full-width card per role, stacked: name and state in the top border, facts in two columns, then what it waits on or returned', () => {
   const drawn = draw(scenario(cardRoles()), { tab: 2, selected: 'panel' }, 150, 60)
   golden('roles-wide', plain(drawn))
   const lines = plain(drawn)
-  const head = name => lines.findIndex(line => new RegExp(`^ ─ [⬢✻] ${name} · `).test(line))
+  const head = name => lines.findIndex(line => new RegExp(`^ [╭╔][─═] [◆○●✓] ${name} [─═]`).test(line))
   const [panel, commands, review] = ['panel', 'commands', 'review'].map(head)
   assert.ok(panel > 0 && panel < commands && commands < review)
-  assert.match(lines[panel], /─ ⬢ panel · ◆ waits on you ─+$/)
-  const block = (from, to) => lines.slice(from + 1, to)
-  const facts = rows => Object.fromEntries(rows.filter(line => /^ {3}\S/.test(line)).map(line => [line.trim().split(/\s+/)[0], line]))
-  const p = facts(block(panel, commands))
-  assert.deepEqual(Object.keys(p), ['agent', 'effort', 'ctx', 'tokens', 'work', 'time', 'branch', 'flags', 'waits'])
-  assert.match(p.effort, /◼◼◼◻◻ high$/)
-  assert.match(p.work, /1 commit · 2 files ✗ 1 outside touches$/)
-  assert.match(p.flags, /-a on-request -s workspace-write$/)
-  assert.match(p.waits, /waits on +Trust this folder\?$/)
-  const c = facts(block(commands, review))
-  assert.match(c.agent, /codex default$/)
-  assert.match(c.effort, /unusual$/)
-  assert.match(lines.slice(commands).find(line => line.includes('result')), /result +done · Safe cleanup$/)
-  const r = facts(block(review, lines.length))
-  assert.match(r.ctx, /ctx +—$/)
-  assert.match(r.tokens, /tokens +—$/)
-  assert.ok(!lines.join('\n').includes('╔') && !lines.join('\n').includes('▰'), 'no cards, no pips')
+  assert.match(lines[panel], /^ ╔═ ◆ panel ═+ {2}waits on you {2}╗$/, 'the selected card is double, its state a pill')
+  assert.match(lines[commands], /^ ╭─ ○ commands ─+ ○ planned ╮$/)
+  // The card is 148 wide: its left column from cell 3, its right from cell 75.
+  const facts = from => Object.fromEntries(lines.slice(from + 1, from + 5).flatMap(line => [line.slice(3, 75), line.slice(75, -2)]).map(cell => { const [label, ...value] = cell.trim().split(/\s+/); return [label, value.join(' ')] }))
+  const p = facts(panel)
+  assert.deepEqual(Object.keys(p), ['effort', 'agent', 'ctx', 'time', 'tokens', 'branch', 'work', 'flags'])
+  assert.equal(p.effort, '◼◼◼◻◻ high')
+  assert.equal(p.agent, '⬢ codex gpt-6.1-sol')
+  assert.equal(p.work, '1 commit · 2 files ✗ 1 outside')
+  assert.equal(p.time, '5m 12s since dispatch')
+  assert.equal(p.flags, '-a on-request -s workspace-write')
+  assert.match(lines[panel + 5], /║ ◆ waits on you · Trust this folder\? +o open +║$/, 'the band says what it waits on')
+  const c = facts(commands)
+  assert.equal(c.agent, '⬢ codex default')
+  assert.equal(c.effort, 'unusual')
+  assert.match(lines[commands + 5], /│ ✓ Safe cleanup +│$/)
+  const r = facts(review)
+  assert.equal(r.ctx, '—')
+  assert.equal(r.tokens, '—')
+  assert.match(lines[review + 5], /│ as each lands +│$/)
   const runs = drawn.lines.flat()
   assert.ok(runs.some(run => run.text.includes('✗ 1') && run.tone === 'error'))
   assert.ok(runs.some(run => run.text === '◼◼◼' && run.tone === 'accent'))
-  const hits = drawn.hits.filter(hit => hit.target.kind === 'role' && hit.col === 1)
-  assert.deepEqual(hits.map(hit => [hit.target.name, hit.row]), [['panel', panel], ['commands', commands], ['review', review]])
+  assert.ok(runs.some(run => run.text.includes('waits on you · Trust') && run.bg === 'warn' && run.fade === 0), 'the band is solid amber')
+  const hits = drawn.hits.filter(hit => hit.target.kind === 'role' && hit.target.stay)
+  assert.deepEqual(hits.map(hit => [hit.target.name, hit.row, hit.height]), [['panel', panel, 7], ['commands', commands, 7], ['review', review, 7]])
+  assert.ok(drawn.hits.some(hit => hit.target.kind === 'key' && hit.target.key === 'o' && hit.target.role === 'panel' && hit.row === panel + 5))
 })
 
-test('ROLES narrow: the list scrolls, lines stay inside the width, and a click on a role rule selects it', () => {
+test('ROLES ctx: a gauge green to red along its cells, and how long a working role has until its context is full', () => {
+  const tokens = { input: 90000, output: 4000, used: 100000, window: 200000 }
+  const m = scenario([role('api', { state: 'working', tokens, seconds: 600, elapsed: '10m 0s' })])
+  const drawn = draw(m, { tab: 2, selected: 'api' }, 120, 30)
+  const row = drawn.lines.find(line => textOf(line).includes('ctx'))
+  assert.match(textOf(row), /ctx +■{16} 50% {2}~10m to full/)
+  const cells = row.flatMap(run => [...run.text].map(text => ({ ...run, text }))).filter(cell => cell.text === '■')
+  assert.equal(cells[0].tone, TONES.ok, 'the first cell is green')
+  assert.equal(cells.filter(cell => cell.fade === 0.45).length, 8, 'the rest of the window is faint')
+  assert.ok(drawn.scene.page.sparks.some(one => one.name === 'api'), 'the tokens line becomes a tokens/s line when live')
+  assert.ok(drawn.scene.page.spins.some(one => one.name === 'api'))
+  assert.doesNotMatch(plain(draw(scenario([role('api', { state: 'idle', tokens, seconds: 600 })]), { tab: 2, selected: 'api' }, 120, 30)).join('\n'), /to full/, 'only while it works')
+})
+
+test('ROLES narrow: one column of facts, the cards scroll, hits stay on screen, and a click on a card selects it there', () => {
   const m = scenario(cardRoles())
   for (const width of [56, 90]) assert.ok(plain(draw(m, { tab: 2, selected: 'panel' }, width, 24)).every(line => line.length <= width))
   const first = draw(m, { tab: 2, selected: 'panel' }, 56, 14)
   assert.ok(first.maxScroll > 0)
-  // Scrolled back from the end until the last role's rule comes into view.
-  let scroll = first.maxScroll
-  while (scroll > 0 && !draw(m, { tab: 2, selected: 'panel', scroll }, 56, 14).hits.some(hit => hit.target.kind === 'role' && hit.col === 1)) scroll -= 1
-  assert.ok(scroll > 0 && scroll < first.maxScroll)
-  const drawn = draw(m, { tab: 2, selected: 'panel', scroll }, 56, 14)
+  const drawn = draw(m, { tab: 2, selected: 'panel', scroll: first.maxScroll }, 56, 14)
   golden('roles-narrow', plain(drawn))
-  const hits = drawn.hits.filter(hit => hit.target.kind === 'role' && hit.col === 1)
-  assert.ok(hits.length >= 1 && hits.every(hit => hit.row >= 4 && hit.row < 12))
+  assert.match(plain(drawn)[11], /^ ╰─+╯$/, 'scrolled to the end, the last card closes on the last row')
+  const hits = drawn.hits.filter(hit => hit.target.kind === 'role' && hit.target.stay)
+  assert.ok(hits.length >= 1 && hits.every(hit => hit.row >= 6 && hit.row + hit.height <= 12))
   const target = hits.at(-1)
-  assert.ok(plain(drawn)[target.row].includes(target.target.name), 'the hit sits on the rule')
+  assert.equal(target.target.name, 'review')
   const next = transition({ tab: 2, selected: 'panel' }, { kind: 'click', row: target.row, col: target.col + 4 }, m, drawn.hits, 14, drawn.maxScroll)
-  assert.equal(next.ui.selected, target.target.name)
+  assert.equal(next.ui.selected, 'review')
+  assert.equal(next.ui.tab, 2)
+})
+
+const key = name => ({ kind: 'key', key: name })
+
+test('LOG: key=value by kind, a lane per role, times relative; scrolling up pauses following, G follows again; Enter opens the fields', () => {
+  const sends = Array.from({ length: 30 }, (_, i) => ({ at: at('12:06'), by: 'cli', ev: 'send', role: i % 2 ? 'api' : 'store', text: `note ${i}` }))
+  const log = [...APPROVED, ...sends]
+  const m = model(log, BUILDING)
+  const height = 20
+  const live = draw(m, { tab: 4, selected: 'api' }, 96, height)
+  assert.match(plain(live)[6], /^ ● LIVE .*events .*12m .*35 events {2}· {2}1 waits {2}· {2}1 commits$/)
+  assert.equal(live.scroll, live.maxScroll, 'following, it shows the newest')
+  assert.match(plain(live)[height - 3], /▍ 1m ago +api +↵ send +role=api {2}text="note 29"/)
+  const top = plain(draw(m, { tab: 4, selected: 'api', paused: log.length, scroll: 0 }, 96, height))
+  assert.match(top[8], /^ ▍ 10:41:00 {2}cli {5}◇ gate-open {4}gate=plan {2}plan=sha256:3f9a0c1e$/)
+  assert.match(top[11], /^ ▍ now {7}api {5}→ dispatch {5}role=api/)
+  assert.match(top[12], /^ ▍ now {7}store {3}→ dispatch/)
+  assert.match(top[13], /^ ▍ 1m ago {4}⎿ {7}↵ send {9}role=store {2}text="note 0"/, 'the next event in the same lane hangs from it')
+  assert.match(top[14], /^ ▍ 1m ago {4}api {5}↵ send/)
+  assert.match(plain(live)[height - 4], /^ ▍ 1m ago {4}store/)
+  const runs = draw(m, { tab: 4, selected: 'api', paused: log.length, scroll: 0 }, 96, height).lines.flat()
+  assert.ok(runs.some(run => run.text === 'sha256:3f9a0c1e' && run.tone === 'accent'))
+  assert.ok(runs.some(run => run.text.startsWith('◇ gate-open') && run.tone === 'warn'))
+  let ui = { tab: 4, selected: 'api', scroll: live.scroll }
+  ui = transition(ui, { kind: 'scroll', by: -3 }, m, live.hits, height, live.maxScroll).ui
+  assert.equal(ui.paused, log.length)
+  const grown = model([...log, { at: at('12:07'), by: 'orch', ev: 'stage', stage: 'review' }], BUILDING)
+  const paused = draw(grown, ui, 96, height)
+  assert.match(plain(paused)[6], /^ ‖ paused · 1 new ↓/)
+  assert.equal(paused.scroll, ui.scroll, 'paused, it stays where it was')
+  ui = transition(ui, key('G'), grown, paused.hits, height, paused.maxScroll).ui
+  assert.equal(ui.paused, undefined)
+  ui = transition(ui, key('up'), grown, paused.hits, height, paused.maxScroll).ui
+  assert.equal(ui.line, grown.log.length - 1, 'the cursor starts on the newest event')
+  ui = transition(ui, key('enter'), grown, paused.hits, height, paused.maxScroll).ui
+  assert.deepEqual(ui.open, [grown.log.length - 1])
+  const open = draw(grown, ui, 96, height)
+  assert.match(plain(open)[height - 3], /^ {21}⎿ stage {6}review/)
+  const row = open.hits.find(hit => hit.target.kind === 'line' && hit.target.index === grown.log.length - 3)
+  assert.ok(row, 'each event row is a target')
+  assert.deepEqual(transition(ui, { kind: 'click', row: row.row, col: 5 }, grown, open.hits, height, open.maxScroll).ui.open, [grown.log.length - 1, grown.log.length - 3])
+  assert.match(plain(draw(model([], new Map()), { tab: 4, selected: 'api' }, 96, height)).join('\n'), /nothing logged yet/)
+})
+
+test('DIFF: each role\'s files as a tree, the file under the cursor as hunks with numbers and word marks; ↑↓ and n go through every role\'s files', () => {
+  const files = parseDiff(['diff --git a/src/api/refresh.ts b/src/api/refresh.ts', '--- a/src/api/refresh.ts', '+++ b/src/api/refresh.ts', '@@ -20,2 +20,3 @@ export const refresh',
+    '   if (!token) return unauthorized()', '-  return issue(token.userId)', '+  await store.markUsed(token.id)', '+  return issue(token.userId, { family: token.family })', ''].join('\n'))
+  const api = { state: 'working', screen: [], work: { commits: [{ sha: 'a1c09e2', subject: 'Rotate the refresh token on use' }], changed: ['src/api/refresh.ts'], outside: [], files } }
+  const m = model(APPROVED, new Map([['api', api], ['store', BUILDING.get('store')]]))
+  const drawn = draw(m, { tab: 5, selected: 'api' }, 110, 30)
+  const lines = plain(drawn)
+  const text = lines.join('\n')
+  for (const one of [/⬢ api +\+2 −1 │/, /▸ {2}└ M refresh\.ts +\+2 −1 ▪▪▪▪▪ │/, /└ M tokens\.ts/, /✻ web +│.*\n {3}not started · after api/, /✻ review +│.*\n {3}changes nothing/]) assert.match(text, one)
+  assert.match(text, /│ {2}a1c09e2 {2}Rotate the refresh token on use/)
+  assert.match(text, /│ ▍ M src\/api\/refresh\.ts {2}\+2 −1/)
+  assert.match(text, /│ +20 +20 +if \(!token\)/)
+  assert.match(text, /│ +21 +- +return issue\(token\.userId\)/)
+  assert.match(text, /│ +22 \+ +return issue\(token\.userId, \{ family: token\.family \}\)/)
+  const runs = drawn.lines.flat()
+  assert.ok(runs.some(run => run.text === ', { family: token.family }' && run.bg === 'ok' && run.wash === 0.34), 'the added words are brighter')
+  assert.ok(runs.some(run => run.text.includes('await store.markUsed') && run.bg === 'ok' && run.wash === 0.12), 'an unpaired added line is washed whole')
+  assert.ok(lines.some(line => line.endsWith('┃')), 'the minimap marks the change')
+  let ui = { tab: 5, selected: 'api' }
+  ui = transition(ui, key('down'), m, drawn.hits, 30, drawn.maxScroll).ui
+  assert.deepEqual([ui.file, ui.selected], ['store\tmigrations/0042_token_family.sql', 'store'], 'down from the last api file goes to store\'s first')
+  ui = transition(ui, key('n'), m, drawn.hits, 30, drawn.maxScroll).ui
+  assert.equal(ui.file, 'store\tsrc/store/tokens.ts')
+  assert.match(plain(draw(m, ui, 110, 30)).join('\n'), /▍ M src\/store\/tokens\.ts[\s\S]*no hunks read yet/)
+  const hit = drawn.hits.find(one => one.target.kind === 'file' && one.target.key === 'store\tsrc/store/tokens.ts')
+  assert.deepEqual(transition({ tab: 5, selected: 'api' }, { kind: 'click', row: hit.row, col: hit.col + 3 }, m, drawn.hits, 30, drawn.maxScroll).ui.file, 'store\tsrc/store/tokens.ts')
+  assert.equal(transition(ui, key('d'), m, drawn.hits, 30, drawn.maxScroll).ui.file, undefined, 'd shows the selected role\'s first file')
+  assert.match(plain(draw(model(APPROVED, new Map()), { tab: 5, selected: 'api' }, 110, 30)).join('\n'), /nothing changed yet/)
+})
+
+test('PLAN: done-when boxes tick at the reviewer\'s PASS once every branch it reviews is done; the contents column jumps to a section', () => {
+  const pass = { state: 'done', result: { status: 'done', summary: 'PASS: 0 act-on', body: '', at: '2026-10-24T12:31:00.000Z' } }
+  const done = { state: 'done', result: { status: 'done', summary: 'ok', body: '' } }
+  const ticked = model(APPROVED, new Map([['api', done], ['store', done], ['web', done], ['review', pass]]))
+  assert.match(plain(draw(ticked, { tab: 3, selected: 'api' }, 110, 40)).join('\n'), /☒ {2}A reused token revokes every token of its family {2}✓ PASS 12:31/)
+  const early = model(APPROVED, new Map([['api', done], ['store', done], ['review', pass]]))
+  assert.ok(!plain(draw(early, { tab: 3, selected: 'api' }, 110, 40)).join('\n').includes('☒'), 'web has not landed yet')
+  const drawn = draw(ticked, { tab: 3, selected: 'api' }, 110, 20)
+  const roles = drawn.hits.find(hit => hit.target.kind === 'scroll' && plain(drawn)[hit.row].includes('Roles'))
+  const jumped = transition({ tab: 3, selected: 'api' }, { kind: 'click', row: roles.row, col: 3 }, ticked, drawn.hits, 20, drawn.maxScroll).ui
+  assert.ok(jumped.scroll > 0)
+  const after = plain(draw(ticked, jumped, 110, 20))
+  assert.match(after[5], /│ ▍ Roles ─/, 'the section is at the top')
+  assert.ok(after.some(line => /^ ▍ Roles +│/.test(line)), 'and lit in the contents')
 })
 
 test('effort: five square cells and the word, default when unset, an unknown word as written; agent colors on every surface', () => {
@@ -415,10 +554,10 @@ test('PLAN issue references continue paragraphs and hanging lists; only real hea
       const lines = plain(drawn)
       const start = lines.findIndex(line => line.includes('Keep checking both'))
       const paragraph = lines.slice(start, lines.findIndex((line, index) => index > start && line === ''))
-      assert.equal(paragraph.map(line => line.trim()).join(' '), `${marker}Keep checking both ${tail}`)
+      assert.equal(paragraph.map(line => line.trim()).join(' '), `${marker.replace('- ', '• ')}Keep checking both ${tail}`)
       assert.ok(paragraph.slice(1).every(line => line.startsWith(' '.repeat(marker.length + 1))), `hanging indent for ${JSON.stringify(marker)} at ${width}`)
       if (width === 150) assert.equal(paragraph.length, 1, 'source continuation joins the previous line')
-      assert.ok(lines.some(line => line.startsWith(' ─ Actual heading ')))
+      assert.ok(lines.some(line => line.startsWith(' ▍ Actual heading ─')))
     }
   }
   const invalid = '#hashtag # ####### seven hashes stay in this paragraph.'
