@@ -1,8 +1,8 @@
 import { badgeOf } from './agents.ts'
-import { Canvas, cellsOf, DOUBLE, fit, SINGLE, wrap } from './canvas.ts'
+import { Canvas, cellsOf, DOUBLE, fit, SINGLE, textOf, wrap } from './canvas.ts'
 import type { Line, Run, Tone } from './canvas.ts'
 import type { PanelModel, RoleView, StageMark } from './model.ts'
-import { layersOf, sectionsOf } from './plan.ts'
+import { clashesOf, layersOf, sectionsOf } from './plan.ts'
 import type { RoleState } from './state.ts'
 
 // The panel's screen (design section 5b): title bar, tabs, the goal, the
@@ -217,6 +217,73 @@ const planFull = (m: PanelModel, width: number): Line[] => {
 const checksOf = (m: PanelModel): Run =>
   m.problems.length === 0 ? { text: 'checks clean', tone: 'ok' } : { text: `${m.problems.length} problem${m.problems.length === 1 ? '' : 's'}`, tone: 'error' }
 
+/**
+ * The plan's shape, above its roles: builders in columns by when they start,
+ * an arrow from a role to the one beside it that waits on it, every row joined
+ * to the reviewer; then the windows by agent and whether touches overlap.
+ * Once a role is dispatched it shows its state and its line turns green when
+ * done. Empty when the columns do not fit.
+ */
+const shapeOf = (m: PanelModel, width: number): Line[] => {
+  const reviewers = m.roles.filter(role => role.touches.length === 0 && role.reviews.length > 0)
+  const builders = m.roles.filter(role => !reviewers.includes(role))
+  const known = new Set(builders.map(role => role.name))
+  const { layers, stuck } = layersOf(builders.map(role => ({ name: role.name, dependsOn: role.dependsOn.filter(dep => known.has(dep)) })))
+  if (builders.length === 0 || stuck.length > 0) return []
+  const byName = new Map(m.roles.map(role => [role.name, role]))
+  const node = (role: RoleView): Line => role.state === 'planned'
+    ? [badge(role), { text: ` ${role.name}`, tone: 'bright', bold: true }]
+    : [{ text: LOOK[role.state].glyph, tone: LOOK[role.state].tone }, { text: ` ${role.name}`, tone: 'bright', bold: true }]
+  const line = (role: RoleView | undefined): Tone => (role?.state === 'done' ? 'ok' : 'chrome')
+  const columns = layers.map((layer, index) => ({
+    head: index === 0 ? 'at once' : `after ${[...new Set(layer.flatMap(one => one.dependsOn))].join(', ')}`,
+    roles: layer.map(one => byName.get(one.name)).filter(role => role !== undefined),
+  }))
+  const widths = columns.map(column => Math.max(cellsOf(column.head), ...column.roles.map(role => cellsOf(textOf(node(role))))))
+  const last = reviewers.length === 0 ? [] : [reviewers.map(role => textOf(node(role))).join(' · '), 'as each lands']
+  const ARROW = 5
+  if (2 + widths.reduce((sum, one) => sum + one + ARROW, 0) + Math.max(0, ...last.map(cellsOf)) > width) return []
+
+  const rows = Math.max(...columns.map(column => column.roles.length))
+  const out: Line[] = [[{ text: '  ' }, ...columns.flatMap((column, index) => [{ text: fit(column.head, widths[index] ?? 0), tone: 'dim' as const }, { text: ' '.repeat(ARROW) }]), ...(last[1] ? [{ text: last[1], tone: 'dim' as const }] : [])]]
+  for (let row = 0; row < rows; row++) {
+    const runs: Line = [{ text: '  ' }]
+    // Where this row's last role ends: its line runs on to the reviewer from there.
+    const end = columns.reduce((found, column, index) => (column.roles[row] === undefined ? found : index), -1)
+    columns.forEach((column, index) => {
+      const role = column.roles[row]
+      const size = widths[index] ?? 0
+      const next = columns[index + 1]?.roles[row]
+      if (role === undefined) {
+        runs.push({ text: index > end && reviewers.length > 0 ? '─'.repeat(size + ARROW) : ' '.repeat(size + ARROW), tone: line(columns[end]?.roles[row]) })
+        return
+      }
+      runs.push(...node(role), { text: ' '.repeat(size - cellsOf(textOf(node(role)))) })
+      if (next !== undefined && next.dependsOn.includes(role.name)) runs.push({ text: ' ──▶ ', tone: line(role) })
+      else if (next === undefined && reviewers.length > 0) runs.push({ text: ' ' + '─'.repeat(ARROW - 1), tone: line(role) })
+      else runs.push({ text: ' '.repeat(ARROW) })
+    })
+    if (reviewers.length > 0) {
+      const tone = line(columns[end]?.roles[row])
+      // The rows join into one arrow to the reviewer.
+      const join = rows === 1 ? '─▶ ' : row === 0 ? '┬▶ ' : row === rows - 1 ? '┘' : '┤'
+      runs.push({ text: join, tone })
+      if (row === 0) reviewers.forEach((role, index) => runs.push(...(index > 0 ? [{ text: ' · ', tone: 'dim' as const }] : []), ...node(role)))
+    }
+    out.push(runs)
+  }
+  const agents = new Map<string, RoleView[]>()
+  for (const role of m.roles) agents.set(role.agent, [...(agents.get(role.agent) ?? []), role])
+  const clash = clashesOf(m.roles)[0]
+  out.push([
+    { text: `  ${m.roles.length} window${m.roles.length === 1 ? '' : 's'} · `, tone: 'dim' },
+    ...[...agents].flatMap(([agent, roles]) => [{ text: `${agent} ×${roles.length}`, tone: badge(roles[0] as RoleView).tone }, { text: ' · ', tone: 'dim' as const }]),
+    clash === undefined ? { text: "touches don't overlap ✓", tone: 'ok' } : { text: `✗ ${clash.a} and ${clash.b} overlap`, tone: 'error' },
+  ])
+
+  return out
+}
+
 /** The plan's parts, the same in the plan gate and on the PLAN tab: goal, why, done when, each role, decisions, out of scope; wrapped, never cut. */
 const planSummary = (m: PanelModel, width: number): Line[] => {
   const lines: Line[] = []
@@ -229,20 +296,37 @@ const planSummary = (m: PanelModel, width: number): Line[] => {
   const item = (n: string, runs: Line) => lines.push(...reflow(runs, width, '     ', '     ').map((line, index) => index === 0 ? [{ text: ` ${n.padStart(2)}  `, tone: 'dim' as const }, ...line.slice(1)] : line))
   m.doneWhen.forEach((one, index) => item(String(index + 1), inline(one)))
   head('ROLES')
+  const shape = shapeOf(m, width)
+  if (shape.length > 0) lines.push(...shape, [])
+  // A role's own problems and its overlaps sit under it; the rest follow the roles.
+  const clashes = clashesOf(m.roles)
+  const placed = new Set<string>()
   m.roles.forEach((role, index) => {
     if (index > 0) lines.push([])
     const agent = `${role.agent} ${role.model || 'default'}`
+    const look = LOOK[role.state]
     lines.push([
       { text: ' ' }, badge(role), { text: ' ' },
       { text: fit(role.name, 11), tone: 'bright', bold: true },
       { text: fit(agent, 20), tone: 'dim' },
       ...fitRuns(effortOf(role.effort), EFFORT + 2),
-      { text: fit(startOf(role), Math.max(0, width - 48)), tone: 'dim' },
+      role.state === 'planned' ? { text: fit(startOf(role), Math.max(0, width - 48)), tone: 'dim' } : { text: fit(`${look.glyph} ${look.text}`, Math.max(0, width - 48)), tone: look.tone },
     ])
     lines.push(...reflow(inline(role.goal), width, '   ', '   '))
-    lines.push(...reflow([{ text: role.touches.length === 0 ? 'changes nothing' : role.touches.join('  '), tone: 'chrome' }], width, '   ', '   '))
+    const side = (one: { a: string; b: string }) => (one.a === role.name ? 0 : one.b === role.name ? 1 : -1)
+    const clashing = new Set(clashes.flatMap(one => (side(one) < 0 ? [] : one.shared.map(pair => pair.split(' ~ ')[side(one)] ?? ''))))
+    const touches: Line = role.touches.length === 0 ? [{ text: 'changes nothing', tone: 'chrome' }] : role.touches.flatMap((one, n) => [{ text: n === 0 ? '' : '  ' }, clashing.has(one) ? { text: `✗ ${one}`, tone: 'error' as const } : { text: one, tone: 'chrome' as const }])
+    lines.push(...reflow(touches, width, '   ', '   '))
+    const own = [
+      ...m.problems.filter(problem => problem.startsWith(`role ${role.name}: `)).map(problem => ({ problem, text: problem.slice(`role ${role.name}: `.length) })),
+      ...clashes.filter(one => one.b === role.name).map(one => ({ problem: m.problems.find(problem => problem.startsWith(`${one.a} and ${one.b} overlap (`)) ?? '', text: `overlaps ${one.a} on ${one.shared.map(pair => pair.replace(/^(.+) ~ \1$/, '$1')).join('; ')} · neither depends on the other` })),
+    ]
+    for (const { problem, text } of own) {
+      placed.add(problem)
+      lines.push(...reflow([{ text: `✗ ${text}`, tone: 'error' }], width, '   ', '     '))
+    }
   })
-  for (const problem of m.problems) wrap(problem, width - 4).forEach((one, index) => lines.push([{ text: `${index === 0 ? '  - ' : '    '}${one}`, tone: 'error' }]))
+  for (const problem of m.problems.filter(one => !placed.has(one))) wrap(problem, width - 4).forEach((one, index) => lines.push([{ text: `${index === 0 ? '  - ' : '    '}${one}`, tone: 'error' }]))
   if (m.decisions.length > 0) head('DECISIONS')
   for (const one of m.decisions) {
     const rec = one.recommended === '' ? '' : `→ ${one.recommended}`
