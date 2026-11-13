@@ -1,6 +1,8 @@
 import { appendFileSync, existsSync, mkdirSync, readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 
+import type { Lang } from './i18n.ts'
+
 // The mission's run log: <git-common-dir>/troupe/<mission>/log.jsonl, one
 // JSON object per line, appended by the CLI and the panel only. It holds what
 // only the moment of action knows (the pane a role opened in, the argv, gate
@@ -21,6 +23,8 @@ export type Event =
   | { ev: 'orchestrator'; harness: 'claude' | 'codex'; session: string; mux: 'tmux' | 'herdr'; pane: string }
   /** A line troupe typed into the orchestrator; its key says what it reported. */
   | { ev: 'notice'; key: string; text: string }
+  /** The person switched the panel's language; the orchestrator is told to write in it. */
+  | { ev: 'lang'; lang: Lang }
 /** Who wrote a line: what the writer says, not a proof. */
 export type By = 'cli' | 'panel' | 'orch'
 export type Logged = Event & { at: string; by: By }
@@ -48,7 +52,7 @@ export const append = (path: string, by: By, event: Event, at = new Date()): Log
   return line
 }
 
-const EVENTS = ['gate-open', 'gate-answer', 'stage', 'dispatch', 'send', 'close', 'up', 'teardown', 'orchestrator', 'notice']
+const EVENTS = ['gate-open', 'gate-answer', 'stage', 'dispatch', 'send', 'close', 'up', 'teardown', 'orchestrator', 'notice', 'lang']
 
 /** The log's events, and how many lines could not be read (a torn last line, a hand edit). */
 export const readLog = (path: string): { events: Logged[]; unread: number } => {

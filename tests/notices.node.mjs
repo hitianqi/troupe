@@ -6,6 +6,7 @@ import { test } from 'node:test'
 
 import { recordActivity } from '../dist/activity.js'
 import { AGENTS } from '../dist/agents.js'
+import { langOf, saveLang } from '../dist/i18n.js'
 import { append, readLog } from '../dist/log.js'
 import { agentSession, callerTarget, deliverNotices, pendingNotices } from '../dist/notices.js'
 import { claudeSessionTurn } from '../dist/usage.js'
@@ -169,4 +170,19 @@ test('an answer a finish has superseded is not replayed when later work is sent'
   assert.deepEqual(keys(), [`answer:wake:${stamp(11)}`])
   append(log, 'cli', { ev: 'send', role: 'wake', text: 'more' }, new Date(stamp(12)))
   assert.deepEqual(keys(), [])
+})
+
+test('a language switch in the panel is told once, the last one only; the choice is saved for the next panel', t => {
+  const { home, log, stamp, keys, tell } = answerSetup(t, 'api')
+  append(log, 'panel', { ev: 'lang', lang: 'zh' }, new Date(stamp(3)))
+  append(log, 'panel', { ev: 'lang', lang: 'en' }, new Date(stamp(4)))
+  append(log, 'panel', { ev: 'lang', lang: 'zh' }, new Date(stamp(5)))
+  assert.deepEqual(keys(), [`lang:${stamp(5)}`])
+  assert.match(tell().text, /^The person switched the panel to Chinese\. Write everything the person reads in Simplified Chinese/)
+  assert.deepEqual(keys(), [])
+
+  assert.equal(langOf(home, { LANG: 'zh_CN.UTF-8' }), 'zh')
+  assert.equal(langOf(home, { LANG: 'en_US.UTF-8' }), 'en')
+  saveLang(home, 'zh')
+  assert.equal(langOf(home, { LANG: 'en_US.UTF-8' }), 'zh', 'the saved choice beats the locale')
 })

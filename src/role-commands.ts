@@ -7,6 +7,8 @@ import type { Agent, Screen } from './agents.ts'
 import { ACTIVITY_EVENTS, ACTIVITY_FILE, claudeTurn } from './activity.ts'
 import { clean, excludeTroupe, git, mux, Refusal, within, workflowStages } from './command-context.ts'
 import type { Mission, Reply, Runtime } from './command-context.ts'
+import { langOf, WRITE_CHINESE } from './i18n.ts'
+import type { Lang } from './i18n.ts'
 import { append, isApproved } from './log.ts'
 import type { Live } from './model.ts'
 import { boundTo, markedPanes, mission, missionTree, orchestratorsOf, unbind } from './missions.ts'
@@ -17,7 +19,7 @@ import { shellOf, tmux } from './run.ts'
 import { CONTEXT_FILE, statusLineCommand } from './statusline.ts'
 import { codexTurn, tokensOf } from './usage.ts'
 
-export const briefOf = (m: Mission, role: Role, worktree: string, branch: string): string => [
+export const briefOf = (m: Mission, role: Role, worktree: string, branch: string, lang: Lang = 'en'): string => [
   `# ${m.name}: ${role.name}`, '',
   `Mission goal: ${m.plan.goal}`, `Why: ${m.plan.why}`, `Your goal: ${role.goal}`, '',
   `Work in ${worktree} on branch ${branch}. Do not rename the branch.`,
@@ -25,6 +27,7 @@ export const briefOf = (m: Mission, role: Role, worktree: string, branch: string
   'Commit your changes on your branch.',
   `Depends on: ${role.dependsOn.join(', ') || 'none'}.`,
   `Skills to load: ${role.skills.join(', ') || 'none'}.`, '',
+  ...(lang === 'zh' ? [WRITE_CHINESE, ''] : []),
   ...(m.texts.has(role.name) ? ['## Referenced instructions', '', m.texts.get(role.name) ?? '', ''] : []),
   '## Your role', '', role.section, '',
   '## Finish', '',
@@ -174,7 +177,7 @@ export const dispatch = async (r: Runtime, initial: Mission, name: string): Prom
   const base = previous?.base ?? git(r, m.root, ['rev-parse', '--verify', '--end-of-options', `${m.plan.base || 'HEAD'}^{commit}`]).trim()
   prepareWorktree(r, m, worktree, branch, base)
   const brief = join(worktree, '.troupe/brief.md')
-  const briefText = briefOf(m, role, worktree, branch)
+  const briefText = briefOf(m, role, worktree, branch, langOf(r.home, r.env))
   mkdirSync(dirname(brief), { recursive: true })
   writeFileSync(brief, briefText)
   writeFileSync(join(dirname(m.log), `brief-${name}.md`), briefText)

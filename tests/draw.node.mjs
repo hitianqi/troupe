@@ -8,6 +8,7 @@ import { fileURLToPath } from 'node:url'
 
 import { Canvas, cellsOf as widthOf, fit, paint, textOf, TONES, wrap } from '../dist/canvas.js'
 import { draw, effortOf } from '../dist/draw.js'
+import { setLang } from '../dist/i18n.js'
 import { fold } from '../dist/log.js'
 import { decisionsOf, modelOf } from '../dist/model.js'
 import { readPlan } from '../dist/plan.js'
@@ -54,7 +55,7 @@ test('the build, api selected: a waiting role in the strip, the flow, its detail
   const lines = plain(draw(model(APPROVED, BUILDING), { tab: 1, selected: 'api' }, 96, 58))
   golden('build-api', lines)
   assert.ok(lines.every(line => line.length <= 96))
-  assert.match(lines[0], /auth-refresh {2}· {2}Build .*◆ 1 needs you {2}· {2}12:07$/)
+  assert.match(lines[0], /auth-refresh {2}· {2}Build .*◆ 1 needs you {2}· {2}12:07 {3}中\/EN$/)
 })
 
 test('the plan gate: goal, why, one line per done-when, each role with its start and touches; the decision', () => {
@@ -102,6 +103,29 @@ test('clicks: tabs, role rows and boxes, and the gate buttons are targets', () =
   assert.ok(hits.filter(one => one.target.kind === 'role' && one.target.name === 'store').length >= 2, 'a row and a box')
   const gate = draw(model(APPROVED.slice(0, 1), new Map()), { tab: 1, selected: 'api' }, 96, 58).hits
   assert.ok(gate.some(one => one.target.kind === 'key' && one.target.key === 'a'))
+})
+
+test('in Chinese every line fits its width in cells and every click target sits on its label', () => {
+  const cells = text => [...text].flatMap(ch => (widthOf(ch) === 2 ? [ch, ''] : [ch]))
+  setLang('zh')
+  try {
+    const asked = [...APPROVED, { at: at('12:30'), by: 'orch', ev: 'gate-open', gate: 'mr-ok', ask: '开 MR 吗？' }]
+    for (const log of [APPROVED, APPROVED.slice(0, 1), asked]) for (const width of [96, 60]) for (const tab of [1, 2, 3, 4, 5]) {
+      const drawn = draw(model(log, BUILDING), { tab, selected: 'api' }, width, 40)
+      const lines = drawn.lines.map(textOf)
+      for (const line of lines) assert.ok(widthOf(line) <= width, `${width} cols, tab ${tab}: ${line}`)
+      for (const { row, col, width: w, target } of drawn.hits) {
+        const under = cells(lines[row] ?? '').slice(col, col + w).join('').trim()
+        if (target.kind === 'tab') assert.ok(under.startsWith(`${target.tab} `), under)
+        if (target.kind === 'key') assert.ok(target.key === 'L' ? under === '中/EN' : under.startsWith(target.key), `${target.key}: ${under}`)
+      }
+    }
+    const lines = plain(draw(model(APPROVED, BUILDING), { tab: 1, selected: 'api' }, 96, 40))
+    assert.match(lines[0], /构建 .*◆ 1 项待你处理 {2}· {2}12:07 {3}中\/EN$/)
+    assert.ok(lines.some(line => line.includes('▌ ◆ api') && line.includes('等你处理')))
+  } finally {
+    setLang('en')
+  }
 })
 
 test('the other tabs: roles table, plan summary, log, diff; and the input line', () => {

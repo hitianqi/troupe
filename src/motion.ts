@@ -1,6 +1,7 @@
 import { cellsOf, coloursOf, PAPER as PAPER_HEX } from './canvas.ts'
 import { contextOf, count, effortOf, LOOK } from './draw.ts'
 import type { Drawn, Point, Rect, Scene } from './draw.ts'
+import { t as say } from './i18n.ts'
 import type { PanelModel, RoleView } from './model.ts'
 import { RGB, rgbOf } from './screen.ts'
 import type { Cell, Rgb, Screen } from './screen.ts'
@@ -9,6 +10,9 @@ import type { RoleState } from './state.ts'
 // The live panel's motion: what it remembers between reads (each role's
 // tokens/s and when its state changed) and the effects drawn over a frame as
 // a function of time. Only the live panel moves; --once and --plain never do.
+
+/** `text` as the screen holds it, one entry per cell: a wide character, then an empty cell. */
+const glyphs = (text: string): string[] => [...text].flatMap(ch => (cellsOf(ch) === 2 ? [ch, ''] : [ch]))
 
 /** A role's output count at its last read, and its tokens/s between reads, oldest first. */
 export type Rates = { at: number; output: number; rates: number[] }
@@ -309,9 +313,10 @@ export class Motion {
       const cells = Math.min(32, column.width - 22)
       if (role.state !== 'planned' && this.rates.has(role.name) && cells >= 8) {
         const rate = this.rateOf(role.name)
-        span(detail.spare, 1, 9).forEach((cell, i) => Object.assign(cell ?? {}, { ch: 'tokens'[i] ?? ' ', fg: RGB.dim }))
+        const name = glyphs(say('tokens'))
+        span(detail.spare, 1, 9).forEach((cell, i) => Object.assign(cell ?? {}, { ch: name[i] ?? ' ', fg: RGB.dim }))
         spark(span(detail.spare, 10, cells), role.name)
-        const label = rate > 0 ? `${count(Math.round(rate))} tok/s` : 'idle'
+        const label = glyphs(rate > 0 ? `${count(Math.round(rate))} tok/s` : say('idle'))
         span(detail.spare, 11 + cells, label.length).forEach((cell, i) => Object.assign(cell ?? {}, { ch: label[i], fg: rate > 0 ? RGB.ok : RGB.dim }))
       }
       const window = detail.window
@@ -423,9 +428,9 @@ export class Motion {
       if (!this.rates.has(one.name)) continue
       const rate = this.rateOf(one.name)
       fx.spark(span(one.row, one.col, 12), one.name)
-      const label = ` ${rate > 0 ? `${count(Math.round(rate))} tok/s` : 'idle'}`
+      const label = glyphs(` ${rate > 0 ? `${count(Math.round(rate))} tok/s` : say('idle')}`)
       span(one.row, one.col + 12, label.length).forEach((cell, i) => Object.assign(cell ?? {}, { ch: label[i], fg: rate > 0 ? RGB.ok : RGB.dim, bold: undefined }))
-      const tail = `  ${one.tail}`
+      const tail = glyphs(`  ${one.tail}`)
       span(one.row, one.col + 12 + label.length, tail.length).forEach((cell, i) => Object.assign(cell ?? {}, { ch: tail[i], fg: RGB.dim, bold: undefined }))
     }
     if (page.live !== undefined) {
@@ -465,7 +470,7 @@ export class Motion {
       fx.shimmer(span(row + 1, col + 4, Math.min(cellsOf(role.name), width - 8)), seed)
     }
     if (role.state !== 'planned') {
-      const pill = ` ${look.text} `
+      const pill = glyphs(` ${say(look.text)} `)
       const wash = mix(this.paper, tone, role.state === 'waits' ? 0.2 + 0.1 * breath(t, 1.4, seed) : 0.16)
       span(row + 1, col + width - 1 - pill.length, pill.length).forEach((cell, i) => Object.assign(cell ?? {}, { ch: pill[i], fg: tone, bg: wash, bold: undefined }))
       // The effort squares, then the sparkline, then the context share flush right.

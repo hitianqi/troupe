@@ -3,6 +3,8 @@ import { blend, Canvas, cellsOf, DOUBLE, fit, rgbOf, ROUND, SINGLE, solid, textO
 import type { Hex, Line, Run, Style, Tone } from './canvas.ts'
 import { pairsOf, wordDiff } from './diff.ts'
 import type { FileDiff } from './diff.ts'
+import { known, lang, plural, t } from './i18n.ts'
+import type { Phrase } from './i18n.ts'
 import { clockOf } from './model.ts'
 import type { PanelModel, RoleView, StageMark } from './model.ts'
 import { clashesOf, sectionsOf, treeOf } from './plan.ts'
@@ -79,7 +81,7 @@ const LEFT = 27
 const BOX = 26
 const GAP = 6
 
-export const LOOK: Record<RoleState, { glyph: string; text: string; tone: Tone }> = {
+export const LOOK: Record<RoleState, { glyph: string; text: Phrase; tone: Tone }> = {
   planned: { glyph: '○', text: 'planned', tone: 'dim' },
   working: { glyph: '●', text: 'working', tone: 'ok' },
   idle: { glyph: '◐', text: 'idle', tone: 'accent' },
@@ -101,13 +103,13 @@ const MARK: Record<StageMark, { glyph: string; tone: Tone }> = {
 
 /** `left` and `right` in `width` cells, `right` flush with the edge; `left` cut first. */
 const spread = (left: string, right: string, width: number) =>
-  right === '' ? fit(left, width) : `${fit(left, Math.max(0, width - right.length - 1))} ${right}`.slice(0, width)
+  right === '' ? fit(left, width) : fit(`${fit(left, Math.max(0, width - cellsOf(right) - 1))} ${right}`, width)
 
-const rule = (title: string, width: number): Line => [{ text: `─ ${title} ${'─'.repeat(Math.max(0, width - title.length - 3))}`, tone: 'chrome' }]
+const rule = (title: string, width: number): Line => [{ text: `─ ${title} ${'─'.repeat(Math.max(0, width - cellsOf(title) - 3))}`, tone: 'chrome' }]
 
 /** When a role starts, as the plan gate says it. */
 const startOf = (role: RoleView) =>
-  role.dependsOn.length > 0 ? `after ${role.dependsOn.join(', ')}` : role.touches.length === 0 && role.reviews.length > 0 ? 'as each lands' : 'starts at once'
+  role.dependsOn.length > 0 ? t('after {0}', role.dependsOn.join(', ')) : role.touches.length === 0 && role.reviews.length > 0 ? t('as each lands') : t('starts at once')
 
 /** Context use as a share of the window, from the agent's transcript; undefined when unknown. */
 const shareOf = (role: RoleView): number | undefined => {
@@ -137,7 +139,7 @@ const contextBar = (role: RoleView, cells: number): Line => {
 /** 1234 → 1.2k, 1234567 → 1.2M. */
 export const count = (n: number) => (n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : n >= 1e3 ? `${(n / 1e3).toFixed(n >= 1e4 ? 0 : 1)}k` : String(n))
 
-const tokensOf = (role: RoleView) => (role.tokens === undefined ? '—' : `${count(role.tokens.input)} in · ${count(role.tokens.output)} out`)
+const tokensOf = (role: RoleView) => (role.tokens === undefined ? '—' : t('{0} in · {1} out', count(role.tokens.input), count(role.tokens.output)))
 
 const badge = (role: RoleView): Run => {
   const one = role.badge ?? badgeOf(role.agent)
@@ -150,7 +152,7 @@ const LEVELS: Record<string, number> = { minimal: 1, low: 1, medium: 2, high: 3,
 /** Effort as five square cells and its word: `◼◼◼◻◻ high`; unset is `default`, an unknown word stays as written. */
 export const effortOf = (effort: string): Line => {
   const level = Object.hasOwn(LEVELS, effort) ? LEVELS[effort] : undefined
-  if (level === undefined) return [{ text: effort || 'default', tone: 'dim' }]
+  if (level === undefined) return [{ text: effort || t('default'), tone: 'dim' }]
 
   return [{ text: '◼'.repeat(level), tone: 'accent' }, { text: '◻'.repeat(5 - level), tone: 'chrome' }, { text: ` ${effort}`, tone: 'dim' }]
 }
@@ -301,7 +303,7 @@ const planFull = (m: PanelModel, width: number): { lines: Line[]; heads: Head[] 
 // ---- the parts -------------------------------------------------------------
 
 const checksOf = (m: PanelModel): Run =>
-  m.problems.length === 0 ? { text: 'checks clean', tone: 'ok' } : { text: `${m.problems.length} problem${m.problems.length === 1 ? '' : 's'}`, tone: 'error' }
+  m.problems.length === 0 ? { text: t('checks clean'), tone: 'ok' } : { text: plural(m.problems.length, '{0} problem', '{0} problems'), tone: 'error' }
 
 /** When the reviewer passed every branch it reviews: its result says PASS and they are all done. */
 const passedAt = (m: PanelModel): string | undefined => {
@@ -343,11 +345,11 @@ const shapeOf = (m: PanelModel, width: number): Line[] => {
     : [{ text: LOOK[role.state].glyph, tone: LOOK[role.state].tone }, { text: ` ${role.name}`, tone: 'bright', bold: true }]
   const line = (role: RoleView | undefined): Tone => (role?.state === 'done' ? 'ok' : 'chrome')
   const columns = layers.map((layer, index) => ({
-    head: index === 0 ? 'at once' : `after ${[...new Set(layer.flatMap(one => one.dependsOn))].join(', ')}`,
+    head: index === 0 ? t('at once') : t('after {0}', [...new Set(layer.flatMap(one => one.dependsOn))].join(', ')),
     roles: layer,
   }))
   const widths = columns.map(column => Math.max(cellsOf(column.head), ...column.roles.map(role => cellsOf(textOf(node(role))))))
-  const last = reviewers.length === 0 ? [] : [reviewers.map(role => textOf(node(role))).join(' · '), 'as each lands']
+  const last = reviewers.length === 0 ? [] : [reviewers.map(role => textOf(node(role))).join(' · '), t('as each lands')]
   const ARROW = 5
   if (2 + widths.reduce((sum, one) => sum + one + ARROW, 0) + Math.max(0, ...last.map(cellsOf)) > width) return []
 
@@ -383,9 +385,9 @@ const shapeOf = (m: PanelModel, width: number): Line[] => {
   for (const role of m.roles) agents.set(role.agent, [...(agents.get(role.agent) ?? []), role])
   const clash = clashesOf(m.roles)[0]
   out.push([
-    { text: `  ${m.roles.length} window${m.roles.length === 1 ? '' : 's'} · `, tone: 'dim' },
+    { text: `  ${plural(m.roles.length, '{0} window', '{0} windows')} · `, tone: 'dim' },
     ...[...agents].flatMap(([agent, roles]) => [{ text: `${agent} ×${roles.length}`, tone: badge(roles[0] as RoleView).tone }, { text: ' · ', tone: 'dim' as const }]),
-    clash === undefined ? { text: "touches don't overlap ✓", tone: 'ok' } : { text: `✗ ${clash.a} and ${clash.b} overlap`, tone: 'error' },
+    clash === undefined ? { text: t("touches don't overlap ✓"), tone: 'ok' } : { text: t('✗ {0} and {1} overlap', clash.a, clash.b), tone: 'error' },
   ])
 
   return out
@@ -395,8 +397,9 @@ const shapeOf = (m: PanelModel, width: number): Line[] => {
 const planSummary = (m: PanelModel, width: number, tone: Tone, page: boolean): { lines: Line[]; heads: Head[] } => {
   const lines: Line[] = []
   const heads: Head[] = []
-  const field = (name: string, runs: Line) => lines.push(...reflow(runs, width, { text: fit(name, 7), tone: 'dim' }, ' '.repeat(7)))
-  const head = (title: string) => {
+  const field = (name: Phrase, runs: Line) => lines.push(...reflow(runs, width, { text: fit(t(name), 7), tone: 'dim' }, ' '.repeat(7)))
+  const head = (phrase: Phrase) => {
+    const title = t(phrase)
     lines.push([])
     heads.push({ title, at: lines.length })
     lines.push(sectionHead([{ text: title }], width, tone, page))
@@ -419,23 +422,23 @@ const planSummary = (m: PanelModel, width: number, tone: Tone, page: boolean): {
   const placed = new Set<string>()
   m.roles.forEach((role, index) => {
     if (index > 0 && page) lines.push([])
-    const agent = `${role.agent} ${role.model || 'default'}`
+    const agent = `${role.agent} ${role.model || t('default')}`
     const look = LOOK[role.state]
     lines.push([
       { text: ' ' }, badge(role), { text: ' ' },
       { text: fit(role.name, 11), tone: 'bright', bold: true },
       { text: fit(agent, 20), tone: 'dim' },
       ...fitRuns(effortOf(role.effort), EFFORT + 2),
-      role.state === 'planned' ? { text: fit(startOf(role), Math.max(0, width - 48)), tone: 'dim' } : { text: fit(`${look.glyph} ${look.text}`, Math.max(0, width - 48)), tone: look.tone },
+      role.state === 'planned' ? { text: fit(startOf(role), Math.max(0, width - 48)), tone: 'dim' } : { text: fit(`${look.glyph} ${t(look.text)}`, Math.max(0, width - 48)), tone: look.tone },
     ])
     lines.push(...reflow(inline(role.goal), width, '   ', '   '))
     const side = (one: { a: string; b: string }) => (one.a === role.name ? 0 : one.b === role.name ? 1 : -1)
     const clashing = new Set(clashes.flatMap(one => (side(one) < 0 ? [] : one.shared.map(pair => pair.split(' ~ ')[side(one)] ?? ''))))
-    const touches: Line = role.touches.length === 0 ? [{ text: 'changes nothing', tone: 'dim' }] : role.touches.flatMap((touch, i) => [...(i > 0 ? [{ text: '  ' }] : []), clashing.has(touch) ? { text: `✗ ${touch}`, tone: 'error' as const } : { text: touch, tone: 'cyan' as const, bg: 'cyan' as const, wash: 0.13 }])
+    const touches: Line = role.touches.length === 0 ? [{ text: t('changes nothing'), tone: 'dim' }] : role.touches.flatMap((touch, i) => [...(i > 0 ? [{ text: '  ' }] : []), clashing.has(touch) ? { text: `✗ ${touch}`, tone: 'error' as const } : { text: touch, tone: 'cyan' as const, bg: 'cyan' as const, wash: 0.13 }])
     lines.push(...reflow(touches, width, '   ', '   '))
     const own = [
       ...m.problems.filter(problem => problem.startsWith(`role ${role.name}: `)).map(problem => ({ problem, text: problem.slice(`role ${role.name}: `.length) })),
-      ...clashes.filter(one => one.b === role.name).map(one => ({ problem: m.problems.find(problem => problem.startsWith(`${one.a} and ${one.b} overlap (`)) ?? '', text: `overlaps ${one.a} on ${one.shared.map(pair => pair.replace(/^(.+) ~ \1$/, '$1')).join('; ')} · neither depends on the other` })),
+      ...clashes.filter(one => one.b === role.name).map(one => ({ problem: m.problems.find(problem => problem.startsWith(`${one.a} and ${one.b} overlap (`)) ?? '', text: t('overlaps {0} on {1} · neither depends on the other', one.a, one.shared.map(pair => pair.replace(/^(.+) ~ \1$/, '$1')).join('; ')) })),
     ]
     for (const { problem, text } of own) {
       placed.add(problem)
@@ -460,15 +463,15 @@ const planSummary = (m: PanelModel, width: number, tone: Tone, page: boolean): {
 /** The gate's buttons as pills, Approve filled: each key with where it sits. */
 const buttons = (plan: boolean): { line: Line; keys: { key: string; col: number; width: number }[] } => {
   const quiet: Style = { bg: 'chrome', wash: 0.35 }
-  const pills: [string, string, Style][] = [['a', ' a  Approve ', solid('warn')], ['c', ' c  Change… ', quiet], ...(plan ? [['v', ' v  Read the plan ', quiet] as [string, string, Style]] : [])]
+  const pills: [string, string, Style][] = [['a', ` a  ${t('Approve')} `, solid('warn')], ['c', ` c  ${t('Change…')} `, quiet], ...(plan ? [['v', ` v  ${t('Read the plan')} `, quiet] as [string, string, Style]] : [])]
   const line: Line = []
   const keys: { key: string; col: number; width: number }[] = []
   let col = 0
   for (const [key, text, style] of pills) {
     if (col > 0) { line.push({ text: '  ' }); col += 2 }
-    keys.push({ key, col, width: text.length })
+    keys.push({ key, col, width: cellsOf(text) })
     line.push({ text, ...style })
-    col += text.length
+    col += cellsOf(text)
   }
 
   return { line, keys }
@@ -482,12 +485,12 @@ const planGate = (m: PanelModel, inner: number): Gate => {
   lines.push([], ...reflow([{ text: `${m.planPath}  ·  ${m.hash.replace(/^(sha256:.{4}).*$/, '$1…')}  ·  `, tone: 'dim' }, checksOf(m)], inner), [])
   const at = lines.length
   const isClean = m.problems.length === 0
-  const note = !isClean ? 'fix the plan first' : m.decisions.length > 0 ? 'approving takes the recommendations' : ''
+  const note = !isClean ? t('fix the plan first') : m.decisions.length > 0 ? t('approving takes the recommendations') : ''
   const { line, keys } = buttons(true)
   if (!isClean) line[0] = { ...line[0], text: line[0]?.text ?? '', bg: 'chrome', wash: 0.35, tone: 'dim' }
   const used = cellsOf(textOf(line))
-  lines.push([...line, { text: note && inner >= used + note.length + 1 ? `${' '.repeat(inner - used - note.length)}${note}` : '', tone: 'dim' }])
-  if (note && inner < used + note.length + 1) lines.push(...reflow([{ text: note, tone: 'dim' }], inner))
+  lines.push([...line, { text: note && inner >= used + cellsOf(note) + 1 ? `${' '.repeat(inner - used - cellsOf(note))}${note}` : '', tone: 'dim' }])
+  if (note && inner < used + cellsOf(note) + 1) lines.push(...reflow([{ text: note, tone: 'dim' }], inner))
 
   return { lines, buttons: at, keys }
 }
@@ -538,10 +541,10 @@ const flow = (m: PanelModel, ui: Ui, width: number): Flow => {
     const notes = note === '' ? [] : wrap(note, w - 4)
     const h = HEIGHT + notes.length
     canvas.box(row, col, w, h, selected ? look.tone : role.state === 'planned' ? 'chrome' : look.tone, selected ? DOUBLE : SINGLE)
-    canvas.put(row + 1, col + 2, spread(`${look.glyph} ${role.name}`, look.text, w - 4), { tone: look.tone, ...(selected && { bold: true }) })
-    canvas.runs(row + 2, col + 2, [badge(role), { text: ` ${fit(`${role.agent} ${role.model || 'default'}`, w - 6)}`, tone: 'dim' }])
-    const ctx = contextOf(role) === '—' ? '' : `ctx ${contextOf(role)}`
-    canvas.runs(row + 3, col + 2, [...fitRuns(effortOf(role.effort), w - 4 - ctx.length), { text: ctx, tone: 'dim' }])
+    canvas.put(row + 1, col + 2, spread(`${look.glyph} ${role.name}`, t(look.text), w - 4), { tone: look.tone, ...(selected && { bold: true }) })
+    canvas.runs(row + 2, col + 2, [badge(role), { text: ` ${fit(`${role.agent} ${role.model || t('default')}`, w - 6)}`, tone: 'dim' }])
+    const ctx = contextOf(role) === '—' ? '' : `${t('ctx')} ${contextOf(role)}`
+    canvas.runs(row + 3, col + 2, [...fitRuns(effortOf(role.effort), w - 4 - cellsOf(ctx)), { text: ctx, tone: 'dim' }])
     notes.forEach((one, index) => canvas.put(row + 4 + index, col + 2, one, { tone: 'dim' }))
     boxes.push({ name: role.name, row, col, width: w, height: h })
 
@@ -549,7 +552,7 @@ const flow = (m: PanelModel, ui: Ui, width: number): Flow => {
   }
 
   canvas.box(0, 0, Math.min(BOX, width), 3, 'chrome')
-  canvas.put(1, 2, fit('● orchestrator', Math.min(BOX, width) - 4), { tone: 'bright' })
+  canvas.put(1, 2, fit(`● ${t('orchestrator')}`, Math.min(BOX, width) - 4), { tone: 'bright' })
   const placed = new Map<string, { row: number; col: number }>()
   const roots: number[] = []
   const locked: Point[][] = []
@@ -562,7 +565,7 @@ const flow = (m: PanelModel, ui: Ui, width: number): Flow => {
     const waits = role.dependsOn.some(dep => builders.some(one => one.name === dep))
     if (!waits) roots.push(mid)
     // The label sits just above the box, beside the edge.
-    const label = fit(`after ${role.dependsOn.join(', ')}`, Math.max(0, width - col - 1)).trimEnd()
+    const label = fit(t('after {0}', role.dependsOn.join(', ')), Math.max(0, width - col - 1)).trimEnd()
     const cells = Array.from({ length: cellsOf(label) }, (_, i) => [row - 1, col + i] as Point)
     if (waits) canvas.put(row - 1, col, label, { tone: 'dim' })
     if (parent === undefined) {
@@ -627,7 +630,7 @@ const flow = (m: PanelModel, ui: Ui, width: number): Flow => {
     roleBox(reviewer, Math.max(0, mid - 2), spine + 4, Math.min(lane, width - spine - 4))
   }
   let row = 3 + tree.length * (HEIGHT + 2)
-  for (const role of below) row = roleBox(role, row, INDENT, box, `reviews ${role.reviews.join(', ')} as each lands`) + 1
+  for (const role of below) row = roleBox(role, row, INDENT, box, t('reviews {0} as each lands', role.reviews.join(', '))) + 1
 
   return { canvas, orchestrator: { row: 0, col: 0, width: Math.min(BOX, width), height: 3 }, boxes, trunks, lanes, links }
 }
@@ -651,34 +654,35 @@ const wire = (canvas: Canvas, row: number, col: number, text: string, tone: Tone
 }
 
 /** The selected role's detail: goal, agent and flags, branch and commits, touches, diff, result; then its window's last lines, live. */
-const detail = (role: RoleView, width: number, room: number): { lines: Line[]; keys: number; spare: number; window?: { row: number; rows: number } } => {
+const detail = (role: RoleView, width: number, room: number): { lines: Line[]; keys: number; keyCols: { key: string; col: number; width: number }[]; spare: number; window?: { row: number; rows: number } } => {
   const look = LOOK[role.state]
-  const lines: Line[] = [[{ text: '─ ', tone: 'chrome' }, { text: `${look.glyph} ${role.name} · ${look.text}`, tone: look.tone }, { text: ` ${'─'.repeat(Math.max(0, width - role.name.length - look.text.length - 8))}`, tone: 'chrome' }]]
-  const field = (name: string, text: string, tone?: Tone) =>
-    wrap(text, width - 10).slice(0, 2).forEach((one, index) => lines.push([{ text: fit(index === 0 ? ` ${name}` : '', 10), tone: 'dim' }, { text: one, ...(tone && { tone }) }]))
+  const head = `${look.glyph} ${role.name} · ${t(look.text)}`
+  const lines: Line[] = [[{ text: '─ ', tone: 'chrome' }, { text: head, tone: look.tone }, { text: ` ${'─'.repeat(Math.max(0, width - cellsOf(head) - 3))}`, tone: 'chrome' }]]
+  const field = (name: Phrase, text: string, tone?: Tone) =>
+    wrap(text, width - 10).slice(0, 2).forEach((one, index) => lines.push([{ text: fit(index === 0 ? ` ${t(name)}` : '', 10), tone: 'dim' }, { text: one, ...(tone && { tone }) }]))
   field('goal', role.goal)
-  lines.push([{ text: fit(' agent', 10), tone: 'dim' }, badge(role), { text: ` ${role.agent} ${role.model || 'default'}   ` }, ...effortOf(role.effort)])
-  if (role.tokens !== undefined) lines.push([{ text: fit(' context', 10), tone: 'dim' }, ...contextBar(role, 16), { text: `   ${tokensOf(role)}`, tone: 'dim' }])
+  lines.push([{ text: fit(` ${t('agent')}`, 10), tone: 'dim' }, badge(role), { text: ` ${role.agent} ${role.model || t('default')}   ` }, ...effortOf(role.effort)])
+  if (role.tokens !== undefined) lines.push([{ text: fit(` ${t('context')}`, 10), tone: 'dim' }, ...contextBar(role, 16), { text: `   ${tokensOf(role)}`, tone: 'dim' }])
   lines.push([{ text: fit('', 10) }, { text: fit(role.flags.join(' '), width - 10), tone: 'accent' }])
   const commits = role.work?.commits.length ?? 0
-  field('branch', `${role.branch}${commits > 0 ? `  ·  ${commits} commit${commits === 1 ? '' : 's'}` : ''}`)
-  field('touches', role.touches.length === 0 ? '— changes nothing' : role.touches.join(' '))
+  field('branch', `${role.branch}${commits > 0 ? `  ·  ${plural(commits, '{0} commit', '{0} commits')}` : ''}`)
+  field('touches', role.touches.length === 0 ? `— ${t('changes nothing')}` : role.touches.join(' '))
   if (role.work !== undefined) {
     const n = role.work.changed.length
-    const files = `${n} file${n === 1 ? '' : 's'} changed`
-    if (role.work.outside.length === 0) field('diff', `${files} · inside touches ✓`, n === 0 ? 'dim' : 'ok')
-    else field('diff', `${files} · outside touches: ${role.work.outside.join(' ')}`, 'error')
+    const files = plural(n, '{0} file changed', '{0} files changed')
+    if (role.work.outside.length === 0) field('diff', `${files} · ${t('inside touches ✓')}`, n === 0 ? 'dim' : 'ok')
+    else field('diff', `${files} · ${t('outside touches: {0}', role.work.outside.join(' '))}`, 'error')
   }
   if (role.result !== undefined) field('result', `${role.result.status || '?'} · ${role.result.summary}`, role.result.status === 'done' ? 'ok' : 'warn')
   const spare = lines.length
   lines.push([])
   let window: { row: number; rows: number } | undefined
-  if (role.state === 'planned') lines.push([{ text: ` not opened yet · ${startOf(role)}`, tone: 'dim' }])
+  if (role.state === 'planned') lines.push([{ text: ` ${t('not opened yet · {0}', startOf(role))}`, tone: 'dim' }])
   else {
     // The live screen takes the rows left, less the key line.
     const inner = Math.max(1, Math.min(role.screen.length, room - lines.length - 3))
-    const title = ' its window, live '
-    lines.push([{ text: `┌─${title}${'─'.repeat(Math.max(0, width - title.length - 3))}┐`, tone: 'chrome' }])
+    const title = ` ${t('its window, live')} `
+    lines.push([{ text: `┌─${title}${'─'.repeat(Math.max(0, width - cellsOf(title) - 3))}┐`, tone: 'chrome' }])
     const shown = role.screen.length === 0 ? [''] : role.screen.slice(-inner)
     window = { row: lines.length - 1, rows: shown.length }
     for (const one of shown) lines.push([{ text: '│ ', tone: 'chrome' }, { text: fit(one, width - 4) }, { text: ' │', tone: 'chrome' }])
@@ -686,9 +690,26 @@ const detail = (role: RoleView, width: number, room: number): { lines: Line[]; k
   }
   const keys = lines.length
   const waits = role.state === 'waits'
-  lines.push([{ text: ' o Open window    ' }, { text: 's Send…', tone: waits ? 'dim' : undefined }, { text: '    d Diff' }, ...(waits ? [{ text: '    answer it first', tone: 'dim' as const }] : [])])
+  // The key line, and where each key's label sits for its click.
+  const keyRuns: [string, Line][] = [['o', [{ text: `o ${t('Open window')}` }]], ['s', [{ text: `s ${t('Send…')}`, tone: waits ? 'dim' : undefined }]], ['d', [{ text: `d ${t('Diff')}` }]]]
+  const keyLine: Line = [{ text: ' ' }]
+  const keyCols: { key: string; col: number; width: number }[] = []
+  for (const [key, runs] of keyRuns) {
+    if (keyCols.length > 0) keyLine.push({ text: '    ' })
+    const col = cellsOf(textOf(keyLine))
+    keyCols.push({ key, col, width: cellsOf(textOf(runs)) })
+    keyLine.push(...runs)
+  }
+  lines.push([...keyLine, ...(waits ? [{ text: `    ${t('answer it first')}`, tone: 'dim' as const }] : [])])
 
-  return { lines, keys, spare, ...(window && { window }) }
+  return { lines, keys, keyCols, spare, ...(window && { window }) }
+}
+
+/** The language switch, `中/EN` with the one in use lit; a click on it or `L` switches. */
+export const langSwitch = (): Line => {
+  const lit = (on: boolean): Style => (on ? { tone: 'accent', bold: true } : { tone: 'dim' })
+
+  return [{ text: '中', ...lit(lang() === 'zh') }, { text: '/', tone: 'chrome' }, { text: 'EN', ...lit(lang() === 'en') }]
 }
 
 // ---- the screen ----------------------------------------------------------------
@@ -704,18 +725,24 @@ export const draw = (m: PanelModel, ui: Ui, width: number, height: number): Draw
   const scene: Scene = { list: [], waits: [] }
 
   // Title bar, tabs, goal, rule.
-  const right = `${needs > 0 ? `◆ ${needs} needs you  ·  ` : ''}${m.clock}`
   let at = c.runs(0, 0, [{ text: ' troupe', tone: 'bright', bold: true }, { text: '  ' }, { text: m.mission, tone: 'accent' }, { text: '  ·  ', tone: 'dim' }])
-  c.put(0, at, m.stage?.label ?? '', { tone: m.gate === undefined ? 'bright' : 'warn' })
-  c.put(0, width - right.length - 1, right, { tone: needs > 0 ? 'warn' : 'dim' })
+  at = c.put(0, at, known(m.stage?.label ?? ''), { tone: m.gate === undefined ? 'bright' : 'warn' })
+  const toggle = langSwitch()
+  const toggleAt = width - cellsOf(textOf(toggle)) - 1
+  // Short of room, the count goes first: the strip below lists what needs you.
+  const full = `${needs > 0 ? `◆ ${t('{0} needs you', needs)}  ·  ` : ''}${m.clock}`
+  const right = toggleAt - cellsOf(full) - 3 > at ? full : m.clock
+  c.put(0, toggleAt - cellsOf(right) - 3, right, { tone: needs > 0 ? 'warn' : 'dim' })
+  c.runs(0, toggleAt, toggle)
+  hit(0, toggleAt, cellsOf(textOf(toggle)), 1, { kind: 'key', key: 'L' })
   at = 2
   TABS.forEach((name, index) => {
-    const text = `${index + 1} ${name}`
-    hit(1, at, text.length, 1, { kind: 'tab', tab: index + 1 })
+    const text = `${index + 1} ${t(name)}`
+    hit(1, at, cellsOf(text), 1, { kind: 'tab', tab: index + 1 })
     at = c.put(1, at, text, ui.tab === index + 1 ? { tone: 'accent', bold: true } : { tone: 'dim' }) + 3
   })
   const goal = m.goal || m.title
-  c.put(2, Math.max(1, width - goal.length - 1), fit(goal, width - 2), { tone: 'dim' })
+  c.put(2, Math.max(1, width - cellsOf(goal) - 1), fit(goal, width - 2), { tone: 'dim' })
   c.put(3, 0, '─'.repeat(width), { tone: 'chrome' })
   let row = 4
   const bottom = height - (ui.input === undefined ? 2 : 3)
@@ -725,36 +752,37 @@ export const draw = (m: PanelModel, ui: Ui, width: number, height: number): Draw
   if (m.gate !== undefined && ui.tab === 1) {
     const inner = width - 4
     const { lines, buttons, keys } = m.gate.isPlan ? planGate(m, inner) : askGate(m.gate.ask, inner)
-    const title = m.gate.isPlan ? ' ◆ APPROVE THE PLAN ' : ` ◆ ${m.gate.label.toUpperCase()} `
+    const title = m.gate.isPlan ? ` ◆ ${t('APPROVE THE PLAN')} ` : ` ◆ ${known(m.gate.label).toUpperCase()} `
     const size = Math.max(2, Math.min(lines.length + 2, bottom - row))
     const room = size - 2
     maxScroll = Math.max(0, lines.length - room)
     const from = Math.max(0, Math.min(ui.scroll ?? 0, maxScroll))
     c.box(row, 0, width, size, 'warn', ROUND)
     scene.gateBox = { row, col: 0, width, height: size }
-    const cue = maxScroll > 0 ? ` ${from + 1}-${Math.min(from + room, lines.length)}/${lines.length} · PgUp/PgDn/wheel ` : ''
-    c.put(row, 1, cue ? fit(`─${title}`, width - 2 - cue.length) : `─${title}`, { tone: 'warn', bold: true })
+    const cue = maxScroll > 0 ? ` ${from + 1}-${Math.min(from + room, lines.length)}/${lines.length} · PgUp/PgDn/${t('wheel')} ` : ''
+    c.put(row, 1, cue ? fit(`─${title}`, width - 2 - cellsOf(cue)) : `─${title}`, { tone: 'warn', bold: true })
     scene.gate = [row, 3]
-    if (cue) c.put(row, width - cue.length - 1, cue, { tone: 'warn' })
+    if (cue) c.put(row, width - cellsOf(cue) - 1, cue, { tone: 'warn' })
     lines.slice(from, from + room).forEach((line, index) => c.runs(row + 1 + index, 2, line))
     if (buttons >= from && buttons < from + room) for (const one of keys) hit(row + 1 + buttons - from, 2 + one.col, one.width, 1, { kind: 'key', key: one.key })
     row += size
   }
   if (m.gate !== undefined && ui.tab !== 1) {
-    const label = `◆ ${m.gate.label} · `
-    c.put(row, 1, fit(`${label}a Approve · c Change · v Plan`, width - 2), { tone: 'warn' })
+    let col = c.put(row, 1, `◆ ${known(m.gate.label)} · `, { tone: 'warn' })
     scene.gate = [row, 1]
-    for (const [offset, size, key] of [[0, 9, 'a'], [12, 8, 'c'], [23, 6, 'v']] as const) {
-      const col = 1 + label.length + offset
-      if (col + size < width) hit(row, col, size, 1, { kind: 'key', key })
+    for (const [key, phrase] of [['a', 'Approve'], ['c', 'Change'], ['v', 'Plan']] as const) {
+      const text = `${key} ${t(phrase)}`
+      if (col + cellsOf(text) < width) hit(row, col, cellsOf(text), 1, { kind: 'key', key })
+      col = c.put(row, col, `${text}${key === 'v' ? '' : ' · '}`, { tone: 'warn' })
     }
     row++
   }
   for (const role of waiting) {
     if (row >= bottom) break
-    c.put(row, 0, spread(`▌ ◆ ${fit(role.name, 7)}waits on you${role.waitsOn ? ` · ${role.waitsOn}` : ''}`, 'o Open window', width - 1), { tone: 'warn' })
+    const open = `o ${t('Open window')}`
+    c.put(row, 0, spread(`▌ ◆ ${fit(role.name, 7)}${t('waits on you')}${role.waitsOn ? ` · ${role.waitsOn}` : ''}`, open, width - 1), { tone: 'warn' })
     hit(row, 0, width, 1, { kind: 'role', name: role.name })
-    hit(row, width - 14, 13, 1, { kind: 'key', key: 'o', role: role.name })
+    hit(row, width - 1 - cellsOf(open), cellsOf(open), 1, { kind: 'key', key: 'o', role: role.name })
     scene.waits.push(row)
     row += 1
   }
@@ -764,16 +792,28 @@ export const draw = (m: PanelModel, ui: Ui, width: number, height: number): Draw
   if (ui.input !== undefined) c.runs(height - 2, 0, [{ text: ` ${ui.input.label} › `, tone: 'accent' }, { text: ui.input.text }, { text: '▏', tone: 'accent' }])
   else if (ui.message) c.put(height - 2, 0, fit(` ${ui.message}`, width), { tone: 'accent' })
   if (ui.input !== undefined && ui.message) c.put(height - 3, 0, fit(` ${ui.message}`, width), { tone: 'accent' })
-  const keys = m.gate !== undefined ? ' a  approve   c  change   v  plan   ↑↓  role   1-5  tabs   ?  help' : ' ↑↓  role   ⏎  detail   o  open   s  send   d  diff   1-5  tabs   ?  help'
-  if (ui.tab === 1) c.put(height - 1, 0, fit(keys, width), { tone: 'dim' })
+  const pairs: [string, Phrase][] = m.gate !== undefined
+    ? [['a', 'approve'], ['c', 'change'], ['v', 'plan'], ['↑↓', 'role'], ['1-5', 'tabs'], ['?', 'help']]
+    : [['↑↓', 'role'], ['⏎', 'detail'], ['o', 'open'], ['s', 'send'], ['d', 'diff'], ['1-5', 'tabs'], ['?', 'help']]
+  if (ui.tab === 1) c.put(height - 1, 0, fit(` ${pairs.map(([key, what]) => `${key}  ${t(what)}`).join('   ')}`, width), { tone: 'dim' })
   else c.runs(height - 1, 0, hints(m, ui, width))
 
   let scroll: number | undefined
   if (row < bottom && ui.tab === 1) maxScroll = mission(c, m, ui, row, bottom, hit, scene)
   else if (row < bottom) ({ maxScroll, scroll } = other(c, m, ui, row, bottom, hit, scene))
   if (ui.help) {
-    const lines = ['↑↓ / j k  select role     Enter  detail', '1-5 / Tab  tabs           o  open role pane', 's  send to role           d  diff    v  plan', 'PgUp/PgDn / wheel  scroll content', 'LOG ⏎ fields  G/End follow   DIFF ↑↓ n N  file', 'a  approve gate           c  type a change', 'Enter  submit input       Esc  cancel input', '? / Esc  close help       q / Ctrl-C  quit']
-    const w = Math.min(60, width - 4)
+    const keys: [string, Phrase][] = [
+      ['↑↓ / j k', 'select role'], ['Enter', 'detail'], ['1-5 / Tab', 'tabs'], ['o', 'open role pane'], ['s', 'send to role'], ['d', 'diff'],
+      ['v', 'plan'], ['PgUp/PgDn', 'scroll'], ['LOG ⏎', 'open an event'], ['LOG G / End', 'follow the newest'], ['DIFF ↑↓ n N', 'next file'],
+      ['a', 'approve the gate'], ['c', 'type a change'], ['Enter / Esc', 'submit or cancel input'], ['L', 'switch language (中/EN)'], ['? / Esc', 'close help'], ['q / Ctrl-C', 'quit'],
+    ]
+    const w = Math.min(72, width - 4)
+    // Two to a line when they fit, else one.
+    const half = Math.floor((w - 4) / 2)
+    const one = ([key, what]: [string, Phrase], room: number) => fit(`${fit(key, 13)}${t(what)}`, room)
+    const lines = half >= 30
+      ? Array.from({ length: Math.ceil(keys.length / 2) }, (_, i) => `${one(keys[2 * i]!, half)}${keys[2 * i + 1] === undefined ? '' : one(keys[2 * i + 1]!, half)}`)
+      : keys.map(key => one(key, w - 4))
     const h = Math.min(lines.length + 2, height - 2)
     const top = Math.max(0, Math.floor((height - h) / 2))
     const left = Math.max(0, Math.floor((width - w) / 2))
@@ -788,7 +828,7 @@ export const draw = (m: PanelModel, ui: Ui, width: number, height: number): Draw
 
 /** The MISSION tab: the left column, then FLOW and the detail on the right. */
 const mission = (c: Canvas, m: PanelModel, ui: Ui, top: number, bottom: number, hit: (row: number, col: number, w: number, h: number, target: Target) => void, scene: Scene): number => {
-  const left: { line: Line; role?: string }[] = [{ line: rule('ROLES', LEFT - 1) }]
+  const left: { line: Line; role?: string }[] = [{ line: rule(t('ROLES'), LEFT - 1) }]
   const groups = [...new Set(m.roles.map(role => role.group))]
   // Depth-first like the FLOW, so a role's └ sits right under what it waits on.
   const order = treeOf(m.roles).map(one => one.role)
@@ -809,12 +849,12 @@ const mission = (c: Canvas, m: PanelModel, ui: Ui, top: number, bottom: number, 
       })
     }
   }
-  left.push({ line: [] }, { line: rule('STAGES', LEFT - 1) })
+  left.push({ line: [] }, { line: rule(t('STAGES'), LEFT - 1) })
   for (const stage of m.stages) {
     const mark = MARK[stage.mark]
-    left.push({ line: [{ text: `  ${mark.glyph} `, tone: mark.tone }, { text: fit(stage.label, 16), ...(stage.mark === 'now' || stage.mark === 'open' ? { tone: mark.tone, bold: true as const } : stage.mark === 'done' ? {} : { tone: 'dim' as const }) }, { text: stage.note.padStart(5), tone: 'dim' }] })
+    left.push({ line: [{ text: `  ${mark.glyph} `, tone: mark.tone }, { text: fit(known(stage.label), 16), ...(stage.mark === 'now' || stage.mark === 'open' ? { tone: mark.tone, bold: true as const } : stage.mark === 'done' ? {} : { tone: 'dim' as const }) }, { text: stage.note.padStart(5), tone: 'dim' }] })
   }
-  left.push({ line: [] }, { line: rule('ACTIVITY', LEFT - 1) })
+  left.push({ line: [] }, { line: rule(t('ACTIVITY'), LEFT - 1) })
   for (const one of m.activity) left.push({ line: [{ text: ` ${one.at} `, tone: 'dim' }, { text: fit(one.text, LEFT - 8) }] })
   const activity = left.length - m.activity.length
   left.slice(0, bottom - top).forEach((one, index) => {
@@ -840,7 +880,7 @@ const mission = (c: Canvas, m: PanelModel, ui: Ui, top: number, bottom: number, 
   const column: Line[] = [...flowLines, ...(shown === undefined ? [] : [[], ...shown.lines])]
   const maxScroll = Math.max(0, column.length - view)
   const from = Math.max(0, Math.min(ui.scroll ?? 0, maxScroll))
-  c.runs(top, col, rule(from < maxScroll ? 'FLOW · scroll for more ↓' : 'FLOW', width))
+  c.runs(top, col, rule(from < maxScroll ? `${t('FLOW')} · ${t('scroll for more ↓')}` : t('FLOW'), width))
   column.slice(from, from + view).forEach((line, index) => c.runs(top + 1 + index, col, line))
   const visible = (row: number, height = 1) => row >= from && row + height <= from + view
   for (const box of drawn.boxes) if (visible(box.row, box.height)) hit(top + 1 + box.row - from, col + box.col, box.width, box.height, { kind: 'role', name: box.name })
@@ -851,11 +891,7 @@ const mission = (c: Canvas, m: PanelModel, ui: Ui, top: number, bottom: number, 
   }
   if (shown !== undefined) {
     const keys = flowLines.length + 1 + shown.keys
-    if (visible(keys)) {
-      hit(top + 1 + keys - from, col + 1, 13, 1, { kind: 'key', key: 'o' })
-      hit(top + 1 + keys - from, col + 18, 7, 1, { kind: 'key', key: 's' })
-      hit(top + 1 + keys - from, col + 29, 6, 1, { kind: 'key', key: 'd' })
-    }
+    if (visible(keys)) for (const one of shown.keyCols) hit(top + 1 + keys - from, col + one.col, one.width, 1, { kind: 'key', key: one.key })
   }
 
   return maxScroll
@@ -902,7 +938,7 @@ const gauge = (role: RoleView): Line => {
   })
   const left = toFull(role)
 
-  return [...cells, { text: ` ${contextOf(role)}` }, ...(left === undefined ? [] : [{ text: `  ~${left} to full`, tone: 'dim' as const }])]
+  return [...cells, { text: ` ${contextOf(role)}` }, ...(left === undefined ? [] : [{ text: `  ${t('~{0} to full', left)}`, tone: 'dim' as const }])]
 }
 
 /** The agent's own status line in its window, `✻ Writing…`, without the `(esc to interrupt)`. */
@@ -913,24 +949,24 @@ const statusLineOf = (role: RoleView): string | undefined => {
 }
 
 /** A role as a full-width card: its name and state cut into the top border, its facts in two columns (one when narrow), then what it waits on, does or returned. */
-const card = (role: RoleView, width: number, selected: boolean, seed: number): { canvas: Canvas; fx: Omit<Page, 'events'>; band?: { row: number; col: number } } => {
+const card = (role: RoleView, width: number, selected: boolean, seed: number): { canvas: Canvas; fx: Omit<Page, 'events'>; band?: { row: number; col: number; width: number } } => {
   const look = LOOK[role.state]
   const two = width >= 84
   const fx: Omit<Page, 'events'> = { spins: [], shimmers: [], breathes: [], sparks: [] }
   const work = role.work
   const tokens: Line = role.tokens === undefined ? [{ text: '—', tone: 'dim' }] : [{ text: tokensOf(role) }]
-  const left: [string, Line][] = [
+  const left: [Phrase, Line][] = [
     ['effort', effortOf(role.effort)],
     ['ctx', gauge(role)],
     ['tokens', tokens],
     ['work', work === undefined || (work.commits.length === 0 && work.changed.length === 0) ? [{ text: '—', tone: 'dim' }] : [
-      { text: `${work.commits.length} commit${work.commits.length === 1 ? '' : 's'} · ${work.changed.length} file${work.changed.length === 1 ? '' : 's'} ` },
-      work.outside.length > 0 ? { text: `✗ ${work.outside.length} outside`, tone: 'error' } : { text: '✓ inside', tone: 'ok' },
+      { text: `${plural(work.commits.length, '{0} commit', '{0} commits')} · ${plural(work.changed.length, '{0} file', '{0} files')} ` },
+      work.outside.length > 0 ? { text: t('✗ {0} outside', work.outside.length), tone: 'error' } : { text: t('✓ inside'), tone: 'ok' },
     ]],
   ]
-  const right: [string, Line][] = [
-    ['agent', [badge(role), { text: ` ${role.agent} ${role.model || 'default'}` }]],
-    ['time', role.elapsed === undefined ? [{ text: '—', tone: 'dim' }] : [{ text: role.elapsed }, { text: ' since dispatch', tone: 'dim' }]],
+  const right: [Phrase, Line][] = [
+    ['agent', [badge(role), { text: ` ${role.agent} ${role.model || t('default')}` }]],
+    ['time', role.elapsed === undefined ? [{ text: '—', tone: 'dim' }] : [{ text: role.elapsed }, { text: t(' since dispatch'), tone: 'dim' }]],
     ['branch', [{ text: role.branch }]],
     ['flags', [{ text: role.flags.join(' ') || '—', tone: role.flags.length === 0 ? 'dim' : 'accent' }]],
   ]
@@ -944,12 +980,12 @@ const card = (role: RoleView, width: number, selected: boolean, seed: number): {
     fx.spins.push({ name: role.name, at: [0, 3] })
     fx.shimmers.push({ name: role.name, row: 0, col: 5, width: cellsOf(role.name) })
   }
-  const state: Line = role.state === 'planned' ? [{ text: `${look.glyph} ${look.text}`, tone: look.tone }] : [{ text: ` ${look.text} `, tone: look.tone, bg: look.tone, wash: role.state === 'waits' ? 0.25 : 0.16 }]
+  const state: Line = role.state === 'planned' ? [{ text: `${look.glyph} ${t(look.text)}`, tone: look.tone }] : [{ text: ` ${t(look.text)} `, tone: look.tone, bg: look.tone, wash: role.state === 'waits' ? 0.25 : 0.16 }]
   canvas.runs(0, width - 3 - cellsOf(textOf(state)), [{ text: ' ' }, ...state, { text: ' ' }])
   const half = two ? Math.floor(width / 2) : width
-  const put = (row: number, col: number, room: number, [label, value]: [string, Line]) => {
-    canvas.runs(row, col, [{ text: fit(label, 8), tone: 'dim' }, ...fitRuns(value, room - 8)])
-    if (label === 'tokens' && role.state === 'working' && role.tokens !== undefined) fx.sparks.push({ name: role.name, row, col: col + 8, tail: `${count(role.tokens.input)} in` })
+  const put = (row: number, col: number, room: number, [label, value]: [Phrase, Line]) => {
+    canvas.runs(row, col, [{ text: fit(t(label), 8), tone: 'dim' }, ...fitRuns(value, room - 8)])
+    if (label === 'tokens' && role.state === 'working' && role.tokens !== undefined) fx.sparks.push({ name: role.name, row, col: col + 8, tail: t('{0} in', count(role.tokens.input)) })
   }
   const fields = two ? left : [right[0]!, ...left, ...right.slice(1)]
   fields.slice(0, rows).forEach((one, k) => put(1 + k, 2, half - 4, one))
@@ -958,12 +994,12 @@ const card = (role: RoleView, width: number, selected: boolean, seed: number): {
 
   // The last line: what it waits on, what it is doing, what it returned, or when it starts.
   const foot = height - 2
-  let band: { row: number; col: number } | undefined
+  let band: { row: number; col: number; width: number } | undefined
   if (role.state === 'waits') {
-    const key = 'o open '
-    canvas.runs(foot, 1, [{ text: fit(` ◆ waits on you · ${role.waitsOn || 'a dialog in its window'}`, width - 2 - key.length - 1), ...solid('warn') }, { text: key, ...solid('warn') }, { text: ' ', ...solid('warn') }])
+    const key = `o ${t('open')} `
+    canvas.runs(foot, 1, [{ text: fit(` ◆ ${t('waits on you')} · ${role.waitsOn || t('a dialog in its window')}`, width - 2 - cellsOf(key) - 1), ...solid('warn') }, { text: key, ...solid('warn') }, { text: ' ', ...solid('warn') }])
     fx.breathes.push({ cells: Array.from({ length: width - 2 }, (_, i) => [foot, 1 + i] as Point), tone: 'warn', period: 1.4, seed, bg: true })
-    band = { row: foot, col: width - 2 - key.length }
+    band = { row: foot, col: width - 2 - cellsOf(key), width: cellsOf(key) }
   } else if (role.state === 'working') {
     const status = statusLineOf(role)
     const last = [...role.screen].reverse().find(one => one.trim() !== '')?.trim() ?? ''
@@ -997,7 +1033,7 @@ const rolesPage = ({ c, m, ui, top, bottom, hit, page }: PageArgs): Paged => {
     const visible = Math.max(top, at)
     const end = Math.min(bottom, at + canvas.height)
     if (end > visible) hit(visible, 1, width, end - visible, { kind: 'role', name: role.name, stay: true })
-    if (band !== undefined && shown(at + band.row)) hit(at + band.row, 1 + band.col, 6, 1, { kind: 'key', key: 'o', role: role.name })
+    if (band !== undefined && shown(at + band.row)) hit(at + band.row, 1 + band.col, band.width - 1, 1, { kind: 'key', key: 'o', role: role.name })
     const move = ([row, col]: Point): Point => [at + row, 1 + col]
     for (const one of fx.spins) if (shown(at + one.at[0])) page.spins.push({ ...one, at: move(one.at) })
     for (const one of fx.shimmers) if (shown(at + one.row)) page.shimmers.push({ ...one, row: at + one.row, col: 1 + one.col })
@@ -1019,7 +1055,7 @@ const planPage = ({ c, m, ui, top, bottom, hit }: PageArgs): Paged => {
   const width = c.width - col - 1
   const body = bodyOf(width)
   const lead: Line[] = [
-    ...reflow([{ text: `${m.planPath}  ·  ${m.hash.replace(/^(sha256:.{8}).*$/, '$1')}  ·  `, tone: 'dim' }, checksOf(m), { text: `  ·  f ${ui.full ? 'summary' : 'full text'}`, tone: 'dim' }], width),
+    ...reflow([{ text: `${m.planPath}  ·  ${m.hash.replace(/^(sha256:.{8}).*$/, '$1')}  ·  `, tone: 'dim' }, checksOf(m), { text: `  ·  f ${t(ui.full ? 'summary' : 'full text')}`, tone: 'dim' }], width),
     [],
     ...(ui.full ? [] : [[{ text: ` ${m.title} `, ...solid('accent') }], []]),
   ]
@@ -1031,7 +1067,7 @@ const planPage = ({ c, m, ui, top, bottom, hit }: PageArgs): Paged => {
   lines.slice(from, from + room).forEach((line, index) => c.runs(top + index, col, line))
   if (toc) {
     const current = heads.filter(head => head.at <= from + 2).at(-1) ?? heads[0]
-    c.put(top, 2, 'CONTENTS', { tone: 'dim' })
+    c.put(top, 2, t('CONTENTS'), { tone: 'dim' })
     heads.slice(0, Math.max(0, room - 2)).forEach((head, i) => {
       const row = top + 2 + i
       c.runs(row, 1, head === current ? [{ text: '▍', tone: 'accent' }, { text: ` ${fit(head.title, TOC - 3)}`, tone: 'bright', bold: true }] : [{ text: `  ${fit(head.title, TOC - 3)}`, tone: 'dim' }])
@@ -1062,12 +1098,12 @@ const valueTone = (value: unknown): Tone | undefined =>
           : /^(sha256:)?[0-9a-f]{7,64}$/.test(value) && /\d/.test(value) ? 'accent' : value.includes('/') ? undefined : 'bright'
 const fieldsOf = (e: PanelModel['log'][number]) => Object.entries(e).filter(([key]) => key !== 'at' && key !== 'by' && key !== 'ev')
 
-/** `now`, `40s ago`, `3m ago` for the last ten minutes, else the time of day. */
+/** `now`, `40s ago`, `3m ago` for the last ten minutes, else the time of day (`12:04:31`). */
 const agoOf = (at: string, now: number) => {
   const seconds = (now - Date.parse(at)) / 1000
-  if (seconds >= 0 && seconds < 5) return 'now'
-  if (seconds >= 0 && seconds < 60) return `${Math.floor(seconds)}s ago`
-  if (seconds >= 0 && seconds < 600) return `${Math.floor(seconds / 60)}m ago`
+  if (seconds >= 0 && seconds < 5) return t('now')
+  if (seconds >= 0 && seconds < 60) return t('{0}s ago', Math.floor(seconds))
+  if (seconds >= 0 && seconds < 600) return t('{0}m ago', Math.floor(seconds / 60))
   const date = new Date(at)
 
   return Number.isNaN(date.getTime()) ? at.slice(11, 19) : `${clockOf(date)}:${String(date.getSeconds()).padStart(2, '0')}`
@@ -1093,7 +1129,7 @@ const logPage = ({ c, m, ui, top, bottom, hit, page }: PageArgs): Paged => {
   const width = c.width - 2
   const following = ui.paused === undefined
   // The strip: LIVE or paused, the event rate over the last twelve minutes, the counts.
-  let at = following ? c.runs(top, 1, [{ text: '●', tone: 'ok' }, { text: ' LIVE', tone: 'ok', bold: true }]) : c.runs(top, 1, [{ text: '‖ paused', tone: 'warn', bold: true }, { text: ` · ${Math.max(0, m.log.length - (ui.paused ?? 0))} new ↓`, tone: 'warn' }])
+  let at = following ? c.runs(top, 1, [{ text: '●', tone: 'ok' }, { text: ` ${t('LIVE')}`, tone: 'ok', bold: true }]) : c.runs(top, 1, [{ text: t('‖ paused'), tone: 'warn', bold: true }, { text: t(' · {0} new ↓', Math.max(0, m.log.length - (ui.paused ?? 0))), tone: 'warn' }])
   if (following) page.live = [top, 1]
   const BUCKET = 15_000
   const levels = Array.from({ length: 48 }, (_, i) => {
@@ -1101,15 +1137,15 @@ const logPage = ({ c, m, ui, top, bottom, hit, page }: PageArgs): Paged => {
     return Math.min(1, m.log.filter(e => { const t = Date.parse(e.at); return t > end - BUCKET && t <= end }).length / 3)
   })
   const counts: Line = [
-    { text: `${m.log.length} event${m.log.length === 1 ? '' : 's'}` }, { text: '  ·  ', tone: 'dim' },
-    { text: `${m.roles.filter(role => role.state === 'waits').length} waits`, tone: 'warn' }, { text: '  ·  ', tone: 'dim' },
-    { text: `${m.roles.reduce((n, role) => n + (role.work?.commits.length ?? 0), 0)} commits` },
+    { text: plural(m.log.length, '{0} event', '{0} events') }, { text: '  ·  ', tone: 'dim' },
+    { text: t('{0} waits', m.roles.filter(role => role.state === 'waits').length), tone: 'warn' }, { text: '  ·  ', tone: 'dim' },
+    { text: t('{0} commits', m.roles.reduce((n, role) => n + (role.work?.commits.length ?? 0), 0)) },
   ]
   const countsAt = c.width - 1 - cellsOf(textOf(counts))
   if (countsAt > at + 1) c.runs(top, countsAt, counts)
   at = Math.max(at + 2, 22)
   if (at + 34 < countsAt) {
-    at = c.put(top, at, 'events ', { tone: 'dim' })
+    at = c.put(top, at, `${t('events')} `, { tone: 'dim' })
     ;[...braille(levels)].forEach((ch, i) => c.put(top, at + i, ch, { tone: mixTone('chrome', 'accentBright', Math.max(levels[i * 2] ?? 0, levels[i * 2 + 1] ?? 0) * 1.3) }))
     c.put(top, at + 25, '12m', { tone: 'dim' })
   }
@@ -1128,7 +1164,7 @@ const logPage = ({ c, m, ui, top, bottom, hit, page }: PageArgs): Paged => {
   const cursor = ui.line === undefined ? -1 : rows.findIndex(row => row.index === ui.line && row.field === undefined)
   if (cursor >= 0 && cursor < from) from = cursor
   if (cursor >= 0 && cursor >= from + room) from = Math.min(maxScroll, cursor - room + 1)
-  if (m.log.length === 0) c.put(first + 2, 1, centred('nothing logged yet · the orchestrator writes here as it plans, dispatches and asks', width), { tone: 'dim' })
+  if (m.log.length === 0) c.put(first + 2, 1, centred(t('nothing logged yet · the orchestrator writes here as it plans, dispatches and asks'), width), { tone: 'dim' })
   const laneOf = (index: number) => { const e = m.log[index]; return e === undefined ? '' : 'role' in e && typeof e.role === 'string' ? e.role : e.by }
   rows.slice(from, from + room).forEach((row, j) => {
     const r = first + j
@@ -1144,11 +1180,12 @@ const logPage = ({ c, m, ui, top, bottom, hit, page }: PageArgs): Paged => {
     // A run of events from one lane hangs from its first row.
     const same = (j > 0 || from > 0) && rows[from + j - 1] !== undefined && laneOf(rows[from + j - 1]!.index) === lane && rows[from + j - 1]!.field === undefined
     const ago = agoOf(e.at, m.now)
+    const recent = Date.parse(e.at) > m.now - 600_000
     const level = levelOf(e)
     const kv: Line = fieldsOf(e).flatMap(([key, value], i) => [{ text: `${i > 0 ? '  ' : ''}${key}`, tone: 'dim' as const }, { text: '=', tone: 'chrome' as const }, { text: valueText(value), ...(valueTone(value) && { tone: valueTone(value) }) }])
     const line: Line = [
       { text: '▍ ', tone: hue },
-      { text: fit(ago, 10), ...(/ago|now/.test(ago) ? {} : { tone: 'dim' as const }) },
+      { text: fit(ago, 10), ...(recent ? {} : { tone: 'dim' as const }) },
       { text: fit(same ? '⎿' : lane, 8), tone: same ? 'chrome' : hue },
       { text: `${level.glyph} `, tone: level.tone },
       { text: fit(e.ev, 13), tone: level.tone },
@@ -1188,7 +1225,7 @@ const stat = (file: { add: number; del: number }, bar: boolean): Line => {
 }
 /** Why a role has nothing in the list. */
 const noFilesOf = (role: RoleView) =>
-  role.touches.length === 0 ? 'changes nothing' : role.state === 'planned' ? `not started · ${startOf(role)}` : role.work === undefined ? 'no work read yet' : 'no changes yet'
+  role.touches.length === 0 ? t('changes nothing') : role.state === 'planned' ? t('not started · {0}', startOf(role)) : role.work === undefined ? t('no work read yet') : t('no changes yet')
 
 /** A role's commits, newest first, the sha as a chip. */
 const commitLines = (role: RoleView, width: number): Line[] =>
@@ -1200,12 +1237,12 @@ const hunkLines = (entry: DiffEntry, width: number, problem: string | undefined)
   const lines: Line[] = [fitRuns([
     { text: '▍', tone: STATUS[file.status] }, { text: ` ${file.status} `, tone: STATUS[file.status], bold: true },
     { text: file.path, tone: outside ? 'error' : 'bright', bold: true }, { text: '  ' }, ...stat(file, false),
-    ...(outside ? [{ text: '  ' }, { text: ' ✗ outside touches ', tone: 'error' as const, bg: 'error' as const, wash: 0.16 }] : []),
+    ...(outside ? [{ text: '  ' }, { text: ` ${t('✗ outside touches')} `, tone: 'error' as const, bg: 'error' as const, wash: 0.16 }] : []),
   ], width), []]
   const marks: ('+' | '-' | '±' | '')[] = []
   const say = (text: string) => lines.push([{ text: centred(text, width), tone: 'dim' }])
   if (file.hunks.length === 0) {
-    say(problem !== undefined ? `the diff could not be read · ${problem}` : file.binary ? 'binary file' : file.cut ? 'new file, too large to show' : entry.role.work?.files === undefined ? 'no hunks read yet' : 'no line changes')
+    say(problem !== undefined ? t('the diff could not be read · {0}', problem) : t(file.binary ? 'binary file' : file.cut ? 'new file, too large to show' : entry.role.work?.files === undefined ? 'no hunks read yet' : 'no line changes'))
     return { lines, marks }
   }
   const digits = Math.max(3, String(Math.max(...file.hunks.flatMap(hunk => hunk.lines.map(line => Math.max(line.old ?? 0, line.new ?? 0))))).length)
@@ -1227,7 +1264,7 @@ const hunkLines = (entry: DiffEntry, width: number, problem: string | undefined)
       marks.push(line.sign === ' ' ? '' : line.sign)
     })
   }
-  if (file.cut) say('… more lines than the panel keeps')
+  if (file.cut) say(t('… more lines than the panel keeps'))
 
   return { lines, marks }
 }
@@ -1294,7 +1331,7 @@ const diffPage = ({ c, m, ui, top, bottom, hit }: PageArgs): Paged => {
   const col = tree ? TREE + 3 : 1
   const width = c.width - col - 1
   if (current === undefined) {
-    c.put(top + Math.floor(room / 3), col, centred('nothing changed yet · files show up here as roles commit', width), { tone: 'dim' })
+    c.put(top + Math.floor(room / 3), col, centred(t('nothing changed yet · files show up here as roles commit'), width), { tone: 'dim' })
     return { maxScroll: 0 }
   }
   // Narrow: the role, its files as a list, then the file under the cursor.
@@ -1335,16 +1372,16 @@ const other = (c: Canvas, m: PanelModel, ui: Ui, top: number, bottom: number, hi
 }
 
 /** Key hints for each page, keys bright and what they do dim; an open gate's keys first. */
-const HINTS: Record<number, [string, string][]> = {
+const HINTS: Record<number, [string, Phrase][]> = {
   2: [['↑↓', 'role'], ['⏎', 'detail'], ['o', 'open window'], ['s', 'send']],
   3: [['↑↓', 'scroll'], ['f', 'full text']],
   4: [['↑↓', 'line'], ['⏎', 'expand'], ['G', 'follow']],
   5: [['↑↓', 'file'], ['PgUp PgDn', 'scroll'], ['o', 'open window']],
 }
 const hints = (m: PanelModel, ui: Ui, width: number): Line => {
-  const keys = [...(m.gate === undefined ? [] : [['a', 'approve'], ['c', 'change']] as [string, string][]), ...(HINTS[ui.tab] ?? []).map(([key, what]): [string, string] => (key === 'f' && ui.full ? [key, 'summary'] : [key, what]))]
-  const left: Line = [{ text: ' ' }, ...keys.flatMap(([key, what]): Line => [{ text: key, tone: 'accentBright', bold: true }, { text: ` ${what}   `, tone: 'dim' }])]
-  const right: Line = [{ text: '1-5', tone: 'accentBright', bold: true }, { text: ' tabs   ', tone: 'dim' }, { text: '?', tone: 'accentBright', bold: true }, { text: ' help ', tone: 'dim' }]
+  const keys = [...(m.gate === undefined ? [] : [['a', 'approve'], ['c', 'change']] as [string, Phrase][]), ...(HINTS[ui.tab] ?? []).map(([key, what]): [string, Phrase] => (key === 'f' && ui.full ? [key, 'summary'] : [key, what]))]
+  const left: Line = [{ text: ' ' }, ...keys.flatMap(([key, what]): Line => [{ text: key, tone: 'accentBright', bold: true }, { text: ` ${t(what)}   `, tone: 'dim' }])]
+  const right: Line = [{ text: '1-5', tone: 'accentBright', bold: true }, { text: ` ${t('tabs')}   `, tone: 'dim' }, { text: '?', tone: 'accentBright', bold: true }, { text: ` ${t('help')} `, tone: 'dim' }]
   const room = width - cellsOf(textOf(right))
 
   return cellsOf(textOf(left)) <= room ? [...fitRuns(left, room), ...right] : fitRuns(left, width)

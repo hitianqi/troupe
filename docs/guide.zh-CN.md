@@ -101,6 +101,13 @@ pane，`s` 给它发消息（它在等你时此键无效），`d` 看 diff，`v`
 `a` / `c` 回答关卡，`?` 帮助，`q` 退出。在 tmux 传递鼠标的地方可以点击
 （`set -g mouse on`）。
 
+点标题栏右侧的 `中/EN`，或按 `L`，可在中文和英文之间切换面板。选择保存在
+`~/.config/troupe/settings.json`；还没选过时，`zh` 开头的 locale 会让面板以
+中文启动。它同时决定 agent 写给你的内容用哪种语言：计划、关卡问题和结果。
+之后派发的角色会在 brief 里收到这条要求；任务进行中切换时，troupe 会告诉
+编排者。已经写好的内容不会变；troupe 自己要读的部分（标题、YAML、`status:`、
+CLI 输出）始终是英文。
+
 <a id="agents"></a>
 ## Agent
 

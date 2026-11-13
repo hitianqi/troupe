@@ -1,11 +1,12 @@
 import { diffFileOf, diffFiles } from './draw.ts'
 import type { Hit, Ui } from './draw.ts'
+import { t } from './i18n.ts'
 import type { PanelModel } from './model.ts'
 
 /** `colour` is the terminal's answer to the panel asking its text (10) or background (11) colour. */
 export type Input = { kind: 'key'; key: string } | { kind: 'text'; text: string } | { kind: 'click'; row: number; col: number } | { kind: 'scroll'; by: number } | { kind: 'colour'; which: 'text' | 'background'; rgb: [number, number, number] }
 export type GateTarget = { id: string; isPlan: boolean; hash: string; stamp: string }
-export type Effect = { kind: 'open'; role: string } | { kind: 'send'; role: string; text: string } | { kind: 'answer'; gate: GateTarget; answer: 'approve' | 'change'; text?: string }
+export type Effect = { kind: 'lang' } | { kind: 'open'; role: string } | { kind: 'send'; role: string; text: string } | { kind: 'answer'; gate: GateTarget; answer: 'approve' | 'change'; text?: string }
 type Entry = { label: string; text: string } & ({ kind: 'send'; role: string } | { kind: 'change'; gate: GateTarget })
 export type PanelUi = Omit<Ui, 'input'> & { input?: Entry }
 export const initialUi = (): PanelUi => ({ tab: 1, selected: '', scroll: 0 })
@@ -109,7 +110,7 @@ export const transition = (ui: PanelUi, action: Input, model: PanelModel | undef
     if (action.key === 'escape') return { ui: { ...ui, input: undefined } }
     if (action.key === 'backspace') return { ui: { ...ui, input: { ...ui.input, text: [...ui.input.text].slice(0, -1).join('') } } }
     if (action.key === 'enter') {
-      if (ui.input.text.trim() === '') return { ui: { ...ui, message: 'Enter some text, or Esc to cancel.' } }
+      if (ui.input.text.trim() === '') return { ui: { ...ui, message: t('Enter some text, or Esc to cancel.') } }
       const effect: Effect = ui.input.kind === 'send'
         ? { kind: 'send', role: ui.input.role, text: ui.input.text }
         : { kind: 'answer', gate: ui.input.gate, answer: 'change', text: ui.input.text }
@@ -120,9 +121,11 @@ export const transition = (ui: PanelUi, action: Input, model: PanelModel | undef
   }
   if (ui.help) return { ui: action.kind === 'key' && ['escape', '?'].includes(action.key) ? { ...ui, help: false } : ui, ...(action.kind === 'key' && action.key === 'q' ? { quit: true as const } : {}) }
   if (action.kind === 'key' && action.key === 'q') return { ui, quit: true }
+  // The language switch works before there is a mission too, while the orchestrator plans.
+  const target = action.kind === 'click' && action.row < height ? hitAt(hits, action.row, action.col) : undefined
+  if ((action.kind === 'key' && action.key === 'L') || (target?.kind === 'key' && target.key === 'L')) return { ui, effect: { kind: 'lang' } }
   if (model === undefined) return { ui }
   if (action.kind === 'click') {
-    const target = action.row < height ? hitAt(hits, action.row, action.col) : undefined
     if (target?.kind === 'key') {
       const selected = target.role !== undefined && model.roles.some(role => role.name === target.role) ? { ...ui, selected: target.role } : ui
 
@@ -182,11 +185,11 @@ export const transition = (ui: PanelUi, action: Input, model: PanelModel | undef
   if (key === 'escape') return { ui: { ...ui, message: undefined } }
   if (key === 'o' && selected !== undefined) return { ui, effect: { kind: 'open', role: selected.name } }
   if (key === 's' && selected !== undefined) return { ui: selected.state === 'waits'
-    ? { ...ui, message: 'answer it first' }
-    : { ...ui, input: { kind: 'send', role: selected.name, label: `send to ${selected.name}`, text: '' }, message: undefined } }
+    ? { ...ui, message: t('answer it first') }
+    : { ...ui, input: { kind: 'send', role: selected.name, label: t('send to {0}', selected.name), text: '' }, message: undefined } }
   const gate = gateTarget(model)
   if ((key === 'a' || key === 'c') && gate !== undefined) {
-    if (key === 'c') return { ui: { ...ui, input: { kind: 'change', gate, label: 'change', text: '' }, message: undefined } }
+    if (key === 'c') return { ui: { ...ui, input: { kind: 'change', gate, label: t('change'), text: '' }, message: undefined } }
 
     return { ui, effect: { kind: 'answer', gate, answer: 'approve' } }
   }

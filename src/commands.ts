@@ -3,6 +3,7 @@ import { join } from 'node:path'
 import { parseArgs } from 'node:util'
 
 import { check } from './check.ts'
+import { langOf, WRITE_CHINESE } from './i18n.ts'
 import { clean, mux, NAME, Refusal, repository, runtime, Usage, workflowStages } from './command-context.ts'
 import type { Mission, Reply, Runtime } from './command-context.ts'
 import { append, fold, logPath, PLAN_GATE, readLog } from './log.ts'
@@ -155,7 +156,9 @@ const missionNew = (r: Runtime, name: string, base: string): Reply => {
   if (caller !== undefined) markOrchestrator(r, repo, caller, name)
   const opened = available(r, 'tmux') ? openPanel(r, name).out : ''
 
-  return { code: 0, out: `Mission ${name}: ${worktree} on mission/${name}\n${opened}` }
+  const language = langOf(r.home, r.env) === 'zh' ? `${WRITE_CHINESE}\n` : ''
+
+  return { code: 0, out: `Mission ${name}: ${worktree} on mission/${name}\n${language}${opened}` }
 }
 
 /** `troupe up -m <m>`: a new mission, with its orchestrator working in the mission worktree and its panel beside it. */
