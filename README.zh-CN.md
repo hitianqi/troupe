@@ -45,7 +45,7 @@
 - **让不同的 agent 构建和审查。** 每个角色可以选 Claude Code 或 Codex，以及自己的模型和 effort。默认工作流逐个审查分支，开 PR 前问你，等你确认合并后再清理现场。
 
 <p align="center">
-  <img src="docs/media/panel-live.gif" width="860" alt="troupe 实时面板：角色、阶段、动态，以及全队的工作流程图">
+  <img src="docs/media/panel-live.zh.gif" width="860" alt="troupe 实时面板：角色、阶段、动态，以及全队的工作流程图">
 </p>
 
 ## 快速开始
@@ -82,19 +82,19 @@ troupe setup
 4. **批准交付。** 你批准开 PR，自己合并，再确认。工作流随后关闭它开的终端，移除临时 worktree。
 
 <details>
-<summary><b>展开看：批准计划、角色终端和最后的交付</b></summary>
+<summary><b>展开看：批准计划、面板的各个页面和最后的交付</b></summary>
 
 **可以改计划，也可以直接批准。**
 
-![阅读、修改和批准计划](docs/media/plan-review.gif)
+![阅读、修改和批准计划](docs/media/plan-review.zh.gif)
 
-**Claude Code、Codex 和审查者，各自在真实终端里工作。**
+**一个面板，五个页面：全队、每个角色、计划、日志和改动。**
 
-![多个 agent 的终端并排工作](docs/media/roles-live.gif)
+![依次切换面板的五个页面](docs/media/tabs-tour.zh.gif)
 
-**开 PR 由你批准，确认合并后再清理现场。**
+**审查通过一条，完成标准就勾一条；最后由你批准开 PR。**
 
-![批准 PR、确认合并和清理现场](docs/media/mr-gate.gif)
+![审查逐条通过完成标准，然后批准开 PR](docs/media/mr-gate.zh.gif)
 
 </details>
 
