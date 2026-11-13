@@ -94,6 +94,8 @@ export class Motion {
   private readonly gradient: boolean
   /** Whether the last frame drew the selected box, whose gradient turns. */
   private turning = false
+  /** Whether the last frame drew the drafting spinner. */
+  private spinning = false
   private paper: Rgb = PAPER
   private text: Rgb = TEXT
   constructor(options: { gradient?: boolean } = {}) {
@@ -135,8 +137,17 @@ export class Motion {
   private rateOf(name: string) {
     return this.rates.get(name)?.rates.at(-1) ?? 0
   }
-  /** The frame with its effects at `now`. */
+  /** The frame with its effects at `now`, and the drafting spinner turning. */
   decorate(base: Screen, drawn: Drawn, selected: string, now: number): Screen {
+    const screen = this.effects(base, drawn, selected, now)
+    this.spinning = drawn.spin !== undefined
+    if (drawn.spin === undefined) return screen
+    const out = screen === base ? base.clone() : screen
+    Object.assign(out.at(...drawn.spin) ?? {}, { ch: SPIN[Math.floor(now / 80) % SPIN.length] })
+
+    return out
+  }
+  private effects(base: Screen, drawn: Drawn, selected: string, now: number): Screen {
     const scene = drawn.scene
     const model = this.model
     this.turning = false
@@ -496,6 +507,7 @@ export class Motion {
   }
   /** Whether anything still moves at `now`; when not, the panel stops its frames until the next read. */
   moving(now: number): boolean {
+    if (this.spinning) return true
     const model = this.model
     if (model === undefined) return false
     if ((this.intro !== undefined && now < this.intro.end) || this.turning || this.pageMoves) return true

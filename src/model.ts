@@ -52,7 +52,13 @@ export type PanelModel = {
   clock: string
   /** When it was read, in ms. */
   now: number
+  /** While the orchestrator drafts the plan: since when, in ms, when known. */
+  drafting?: { since?: number }
 }
+
+/** A span as the panel shows it: 42s, 3m 12s, 1h 4m. */
+export const durationOf = (seconds: number): string =>
+  seconds < 60 ? `${seconds}s` : seconds < 3600 ? `${Math.floor(seconds / 60)}m ${seconds % 60}s` : `${Math.floor(seconds / 3600)}h ${Math.floor(seconds % 3600 / 60)}m`
 
 /** HH:MM, local time. */
 export const clockOf = (at: Date | string) => {
@@ -109,6 +115,7 @@ export type ModelInput = {
   stages: Stage[]
   now: Date
   agents?: Record<string, Agent>
+  drafting?: { since?: number }
 }
 
 export const modelOf = (input: ModelInput): PanelModel => {
@@ -119,7 +126,7 @@ export const modelOf = (input: ModelInput): PanelModel => {
 
     const opened = folded.roles.get(role.name)
     const seconds = opened === undefined ? NaN : Math.max(0, Math.floor((input.now.getTime() - Date.parse(opened.at)) / 1000))
-    const elapsed = !Number.isFinite(seconds) ? undefined : seconds < 60 ? `${seconds}s` : seconds < 3600 ? `${Math.floor(seconds / 60)}m ${seconds % 60}s` : `${Math.floor(seconds / 3600)}h ${Math.floor(seconds % 3600 / 60)}m`
+    const elapsed = !Number.isFinite(seconds) ? undefined : durationOf(seconds)
 
     return { ...role, ...live, badge: badgeOf(role.agent, input.agents?.[role.agent]), branch: opened?.branch ?? `role/${input.mission}/${role.name}`, screen: live.screen ?? [], ...(opened && { dispatchedAt: opened.at }), ...(elapsed && { elapsed, seconds }) }
   })
@@ -171,5 +178,6 @@ export const modelOf = (input: ModelInput): PanelModel => {
     log: input.log,
     clock: clockOf(input.now),
     now: input.now.getTime(),
+    ...(input.drafting && { drafting: input.drafting }),
   }
 }

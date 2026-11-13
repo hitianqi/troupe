@@ -5,7 +5,7 @@ import { pairsOf, wordDiff } from './diff.ts'
 import type { FileDiff } from './diff.ts'
 import { known, lang, plural, t } from './i18n.ts'
 import type { Phrase } from './i18n.ts'
-import { clockOf } from './model.ts'
+import { clockOf, durationOf } from './model.ts'
 import type { PanelModel, RoleView, StageMark } from './model.ts'
 import { clashesOf, sectionsOf, treeOf } from './plan.ts'
 import type { RoleState } from './state.ts'
@@ -75,7 +75,7 @@ export type Page = {
   events: { index: number; row: number; col: number; width: number; tone: Tone }[]
 }
 /** `scroll` is where the frame scrolled to, when the page chose it (the LOG following its newest line). */
-export type Drawn = { lines: Line[]; hits: Hit[]; maxScroll: number; scroll?: number; scene?: Scene }
+export type Drawn = { lines: Line[]; hits: Hit[]; maxScroll: number; scroll?: number; scene?: Scene; spin?: Point }
 
 const LEFT = 27
 const BOX = 26
@@ -99,6 +99,21 @@ const MARK: Record<StageMark, { glyph: string; tone: Tone }> = {
   open: { glyph: '◆', tone: 'warn' },
   gate: { glyph: '◇', tone: 'dim' },
   todo: { glyph: '○', tone: 'dim' },
+}
+
+/** While the orchestrator drafts the plan: that it does and for how long, where to watch it, and what comes here; centred, the spinner's cell with it. */
+export const drafting = (planPath: string | undefined, since: number | undefined, now: number, width: number): { lines: Line[]; spin: Point } => {
+  const took = since === undefined ? '' : ` · ${durationOf(Math.max(0, Math.floor((now - since) / 1000)))}`
+  const next: Line = planPath === undefined
+    ? [{ text: t('The plan comes here for approval when it is written.'), tone: 'dim' }]
+    : [{ text: planPath }, { text: t(' comes here for approval when it is written'), tone: 'dim' }]
+  const centre = (line: Line): Line => [{ text: ' '.repeat(Math.max(0, Math.floor((width - cellsOf(textOf(line))) / 2))) }, ...line]
+  const title = centre([{ text: '⠋', tone: 'accent' }, { text: ' ' }, { text: t('Orch is drafting the plan'), tone: 'bright', bold: true }, { text: took, tone: 'dim' }])
+
+  return {
+    lines: [title, centre([{ text: t("in the orchestrator's pane, beside this one"), tone: 'dim' }]), [], ...reflow(next, width).map(centre)],
+    spin: [0, cellsOf(title[0]?.text ?? '')],
+  }
 }
 
 /** `left` and `right` in `width` cells, `right` flush with the edge; `left` cut first. */
@@ -799,8 +814,9 @@ export const draw = (m: PanelModel, ui: Ui, width: number, height: number): Draw
   else c.runs(height - 1, 0, hints(m, ui, width))
 
   let scroll: number | undefined
+  let spin: Point | undefined
   if (row < bottom && ui.tab === 1) maxScroll = mission(c, m, ui, row, bottom, hit, scene)
-  else if (row < bottom) ({ maxScroll, scroll } = other(c, m, ui, row, bottom, hit, scene))
+  else if (row < bottom) ({ maxScroll, scroll, spin } = other(c, m, ui, row, bottom, hit, scene))
   if (ui.help) {
     const keys: [string, Phrase][] = [
       ['↑↓ / j k', 'select role'], ['Enter', 'detail'], ['1-5 / Tab', 'tabs'], ['o', 'open role pane'], ['s', 'send to role'], ['d', 'diff'],
@@ -823,7 +839,7 @@ export const draw = (m: PanelModel, ui: Ui, width: number, height: number): Draw
     hits.length = 0
   }
 
-  return { lines: c.lines(), hits, maxScroll, ...(scroll !== undefined && { scroll }), ...(!ui.help && { scene }) }
+  return { lines: c.lines(), hits, maxScroll, ...(scroll !== undefined && { scroll }), ...(!ui.help && { scene, ...(spin && { spin }) }) }
 }
 
 /** The MISSION tab: the left column, then FLOW and the detail on the right. */
@@ -902,7 +918,7 @@ const mission = (c: Canvas, m: PanelModel, ui: Ui, top: number, bottom: number, 
 type HitFn = (row: number, col: number, w: number, h: number, target: Target) => void
 /** A page draws between `top` and `bottom` and says how far it scrolls; `scroll` when it chose where. */
 type PageArgs = { c: Canvas; m: PanelModel; ui: Ui; top: number; bottom: number; hit: HitFn; page: Page }
-type Paged = { maxScroll: number; scroll?: number }
+type Paged = { maxScroll: number; scroll?: number; spin?: Point }
 
 const toHex = (rgb: readonly number[]): Hex => `#${rgb.map(x => x.toString(16).padStart(2, '0')).join('')}`
 const mixTone = (a: Tone, b: Tone, t: number): Hex => toHex(blend(rgbOf(TONES[a]), rgbOf(TONES[b]), t))
@@ -1048,6 +1064,14 @@ const rolesPage = ({ c, m, ui, top, bottom, hit, page }: PageArgs): Paged => {
 const TOC = 20
 /** PLAN: the summary or the whole plan as markdown, its sections listed on the left when there is room; a click on one jumps to it. */
 const planPage = ({ c, m, ui, top, bottom, hit }: PageArgs): Paged => {
+  // The draft is the orchestrator's to show, in its own pane; this page says so until the plan gate opens.
+  if (m.drafting !== undefined) {
+    const shown = drafting(m.planPath, m.drafting.since, m.now, c.width - 2)
+    const row = top + Math.max(0, Math.floor((bottom - top - shown.lines.length) / 2))
+    shown.lines.forEach((line, index) => { if (row + index < bottom) c.runs(row + index, 1, line) })
+
+    return { maxScroll: 0, spin: [row + shown.spin[0], 1 + shown.spin[1]] }
+  }
   const bodyOf = (width: number) => (ui.full ? planFull(m, width) : planSummary(m, width, 'accent', true))
   // The contents column, when there is room and more than one section to list.
   const toc = c.width >= 90 && bodyOf(c.width - TOC - 4).heads.length >= 2
@@ -1379,7 +1403,7 @@ const HINTS: Record<number, [string, Phrase][]> = {
   5: [['↑↓', 'file'], ['PgUp PgDn', 'scroll'], ['o', 'open window']],
 }
 const hints = (m: PanelModel, ui: Ui, width: number): Line => {
-  const keys = [...(m.gate === undefined ? [] : [['a', 'approve'], ['c', 'change']] as [string, Phrase][]), ...(HINTS[ui.tab] ?? []).map(([key, what]): [string, Phrase] => (key === 'f' && ui.full ? [key, 'summary'] : [key, what]))]
+  const keys = [...(m.gate === undefined ? [] : [['a', 'approve'], ['c', 'change']] as [string, Phrase][]), ...(ui.tab === 3 && m.drafting !== undefined ? [] : HINTS[ui.tab] ?? []).map(([key, what]): [string, Phrase] => (key === 'f' && ui.full ? [key, 'summary'] : [key, what]))]
   const left: Line = [{ text: ' ' }, ...keys.flatMap(([key, what]): Line => [{ text: key, tone: 'accentBright', bold: true }, { text: ` ${t(what)}   `, tone: 'dim' }])]
   const right: Line = [{ text: '1-5', tone: 'accentBright', bold: true }, { text: ` ${t('tabs')}   `, tone: 'dim' }, { text: '?', tone: 'accentBright', bold: true }, { text: ` ${t('help')} `, tone: 'dim' }]
   const room = width - cellsOf(textOf(right))

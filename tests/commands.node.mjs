@@ -790,18 +790,25 @@ test('open from caller B takes over its mission only once caller A is dead, and 
 })
 
 
-test('only explicit planning opens show progress, then discovery restores truthful idle state', async t => {
+test('only explicit planning opens show drafting until the plan gate opens, then discovery restores truthful idle state', async t => {
   const w = world(t)
   const path = join(w.root, 'docs/missions/m1/plan.md')
   rmSync(path)
   assert.equal((await w.call('open')).code, 0)
   const pane = [...w.panes].find(([, p]) => p.panel === w.root)[0]
-  const r = { ...w.r, env: { ...w.r.env, TMUX_PANE: pane } }
+  let now = 5000
+  const r = { ...w.r, env: { ...w.r.env, TMUX_PANE: pane }, now: () => now }
   assert.deepEqual(readPanel(r, 'm1'), { missing: 'no mission yet' })
-  assert.equal((await w.call('open', '--planning')).code, 0)
-  assert.deepEqual(readPanel(r, 'm1'), { missing: 'Orch is planning…' })
+  assert.equal((await execute('open', ['--planning'], r)).code, 0)
+  assert.deepEqual(readPanel(r, 'm1'), { missing: 'Orch is drafting the plan', drafting: { since: 5000, now: 5000 } })
+  // Opening again keeps when drafting began.
+  now = 9000
+  assert.equal((await execute('open', ['--planning'], r)).code, 0)
   w.write(path, plan())
-  assert.ok('model' in readPanel(r, 'm1'))
+  assert.deepEqual(readPanel(r, 'm1').model.drafting, { since: 5000 })
+  assert.equal(w.panes.get(pane).planning, '5000')
+  append(join(w.root, '.git/troupe/m1/log.jsonl'), 'orch', { ev: 'gate-open', gate: 'plan', plan: mission(r, 'm1').hash })
+  assert.equal(readPanel(r, 'm1').model.drafting, undefined)
   assert.equal(w.panes.get(pane).planning, undefined)
   rmSync(path)
   assert.deepEqual(readPanel(r, 'm1'), { missing: 'no mission yet' })
