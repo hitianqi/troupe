@@ -1,4 +1,4 @@
- troupe  auth-refresh  ·  Build                                                                                               ◆ 1 needs you  ·  12:07
+ troupe  auth-refresh  ·  Build                                                                                       ◆ 1 needs you  ·  12:07   中/EN
   1 MISSION   2 ROLES   3 PLAN   4 LOG   5 DIFF
                                                                                       Refresh tokens rotate on every use, and a reused one is refused
 ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────

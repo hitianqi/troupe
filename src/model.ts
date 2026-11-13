@@ -1,5 +1,6 @@
 import { badgeOf } from './agents.ts'
 import type { Agent, Badge } from './agents.ts'
+import { known, t } from './i18n.ts'
 import { isApproved, PLAN_GATE } from './log.ts'
 import type { Folded, Logged } from './log.ts'
 import { sectionsOf } from './plan.ts'
@@ -71,28 +72,29 @@ export const decisionsOf = (source: string): Decision[] => {
     .map(match => {
       const text = (match[2] ?? '').replace(/\s+/g, ' ').trim()
       const recommended = /\*\*Recommended:\s*([^*]+?)\.?\*\*/i.exec(text)?.[1]?.trim() ?? ''
-      const ask = /^.*?\?/.exec(text)?.[0] ?? (/^.*?[.!](?=\s|$)/.exec(text)?.[0] ?? text)
+      const ask = /^.*?[?？]/.exec(text)?.[0] ?? (/^.*?(?:[.!](?=\s|$)|[。！])/.exec(text)?.[0] ?? text)
 
       return { n: match[1] ?? '', ask: ask.replace(/\*\*/g, ''), recommended }
     })
 }
 
 const describe = (e: Logged, labelOf: (gate: string) => string): string => {
-  if ((e as { ev: string }).ev === 'teardown') return 'mission teardown complete'
-  if (e.ev === 'stage') return `stage: ${e.stage}`
-  if (e.ev === 'gate-open') return e.gate === PLAN_GATE ? 'plan gate opened' : `asked ${labelOf(e.gate)}: ${e.ask ?? ''}`
+  if ((e as { ev: string }).ev === 'teardown') return t('mission teardown complete')
+  if (e.ev === 'stage') return t('stage: {0}', e.stage)
+  if (e.ev === 'gate-open') return e.gate === PLAN_GATE ? t('plan gate opened') : t('asked {0}: {1}', known(labelOf(e.gate)), e.ask ?? '')
   if (e.ev === 'gate-answer') {
-    const what = e.gate === PLAN_GATE ? 'plan' : labelOf(e.gate)
+    const what = e.gate === PLAN_GATE ? t('plan') : known(labelOf(e.gate))
 
-    return e.answer === 'approve' ? `${what} approved` : `${what}: change: ${e.text ?? ''}`
+    return e.answer === 'approve' ? t('{0} approved', what) : t('{0}: change: {1}', what, e.text ?? '')
   }
-  if (e.ev === 'dispatch') return `dispatched ${e.role}`
-  if (e.ev === 'send') return `sent to ${e.role}: ${e.text}`
-  if (e.ev === 'up') return `opened mission window ${e.window}`
+  if (e.ev === 'dispatch') return t('dispatched {0}', e.role)
+  if (e.ev === 'send') return t('sent to {0}: {1}', e.role, e.text)
+  if (e.ev === 'up') return t('opened mission window {0}', e.window)
 
-  if (e.ev === 'close') return `closed ${e.role}`
+  if (e.ev === 'close') return t('closed {0}', e.role)
+  if (e.ev === 'lang') return t('language: {0}', e.lang === 'zh' ? '中文' : 'English')
 
-  return `mission: ${(e as { ev: string }).ev}`
+  return t('mission: {0}', (e as { ev: string }).ev)
 }
 
 export type ModelInput = {

@@ -4,6 +4,7 @@ import { join, relative } from 'node:path'
 
 import { claudeActivity } from './activity.ts'
 import { mux } from './command-context.ts'
+import { switchedTo } from './i18n.ts'
 import type { Mission, Repository, Runtime } from './command-context.ts'
 import { append, fold, logPath, orchestratorOf, readLog } from './log.ts'
 import type { Logged, Orchestrator } from './log.ts'
@@ -81,7 +82,7 @@ const writtenAt = (path: string): { bytes: string; at: number } | undefined => {
   try { return { bytes: readFileSync(path, 'utf8'), at: statSync(path).mtimeMs } } catch { return undefined }
 }
 
-/** What the orchestrator has not been told yet: gate answers made in the panel, oldest first, then for each role its answered waits and its finish. */
+/** What the orchestrator has not been told yet: gate answers made in the panel, oldest first, then the panel's language, then for each role its answered waits and its finish. */
 export const pendingNotices = (r: Runtime, m: Mission, events: Logged[], since: string): Notice[] => {
   const told = said(events)
   const folded = fold(events)
@@ -94,6 +95,9 @@ export const pendingNotices = (r: Runtime, m: Mission, events: Logged[], since: 
     const key = `gate:${e.gate}:${e.at}`
     if (!told.has(key)) notices.push({ key, text: e.answer === 'approve' ? `${e.gate} approved in the panel. ${afterApproval(e.gate, m.name)}` : `Change requested on ${e.gate}: ${e.text ?? ''}` })
   }
+  // Only the last switch counts: switching back and forth before it is told says nothing new.
+  const switched = events.filter(e => e.ev === 'lang' && e.by === 'panel' && e.at >= since).at(-1)
+  if (switched?.ev === 'lang' && !told.has(`lang:${switched.at}`)) notices.push({ key: `lang:${switched.at}`, text: switchedTo(switched.lang) })
   for (const [name, opened] of folded.roles) {
     if (opened.closed) continue
     const agent = m.agents[opened.agent ?? '']

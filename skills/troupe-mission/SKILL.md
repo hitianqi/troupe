@@ -58,7 +58,9 @@ it at dispatch, so a role sees what you merged before it. It also binds this
 session's pane to the mission, so the commands below act on it without `-m`,
 and other missions in the same repository can run beside it. The person's
 checkout stays on its branch. Fill in the plan in the mission worktree, by
-its full path.
+its full path. When its output names the language the person reads, write
+in it as it says; if the person switches the panel's language later, troupe
+tells you in a line.
 
 - **A role is a window.** Name roles for what they do (`api`, `web`,
   `review`). Split by coupling, not by file: files that change together go

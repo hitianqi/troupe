@@ -3,8 +3,9 @@ import { StringDecoder } from 'node:string_decoder'
 import { cellsOf, fit, paint, textOf } from './canvas.ts'
 import type { Line } from './canvas.ts'
 import type { Reply, Runtime } from './command-context.ts'
-import { draw } from './draw.ts'
+import { draw, langSwitch } from './draw.ts'
 import type { Drawn } from './draw.ts'
+import { known, langOf, setLang, t } from './i18n.ts'
 import { Motion } from './motion.ts'
 import { deliverNotices } from './notices.ts'
 import { flushAnswers } from './orchestrator.ts'
@@ -29,18 +30,22 @@ export const frameOf = (reading: Reading, ui: PanelUi, width: number, height: nu
   if ('missing' in reading && reading.missing === PLANNING && usable(width, height)) {
     const top = Math.max(0, Math.floor(height / 2) - 2)
     const centre = (text: string): string => `${' '.repeat(Math.max(0, Math.floor((width - cellsOf(text)) / 2)))}${text}`
-    const lines: Line[] = Array.from({ length: top }, () => [])
+    // The language switch sits top right, as on every other screen: the plan is written in it.
+    const toggle = langSwitch()
+    const col = width - cellsOf(textOf(toggle)) - 1
+    const lines: Line[] = [[{ text: ' '.repeat(col) }, ...toggle], ...Array.from({ length: Math.max(0, top - 1) }, () => [])]
     lines.push(
-      [{ text: centre(PLANNING), tone: 'bright', bold: true }],
-      [{ text: centre("in the orchestrator's pane, beside this one"), tone: 'dim' }],
+      [{ text: centre(known(PLANNING)), tone: 'bright', bold: true }],
+      [{ text: centre(t("in the orchestrator's pane, beside this one")), tone: 'dim' }],
       [],
-      [{ text: fit(centre('The plan comes here for approval once it is written.'), width).trimEnd(), tone: 'dim' }],
+      [{ text: fit(centre(t('The plan comes here for approval once it is written.')), width).trimEnd(), tone: 'dim' }],
     )
+    if (ui.message) lines.push([], [{ text: centre(ui.message), tone: 'accent' }])
 
-    return { lines, hits: [], maxScroll: 0 }
+    return { lines, hits: [{ row: 0, col, width: cellsOf(textOf(toggle)), height: 1, target: { kind: 'key', key: 'L' } }], maxScroll: 0 }
   }
   if ('missing' in reading || !usable(width, height)) return {
-    lines: [[{ text: fit('missing' in reading ? reading.missing : 'Panel needs 40 columns and 10 rows.', width).trimEnd() }]], hits: [], maxScroll: 0,
+    lines: [[{ text: fit('missing' in reading ? known(reading.missing) : t('Panel needs 40 columns and 10 rows.'), width).trimEnd() }]], hits: [], maxScroll: 0,
   }
 
   return draw(reading.model, ui, width, height)
@@ -60,6 +65,7 @@ const FRAME = 40
 export const panel = async (r: Runtime, options: PanelOptions, terminal: Terminal = { input: process.stdin, output: process.stdout }): Promise<Reply> => {
   const { input, output } = terminal
   const dimensions = () => ({ width: options.width ?? output.columns ?? 96, height: options.height ?? output.rows ?? 40 })
+  setLang(langOf(r.home, r.env))
   let reading = readPanel(r, options.mission)
   let missionName = 'mission' in reading ? reading.mission.name : undefined
   let ui = initialUi()
@@ -146,7 +152,7 @@ export const panel = async (r: Runtime, options: PanelOptions, terminal: Termina
       if (missionName !== nextMission) {
         if (missionName !== undefined) {
           const typing = ui.input !== undefined
-          ui = { ...ui, selected: '', scroll: 0, input: undefined, help: false, ...(typing ? { message: 'Mission changed; input cancelled.' } : {}) }
+          ui = { ...ui, selected: '', scroll: 0, input: undefined, help: false, ...(typing ? { message: t('Mission changed; input cancelled.') } : {}) }
           if (typing) messageUntil = r.now() + 4000
         }
         missionName = nextMission
@@ -180,8 +186,8 @@ export const panel = async (r: Runtime, options: PanelOptions, terminal: Termina
           if (next.ui.message !== ui.message && next.ui.message) messageUntil = r.now() + 4000
           ui = next.ui
           if (next.quit) { finish(); return }
-          if (next.effect !== undefined && 'mission' in shown) {
-            const message = await panelEffect(r, shown.mission.name, next.effect)
+          if (next.effect !== undefined && ('mission' in shown || next.effect.kind === 'lang')) {
+            const message = await panelEffect(r, 'mission' in shown ? shown.mission.name : options.mission, next.effect)
             if (finished) return
             ui = { ...ui, message: message.replace(/\s+/g, ' ').trim() }
             messageUntil = r.now() + 4000

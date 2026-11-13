@@ -108,6 +108,14 @@ its window live on the right. ↑↓ or j/k select a role, `o` opens its pane,
 plan, `a` / `c` answer a gate, `?` help, `q` quits. Clicks work where tmux
 passes the mouse (`set -g mouse on`).
 
+`中/EN` at the right of the title bar, or `L`, switches the panel between
+English and Chinese. The choice is saved in `~/.config/troupe/settings.json`;
+until you make one, a `zh` locale starts the panel in Chinese. It also sets
+the language the agents write in for you: the plan, gate questions and
+results. Roles dispatched later get it in their brief, and the orchestrator
+is told when you switch mid-mission. What is already written stays as it is,
+and what troupe reads (headings, YAML, `status:`, CLI output) stays English.
+
 ## Agents
 
 Built in: `claude` and `codex`. An adapter says how to start the agent with
