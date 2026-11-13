@@ -82,19 +82,19 @@ You can also run `troupe up -m <mission>` in your target repository to start the
 4. **Approve the handoff.** You approve opening the pull request, merge it yourself, and confirm. The workflow then closes its terminals and removes its temporary worktrees.
 
 <details>
-<summary><b>See the plan approval, agent terminals and final handoff</b></summary>
+<summary><b>See the plan approval, the panel's pages and the final handoff</b></summary>
 
 **Change the plan, or approve it.**
 
 ![Reviewing and approving a plan](docs/media/plan-review.gif)
 
-**Claude Code, Codex and a reviewer, each in a real terminal.**
+**One panel, five pages: the team, each role, the plan, the log and the changes.**
 
-![Agent terminals working side by side](docs/media/roles-live.gif)
+![The panel's five pages, one after another](docs/media/tabs-tour.gif)
 
-**You approve the pull request and confirm the merge before cleanup.**
+**Each criterion is ticked as the review passes it; then you approve the pull request.**
 
-![Pull request approval, merge confirmation and cleanup](docs/media/mr-gate.gif)
+![Done-when criteria ticked as the review passes, then the pull request approval](docs/media/mr-gate.gif)
 
 </details>
 
