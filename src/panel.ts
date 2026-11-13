@@ -11,7 +11,7 @@ import { flushAnswers } from './orchestrator.ts'
 import { panelEffect } from './panel-actions.ts'
 import { initialUi, parseInput, transition } from './panel-input.ts'
 import type { Input, PanelUi } from './panel-input.ts'
-import { readPanel } from './panel-model.ts'
+import { PLANNING, readPanel } from './panel-model.ts'
 import type { Reading } from './panel-model.ts'
 import { diff, full, Screen } from './screen.ts'
 
@@ -25,6 +25,20 @@ export const LEAVE_PANEL = '\x1b[?2004l\x1b[?1006l\x1b[?1000l\x1b[0m\x1b[?7h\x1b
 
 const usable = (width: number, height: number) => width >= 40 && height >= 10
 export const frameOf = (reading: Reading, ui: PanelUi, width: number, height: number): Drawn => {
+  // While the orchestrator drafts the plan, its own pane shows the work; the panel only says so.
+  if ('missing' in reading && reading.missing === PLANNING && usable(width, height)) {
+    const top = Math.max(0, Math.floor(height / 2) - 2)
+    const centre = (text: string): string => `${' '.repeat(Math.max(0, Math.floor((width - cellsOf(text)) / 2)))}${text}`
+    const lines: Line[] = Array.from({ length: top }, () => [])
+    lines.push(
+      [{ text: centre(PLANNING), tone: 'bright', bold: true }],
+      [{ text: centre("in the orchestrator's pane, beside this one"), tone: 'dim' }],
+      [],
+      [{ text: fit(centre('The plan comes here for approval once it is written.'), width).trimEnd(), tone: 'dim' }],
+    )
+
+    return { lines, hits: [], maxScroll: 0 }
+  }
   if ('missing' in reading || !usable(width, height)) return {
     lines: [[{ text: fit('missing' in reading ? reading.missing : 'Panel needs 40 columns and 10 rows.', width).trimEnd() }]], hits: [], maxScroll: 0,
   }

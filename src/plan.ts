@@ -184,7 +184,20 @@ export const checkRoles = (roles: Role[], agents: Record<string, Agent>, keys = 
     for (const dep of role.dependsOn) if (!byName.has(dep)) problems.push(`role ${name}: depends_on unknown role "${dep}"`)
     for (const one of role.reviews) if (!byName.has(one)) problems.push(`role ${name}: reviews unknown role "${one}"`)
   }
-  const deps = (name: string): Set<string> => {
+  const deps = depsOf(roles)
+  for (const name of byName.keys()) if (deps(name).has(name)) problems.push(`role ${name}: dependency cycle`)
+  for (const { a, b, shared } of clashesOf(roles)) problems.push(`${a} and ${b} overlap (${shared.join('; ')}) but neither depends on the other`)
+
+  return problems
+}
+
+type Node = Pick<Role, 'name' | 'touches' | 'dependsOn'>
+
+/** Every role a role waits on, directly or through others. */
+const depsOf = (roles: Node[]) => {
+  const byName = new Map(roles.map(role => [role.name, role]))
+
+  return (name: string): Set<string> => {
     const seen = new Set<string>()
     const stack = [...(byName.get(name)?.dependsOn ?? [])]
     for (let dep = stack.pop(); dep !== undefined; dep = stack.pop()) {
@@ -195,17 +208,17 @@ export const checkRoles = (roles: Role[], agents: Record<string, Agent>, keys = 
 
     return seen
   }
-  for (const name of byName.keys()) if (deps(name).has(name)) problems.push(`role ${name}: dependency cycle`)
-  roles.forEach((a, index) => {
-    for (const b of roles.slice(index + 1)) {
-      const shared = a.touches.flatMap(x => b.touches.filter(y => overlaps(x, y)).map(y => `${x} ~ ${y}`))
-      if (shared.length > 0 && !deps(a.name).has(b.name) && !deps(b.name).has(a.name)) {
-        problems.push(`${a.name} and ${b.name} overlap (${shared.join('; ')}) but neither depends on the other`)
-      }
-    }
-  })
+}
 
-  return problems
+/** Pairs of roles whose touches can name the same file while neither depends on the other; `shared` holds each `x ~ y`. */
+export const clashesOf = (roles: Node[]): { a: string; b: string; shared: string[] }[] => {
+  const deps = depsOf(roles)
+
+  return roles.flatMap((a, index) => roles.slice(index + 1).flatMap(b => {
+    const shared = a.touches.flatMap(x => b.touches.filter(y => overlaps(x, y)).map(y => `${x} ~ ${y}`))
+
+    return shared.length > 0 && !deps(a.name).has(b.name) && !deps(b.name).has(a.name) ? [{ a: a.name, b: b.name, shared }] : []
+  }))
 }
 
 /**

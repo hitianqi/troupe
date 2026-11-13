@@ -198,6 +198,19 @@ test('PLAN reflows paragraphs and hanging lists, renders headings, inline styles
   }
 })
 
+test('a role\'s own problems and its overlap sit under it; the others still follow the roles', () => {
+  const source = PLAN.replace('touches: [src/store/, migrations/]', 'touches: [src/store/, src/api/errors.ts]')
+  const plan = readPlan(source)
+  const problems = [...plan.problems, 'role web: no text', 'a problem of no role']
+  const m = modelOf({ mission: 'auth-refresh', planPath: 'p', planText: source, plan: { ...plan, problems }, hash: HASH, folded: fold([]), log: [], live: new Map(), stages: DEFAULT_STAGES, now: new Date(at('12:07')) })
+  const text = plain(draw(m, { tab: 3, selected: 'api' }, 88, 80)).join('\n')
+  assert.match(text, /src\/store\/  ✗ src\/api\/errors\.ts\n +✗ overlaps api on src\/api\/errors\.ts · neither depends on the other/)
+  assert.match(text, /web\/src\/session\/\n +✗ no text/)
+  assert.match(text, /✗ api and store overlap/)
+  assert.doesNotMatch(text, /- (role web|api and store)/)
+  assert.match(text, /- a problem of no role/)
+})
+
 test('PLAN preserves a long token through scrolling; YAML stays on its source row', () => {
   const token = 'abcdefghijklmnopqrstuvwxyz'.repeat(4)
   const source = `# Test\n\n${token}\n\n\`\`\`yaml\nkey: ${'x'.repeat(100)}\nnext: value\n\`\`\`\n`

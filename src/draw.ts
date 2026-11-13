@@ -5,7 +5,7 @@ import { pairsOf, wordDiff } from './diff.ts'
 import type { FileDiff } from './diff.ts'
 import { clockOf } from './model.ts'
 import type { PanelModel, RoleView, StageMark } from './model.ts'
-import { sectionsOf, treeOf } from './plan.ts'
+import { clashesOf, sectionsOf, treeOf } from './plan.ts'
 import type { RoleState } from './state.ts'
 
 // The panel's screen (design section 5b): title bar, tabs, the goal, the
@@ -313,6 +313,84 @@ const passedAt = (m: PanelModel): string | undefined => {
   return result.at === undefined ? '' : clockOf(result.at)
 }
 
+/**
+ * The plan's shape, above its roles: builders in columns by when they start,
+ * an arrow from a role to the one beside it that waits on it, every row joined
+ * to the reviewer; then the windows by agent and whether touches overlap.
+ * Once a role is dispatched it shows its state and its line turns green when
+ * done. Empty when the columns do not fit.
+ */
+const shapeOf = (m: PanelModel, width: number): Line[] => {
+  const reviewers = m.roles.filter(role => role.touches.length === 0 && role.reviews.length > 0)
+  const builders = m.roles.filter(role => !reviewers.includes(role))
+  // A builder's column is one past the furthest of the builders it waits on; a cycle has none.
+  const column = new Map<string, number>()
+  const columnOf = (role: RoleView, seen: string[] = []): number => {
+    if (seen.includes(role.name)) return NaN
+    const known = column.get(role.name)
+    if (known !== undefined) return known
+    const deps = builders.filter(one => role.dependsOn.includes(one.name)).map(one => columnOf(one, [...seen, role.name]))
+    const at = deps.length === 0 ? 0 : Math.max(...deps) + 1
+    column.set(role.name, at)
+
+    return at
+  }
+  const at = builders.map(role => columnOf(role))
+  if (builders.length === 0 || at.some(Number.isNaN)) return []
+  const layers = Array.from({ length: Math.max(...at) + 1 }, (_, n) => builders.filter((_, i) => at[i] === n))
+  const node = (role: RoleView): Line => role.state === 'planned'
+    ? [badge(role), { text: ` ${role.name}`, tone: 'bright', bold: true }]
+    : [{ text: LOOK[role.state].glyph, tone: LOOK[role.state].tone }, { text: ` ${role.name}`, tone: 'bright', bold: true }]
+  const line = (role: RoleView | undefined): Tone => (role?.state === 'done' ? 'ok' : 'chrome')
+  const columns = layers.map((layer, index) => ({
+    head: index === 0 ? 'at once' : `after ${[...new Set(layer.flatMap(one => one.dependsOn))].join(', ')}`,
+    roles: layer,
+  }))
+  const widths = columns.map(column => Math.max(cellsOf(column.head), ...column.roles.map(role => cellsOf(textOf(node(role))))))
+  const last = reviewers.length === 0 ? [] : [reviewers.map(role => textOf(node(role))).join(' · '), 'as each lands']
+  const ARROW = 5
+  if (2 + widths.reduce((sum, one) => sum + one + ARROW, 0) + Math.max(0, ...last.map(cellsOf)) > width) return []
+
+  const rows = Math.max(...columns.map(column => column.roles.length))
+  const out: Line[] = [[{ text: '  ' }, ...columns.flatMap((column, index) => [{ text: fit(column.head, widths[index] ?? 0), tone: 'dim' as const }, { text: ' '.repeat(ARROW) }]), ...(last[1] ? [{ text: last[1], tone: 'dim' as const }] : [])]]
+  for (let row = 0; row < rows; row++) {
+    const runs: Line = [{ text: '  ' }]
+    // Where this row's last role ends: its line runs on to the reviewer from there.
+    const end = columns.reduce((found, column, index) => (column.roles[row] === undefined ? found : index), -1)
+    columns.forEach((column, index) => {
+      const role = column.roles[row]
+      const size = widths[index] ?? 0
+      const next = columns[index + 1]?.roles[row]
+      if (role === undefined) {
+        runs.push({ text: index > end && reviewers.length > 0 ? '─'.repeat(size + ARROW) : ' '.repeat(size + ARROW), tone: line(columns[end]?.roles[row]) })
+        return
+      }
+      runs.push(...node(role), { text: ' '.repeat(size - cellsOf(textOf(node(role)))) })
+      if (next !== undefined && next.dependsOn.includes(role.name)) runs.push({ text: ' ──▶ ', tone: line(role) })
+      else if (next === undefined && reviewers.length > 0) runs.push({ text: ' ' + '─'.repeat(ARROW - 1), tone: line(role) })
+      else runs.push({ text: ' '.repeat(ARROW) })
+    })
+    if (reviewers.length > 0) {
+      const tone = line(columns[end]?.roles[row])
+      // The rows join into one arrow to the reviewer.
+      const join = rows === 1 ? '─▶ ' : row === 0 ? '┬▶ ' : row === rows - 1 ? '┘' : '┤'
+      runs.push({ text: join, tone })
+      if (row === 0) reviewers.forEach((role, index) => runs.push(...(index > 0 ? [{ text: ' · ', tone: 'dim' as const }] : []), ...node(role)))
+    }
+    out.push(runs)
+  }
+  const agents = new Map<string, RoleView[]>()
+  for (const role of m.roles) agents.set(role.agent, [...(agents.get(role.agent) ?? []), role])
+  const clash = clashesOf(m.roles)[0]
+  out.push([
+    { text: `  ${m.roles.length} window${m.roles.length === 1 ? '' : 's'} · `, tone: 'dim' },
+    ...[...agents].flatMap(([agent, roles]) => [{ text: `${agent} ×${roles.length}`, tone: badge(roles[0] as RoleView).tone }, { text: ' · ', tone: 'dim' as const }]),
+    clash === undefined ? { text: "touches don't overlap ✓", tone: 'ok' } : { text: `✗ ${clash.a} and ${clash.b} overlap`, tone: 'error' },
+  ])
+
+  return out
+}
+
 /** The plan's parts, the same in the plan gate and on the PLAN tab: goal, why, done when, each role, decisions, out of scope; wrapped, never cut. */
 const planSummary = (m: PanelModel, width: number, tone: Tone, page: boolean): { lines: Line[]; heads: Head[] } => {
   const lines: Line[] = []
@@ -334,21 +412,37 @@ const planSummary = (m: PanelModel, width: number, tone: Tone, page: boolean): {
     lines.push(...reflow(runs, width, { text: passed === undefined ? '  ☐  ' : '  ☒  ', tone: passed === undefined ? 'dim' : 'ok' }, '     '))
   }
   head('Roles')
+  const shape = shapeOf(m, width)
+  if (shape.length > 0) lines.push(...shape, [])
+  // A role's own problems and its overlaps sit under it; the rest follow the roles.
+  const clashes = clashesOf(m.roles)
+  const placed = new Set<string>()
   m.roles.forEach((role, index) => {
     if (index > 0 && page) lines.push([])
     const agent = `${role.agent} ${role.model || 'default'}`
+    const look = LOOK[role.state]
     lines.push([
       { text: ' ' }, badge(role), { text: ' ' },
       { text: fit(role.name, 11), tone: 'bright', bold: true },
       { text: fit(agent, 20), tone: 'dim' },
       ...fitRuns(effortOf(role.effort), EFFORT + 2),
-      { text: fit(startOf(role), Math.max(0, width - 48)), tone: 'dim' },
+      role.state === 'planned' ? { text: fit(startOf(role), Math.max(0, width - 48)), tone: 'dim' } : { text: fit(`${look.glyph} ${look.text}`, Math.max(0, width - 48)), tone: look.tone },
     ])
     lines.push(...reflow(inline(role.goal), width, '   ', '   '))
-    const touches: Line = role.touches.length === 0 ? [{ text: 'changes nothing', tone: 'dim' }] : role.touches.flatMap((touch, i) => [...(i > 0 ? [{ text: '  ' }] : []), { text: touch, tone: 'cyan' as const, bg: 'cyan' as const, wash: 0.13 }])
+    const side = (one: { a: string; b: string }) => (one.a === role.name ? 0 : one.b === role.name ? 1 : -1)
+    const clashing = new Set(clashes.flatMap(one => (side(one) < 0 ? [] : one.shared.map(pair => pair.split(' ~ ')[side(one)] ?? ''))))
+    const touches: Line = role.touches.length === 0 ? [{ text: 'changes nothing', tone: 'dim' }] : role.touches.flatMap((touch, i) => [...(i > 0 ? [{ text: '  ' }] : []), clashing.has(touch) ? { text: `✗ ${touch}`, tone: 'error' as const } : { text: touch, tone: 'cyan' as const, bg: 'cyan' as const, wash: 0.13 }])
     lines.push(...reflow(touches, width, '   ', '   '))
+    const own = [
+      ...m.problems.filter(problem => problem.startsWith(`role ${role.name}: `)).map(problem => ({ problem, text: problem.slice(`role ${role.name}: `.length) })),
+      ...clashes.filter(one => one.b === role.name).map(one => ({ problem: m.problems.find(problem => problem.startsWith(`${one.a} and ${one.b} overlap (`)) ?? '', text: `overlaps ${one.a} on ${one.shared.map(pair => pair.replace(/^(.+) ~ \1$/, '$1')).join('; ')} · neither depends on the other` })),
+    ]
+    for (const { problem, text } of own) {
+      placed.add(problem)
+      lines.push(...reflow([{ text: `✗ ${text}`, tone: 'error' }], width, '   ', '     '))
+    }
   })
-  for (const problem of m.problems) wrap(problem, width - 4).forEach((one, index) => lines.push([{ text: `${index === 0 ? '  - ' : '    '}${one}`, tone: 'error' }]))
+  for (const problem of m.problems.filter(one => !placed.has(one))) wrap(problem, width - 4).forEach((one, index) => lines.push([{ text: `${index === 0 ? '  - ' : '    '}${one}`, tone: 'error' }]))
   if (m.decisions.length > 0) head('Decisions')
   for (const one of m.decisions) {
     const n = `  ${one.n}. `

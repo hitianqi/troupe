@@ -11,6 +11,8 @@ import { tmux } from './run.ts'
 
 export type Snapshot = { mission: Mission; model: PanelModel }
 export type Reading = Snapshot | { missing: string }
+/** What the panel reads while the orchestrator drafts the plan. */
+export const PLANNING = 'Orch is planning…'
 
 const planning = (r: Runtime, root: string, finish = false): boolean => {
   const pane = r.env.TMUX_PANE
@@ -39,7 +41,7 @@ export const readPanel = (r: Runtime, want: string): Reading => {
   } catch (error) {
     const why = (error as Error).message
     const waiting = error instanceof Unresolved || /^no plan for/.test(why)
-    if (waiting && planning(r, rootOf(r.cwd, r.run))) return { missing: 'Orch is planning…' }
+    if (waiting && planning(r, rootOf(r.cwd, r.run))) return { missing: PLANNING }
     // With missions open, an unbound panel names them instead of looking idle.
     if (error instanceof Unresolved && error.open.length > 0) return { missing: `panel: ${why}` }
 
