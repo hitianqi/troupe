@@ -336,17 +336,24 @@ export const claudeSessionTurn = (session: string, home: string): TurnAt | undef
 }
 
 /** The first end of a turn (`turn_duration` or an interrupt row) in a Claude session's transcript at or after `since`. */
+const endedCache = new Map<string, { key: string; since: number; ended: number | undefined }>()
 export const claudeTurnEnded = (session: string, home: string, since: number): number | undefined => {
   try {
     const path = transcriptOf(session, home)
     if (path === undefined) return undefined
+    const stat = statSync(path)
+    const key = stamp(stat)
+    // A waiting role asks every poll; an unchanged transcript since the same wait needs no backward read.
+    const cached = endedCache.get(path)
+    if (cached?.key === key && cached.since === since) return cached.ended
     let ended: number | undefined
-    for (const bytes of reverseLines(path, statSync(path).size)) {
+    for (const bytes of reverseLines(path, stat.size)) {
       const turn = claudeRowTurn(bytes)
       if (turn === undefined) continue
       if (turn.at < since) break
       if (turn.turn === 'ready') ended = turn.at
     }
+    endedCache.set(path, { key, since, ended })
 
     return ended
   } catch {

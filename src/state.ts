@@ -55,22 +55,48 @@ export const resultOf = (text: string): Result => {
 }
 
 /** The results `troupe send` put aside for a role (`result-<role>-<uuid>.md` beside the log), oldest first. */
+const earlier = new Map<string, { key: string; results: Result[] }>()
 export const earlierResults = (dir: string, role: string): Result[] => {
-  if (!existsSync(dir)) return []
+  // A file beside the log is moved in whole and never rewritten, so the folder's stamp says when to re-read.
+  let key = 'none'
+  try {
+    const stat = statSync(dir)
+    key = `${stat.dev}:${stat.ino}:${stat.mtimeMs}:${stat.ctimeMs}`
+  } catch {
+    return []
+  }
+  const cached = earlier.get(`${dir}\0${role}`)
+  if (cached?.key === key) return cached.results
   // Role names are plain (NAME), so the role needs no escaping here.
   const name = new RegExp(`^result-${role}-[0-9a-f-]{36}\\.md$`)
-
-  return readdirSync(dir).filter(file => name.test(file)).map(file => join(dir, file))
+  const results = readdirSync(dir).filter(file => name.test(file)).map(file => join(dir, file))
     .map(path => ({ ...resultOf(readFileSync(path, 'utf8')), at: statSync(path).mtime.toISOString() }))
     .sort((a, b) => a.at.localeCompare(b.at))
+  earlier.set(`${dir}\0${role}`, { key, results })
+
+  return results
 }
+
+const results = new Map<string, { key: string; result: Result }>()
 
 /** The role's result, or undefined while it has written none. */
 export const readResult = (worktree: string): Result | undefined => {
   const path = join(worktree, RESULT_FILE)
+  let stat: ReturnType<typeof statSync>
+  try {
+    stat = statSync(path)
+  } catch {
+    return undefined
+  }
+  const key = `${stat.dev}:${stat.ino}:${stat.size}:${stat.mtimeMs}:${stat.ctimeMs}`
+  const cached = results.get(path)
+  if (cached?.key === key) return cached.result
 
   // When it was written: the panel ticks the done-when criteria at the reviewer's PASS.
-  return existsSync(path) ? { ...resultOf(readFileSync(path, 'utf8')), at: statSync(path).mtime.toISOString() } : undefined
+  const result = { ...resultOf(readFileSync(path, 'utf8')), at: stat.mtime.toISOString() }
+  results.set(path, { key, result })
+
+  return result
 }
 
 const git = (cwd: string, args: string[], runner: Run): string => {
@@ -112,8 +138,44 @@ const filesOf = (worktree: string, base: string, untracked: string[], runner: Ru
   return [...tracked, ...added]
 }
 
+/** Everything that says a worktree's work moved — its HEAD, its status entries, its untracked files — in one git read. */
+const stateOf = (worktree: string, runner: Run): string => {
+  const status = runner('git', ['--no-optional-locks', 'status', '--porcelain=v2', '--branch', '--untracked-files=all'], { cwd: worktree })
+  if (status.code !== 0) throw new Error(status.err || 'git failed')
+
+  return status.out
+}
+
+/** A file this large is fingerprinted by stat, not by bytes: hashing it every poll would cost more than the diff. */
+const FINGERPRINT = 256 * 1024
+
+/** The bytes of every file a cached work shows: an edit that leaves the status lines standing still still re-reads. */
+const fingerprintOf = (worktree: string, files: string[]): string => files.map(file => {
+  try {
+    const stat = statSync(join(worktree, file))
+
+    return stat.size > FINGERPRINT ? `${stat.mtimeMs}:${stat.size}` : createHash('sha256').update(readFileSync(join(worktree, file))).digest('hex')
+  } catch {
+    return 'gone'
+  }
+}).join('\n')
+
+type CachedWork = { base: string; touches: string; state: string; fingerprint: string; work: Work }
+/** The panel reads every role's work every two seconds; between a role's moves its worktree stands still. */
+const workCache = new Map<Run, Map<string, CachedWork>>()
+
 /** The role's commits since `base` and the files it changed, against its touches. */
 export const workOf = (worktree: string, base: string, touches: string[], runner: Run = run): Work => {
+  const state = stateOf(worktree, runner)
+  const marked = touches.join('\0')
+  let byWorktree = workCache.get(runner)
+  if (byWorktree === undefined) {
+    byWorktree = new Map()
+    workCache.set(runner, byWorktree)
+  }
+  const cached = byWorktree.get(worktree)
+  if (cached !== undefined && cached.base === base && cached.touches === marked && cached.state === state
+    && cached.fingerprint === fingerprintOf(worktree, cached.work.changed)) return cached.work
   const commits = git(worktree, ['log', '--format=%h%x09%s', `${base}..HEAD`], runner)
     .split('\n')
     .filter(line => line !== '')
@@ -122,26 +184,48 @@ export const workOf = (worktree: string, base: string, touches: string[], runner
 
       return { sha, subject: subject.join('\t') }
     })
-  const untracked = git(worktree, ['ls-files', '--others', '--exclude-standard'], runner).split('\n').filter(file => file !== '')
-  const changed = [...new Set([...git(worktree, ['diff', '--name-only', base], runner).split('\n'), ...untracked])]
-    .filter(file => file !== '')
-    .sort()
-  const outside = changed.filter(file => !touches.some(touch => overlaps(touch, file)))
+  const untracked = git(worktree, ['-c', 'core.quotePath=false', 'ls-files', '--others', '--exclude-standard'], runner).split('\n').filter(file => file !== '')
   // The hunks are extra: a diff too large or unreadable leaves the commits and files standing.
   try {
-    const byPath = new Map(filesOf(worktree, base, untracked, runner).map(file => [file.path, file]))
+    const files = filesOf(worktree, base, untracked, runner)
+    const changed = files.map(file => file.path).sort()
+    const outside = changed.filter(file => !touches.some(touch => overlaps(touch, file)))
+    const byPath = new Map(files.map(file => [file.path, file]))
+    const work: Work = { commits, changed, outside, files: changed.map(path => byPath.get(path) ?? { path, status: 'M', add: 0, del: 0, hunks: [] }) }
+    byWorktree.set(worktree, { base, touches: marked, state, fingerprint: fingerprintOf(worktree, changed), work })
 
-    return { commits, changed, outside, files: changed.map(path => byPath.get(path) ?? { path, status: 'M', add: 0, del: 0, hunks: [] }) }
+    return work
   } catch (error) {
+    const changed = [...new Set([...git(worktree, ['diff', '--name-only', base], runner).split('\n'), ...untracked])]
+      .filter(file => file !== '')
+      .sort()
+    const outside = changed.filter(file => !touches.some(touch => overlaps(touch, file)))
+
     return { commits, changed, outside, diffProblem: (error as Error).message }
   }
 }
 
 export type Pane = { alive: boolean; dead: boolean; screen: string }
+export type PaneMark = { dead: boolean; owner: string }
+let paneMarks: Map<string, PaneMark> | undefined
+/** One `list-panes -a` names every pane; share it so the pane reads of one synchronous run need no `display` each. */
+export const sharePaneMarks = (marks: Map<string, PaneMark>): void => {
+  paneMarks = marks
+  // The marks are stale the moment the loop yields; every later read asks tmux itself again.
+  queueMicrotask(() => { paneMarks = undefined })
+}
 
 /** The pane's state from tmux: gone, its agent exited (`remain-on-exit`), or alive with its screen. */
 export const paneOf = (pane: string, runner: Run = run, env = process.env, expected?: string): Pane => {
   const gone = { alive: false, dead: false, screen: '' }
+  const shared = paneMarks?.get(pane)
+  // A pane the shared marks name is identified by them; one they do not (a pane opened after they were read) asks tmux.
+  if (shared !== undefined) {
+    if (!expected || shared.owner !== expected) return gone
+    const captured = tmux(['capture-pane', '-p', '-t', pane], runner, env)
+
+    return { alive: true, dead: shared.dead, screen: captured.code === 0 ? captured.out : '' }
+  }
   try {
     const identified = tmux(['display', '-p', '-t', pane, '#{pane_id}\t#{pane_dead}\t#{@troupe-owner}'], runner, env)
     const [id, dead, owner] = identified.out.trimEnd().split('\t')

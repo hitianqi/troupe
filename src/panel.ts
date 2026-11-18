@@ -119,7 +119,7 @@ export const panel = async (r: Runtime, options: PanelOptions, terminal: Termina
         resolve({ code, out })
       }
     }
-    const paintFrame = () => {
+    const paintFrame = (held = false) => {
       if (finished) return
       if (ui.message && r.now() >= messageUntil) ui = { ...ui, message: undefined }
       const { width, height } = dimensions()
@@ -127,8 +127,8 @@ export const panel = async (r: Runtime, options: PanelOptions, terminal: Termina
       ui = { ...ui, scroll: frame.scroll ?? Math.max(0, Math.min(frame.maxScroll, ui.scroll ?? 0)) }
       base = Screen.of(frame.lines, width, height, !!options.plain, motion?.background)
       stale = true
-      // Input that arrives together is one frame, written once the queue drains.
-      if (jobs === 0) render()
+      // Input that arrives together is one frame, written once the queue drains — or, held, once its burst ends.
+      if (jobs === 0 && !held) render()
     }
     /** One synchronized write: the whole screen after a clear, else only the cells that changed. */
     const render = () => {
@@ -171,27 +171,61 @@ export const panel = async (r: Runtime, options: PanelOptions, terminal: Termina
       const shown = reading
       const shownFrame = frame
       const { width, height } = dimensions()
-      enqueue(async () => {
-        for (const action of actions) {
-          if (finished) return
-          if (!usable(width, height)) {
-            if (action.kind === 'key' && (action.key === 'q' || action.key === 'quit')) { finish(); return }
-            continue
+      // A packet of pure moves draws at once when no job is pending: a key must not wait behind a refresh.
+      // An effect, and the packet from it on, keep the queue: effects act on the world, and their order holds.
+      if (jobs === 0) {
+        let index = 0
+        try {
+          for (const action of actions) {
+            if (!usable(width, height)) {
+              if (action.kind === 'key' && (action.key === 'q' || action.key === 'quit')) { finish(); return }
+              continue
+            }
+            const model = 'model' in shown ? shown.model : undefined
+            const next = transition(ui, action, model, shownFrame.hits, height, shownFrame.maxScroll)
+            if (next.effect !== undefined && ('mission' in shown || next.effect.kind === 'lang')) break
+            if (next.ui.message !== ui.message && next.ui.message) messageUntil = r.now() + 4000
+            ui = next.ui
+            if (next.quit) { finish(); return }
+            index += 1
           }
-          const model = 'model' in shown ? shown.model : undefined
-          const next = transition(ui, action, model, shownFrame.hits, height, shownFrame.maxScroll)
-          if (next.ui.message !== ui.message && next.ui.message) messageUntil = r.now() + 4000
-          ui = next.ui
-          if (next.quit) { finish(); return }
-          if (next.effect !== undefined && ('mission' in shown || next.effect.kind === 'lang')) {
-            const message = await panelEffect(r, 'mission' in shown ? shown.mission.name : options.mission, next.effect)
-            if (finished) return
-            ui = { ...ui, message: message.replace(/\s+/g, ' ').trim() }
-            messageUntil = r.now() + 4000
-            refresh()
-          } else paintFrame()
+        } catch (error) {
+          finish(1, `${(error as Error).message}\n`)
+          return
         }
-      })
+        if (index === actions.length) {
+          // Held: one write once the burst of input ends, as the queue would coalesce it.
+          paintFrame(true)
+          queueMicrotask(() => { if (jobs === 0 && stale) render() })
+          return
+        }
+        // The pure prefix draws now; the effect and what follows it run in the queue.
+        paintFrame(true)
+        enqueue(async () => { await runActions(actions.slice(index), shown, shownFrame, width, height) })
+        return
+      }
+      enqueue(async () => { await runActions(actions, shown, shownFrame, width, height) })
+    }
+    const runActions = async (actions: Input[], shown: Reading, shownFrame: Drawn, width: number, height: number): Promise<void> => {
+      for (const action of actions) {
+        if (finished) return
+        if (!usable(width, height)) {
+          if (action.kind === 'key' && (action.key === 'q' || action.key === 'quit')) { finish(); return }
+          continue
+        }
+        const model = 'model' in shown ? shown.model : undefined
+        const next = transition(ui, action, model, shownFrame.hits, height, shownFrame.maxScroll)
+        if (next.ui.message !== ui.message && next.ui.message) messageUntil = r.now() + 4000
+        ui = next.ui
+        if (next.quit) { finish(); return }
+        if (next.effect !== undefined && ('mission' in shown || next.effect.kind === 'lang')) {
+          const message = await panelEffect(r, 'mission' in shown ? shown.mission.name : options.mission, next.effect)
+          if (finished) return
+          ui = { ...ui, message: message.replace(/\s+/g, ' ').trim() }
+          messageUntil = r.now() + 4000
+          refresh()
+        } else paintFrame()
+      }
     }
     const onData = (chunk: Buffer | string) => {
       clearTimeout(escape)

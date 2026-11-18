@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url'
 
 import { textOf } from '../dist/canvas.js'
 import { runtime } from '../dist/command-context.js'
-import { mission } from '../dist/missions.js'
+import { mission, worktreeList } from '../dist/missions.js'
 import { draw } from '../dist/draw.js'
 import { append, readLog } from '../dist/log.js'
 import { flushAnswers } from '../dist/orchestrator.js'
@@ -56,6 +56,8 @@ const world = t => {
       if (raw.includes('--show-toplevel')) return yes(root)
       if (raw.includes('--git-common-dir')) return yes('.git')
       if (raw[0] === 'symbolic-ref') return yes(head.branch)
+      // The hunk diff; a read that failed falls back to names only.
+      if (raw[0] === '-c' && raw.includes('diff')) return yes('diff --git a/src/api.ts b/src/api.ts\nindex 1..2 100644\n--- a/src/api.ts\n+++ b/src/api.ts\n@@ -0,0 +1 @@\n+api\n')
       if (raw[0] === 'diff') return yes('src/api.ts\n')
       return yes()
     }
@@ -88,6 +90,26 @@ const world = t => {
 const tick = () => new Promise(resolve => setImmediate(resolve))
 const key = key => ({ kind: 'key', key })
 const step = (ui, input, model, hits = [], height = 58, max = 100) => transition(ui, input, model, hits, height, max)
+
+test('the worktree list falls back to blank-line porcelain for a git without -z (before 2.36)', () => {
+  // What `git worktree list --porcelain` prints, entries apart on blank lines; -z it cannot parse.
+  const out = 'worktree /repo\nHEAD abc\nbranch refs/heads/main\n\nworktree /repo/.troupe/missions/m1\nHEAD def\nbranch refs/heads/mission/m1\n\n'
+  const r = runtime({ run: (command, args) => (args.includes('-z')
+    ? { code: 129, out: '', err: "error: unknown switch `z'" }
+    : { code: 0, out, err: '' }) })
+  assert.deepEqual(worktreeList(r, '/repo'), [
+    ['worktree /repo', 'HEAD abc', 'branch refs/heads/main'],
+    ['worktree /repo/.troupe/missions/m1', 'HEAD def', 'branch refs/heads/mission/m1'],
+  ])
+  // A git that knows -z reads it NUL-separated.
+  const zr = runtime({ run: (command, args) => (args.includes('-z')
+    ? { code: 0, out: 'worktree /repo\0HEAD abc\0branch refs/heads/main\0\0worktree /repo/wt\0HEAD def\0branch refs/heads/mission/m1\0\0', err: '' }
+    : { code: 1, out: '', err: '' }) })
+  assert.deepEqual(worktreeList(zr, '/repo'), [
+    ['worktree /repo', 'HEAD abc', 'branch refs/heads/main'],
+    ['worktree /repo/wt', 'HEAD def', 'branch refs/heads/mission/m1'],
+  ])
+})
 
 test('parser handles keys, split escapes, SGR clicks/releases/motion and wheel', () => {
   assert.deepEqual(parseInput('\x1b[A\x1bOBjk12345\t\r\x1b[5~\x1b[6~\x7f\x03').actions.map(a => a.key), ['up', 'down', 'j', 'k', '1', '2', '3', '4', '5', 'tab', 'enter', 'pageUp', 'pageDown', 'backspace', 'quit'])

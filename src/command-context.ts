@@ -66,11 +66,36 @@ export const mux = (r: Runtime, args: string[], options?: RunOptions): string =>
 
 /** `root` is the main checkout, where mission and role worktrees live, from any worktree of the repository. */
 export type Repository = { root: string; common: string }
-export const repository = (r: Runtime): Repository => {
-  const top = rootOf(r.cwd, r.run)
-  const common = resolve(top, git(r, top, ['rev-parse', '--git-common-dir']).trim())
+/** The repository top of a cwd never changes while a process runs; the panel asks every two seconds. */
+const tops = new Map<Run, Map<string, string>>()
+export const toplevelOf = (runner: Run, cwd: string): string => {
+  let byCwd = tops.get(runner)
+  if (byCwd === undefined) {
+    byCwd = new Map()
+    tops.set(runner, byCwd)
+  }
+  const cached = byCwd.get(cwd)
+  if (cached !== undefined) return cached
+  const top = rootOf(cwd, runner)
+  byCwd.set(cwd, top)
 
-  return { root: basename(common) === '.git' ? dirname(common) : top, common }
+  return top
+}
+const repositories = new Map<Run, Map<string, Repository>>()
+export const repository = (r: Runtime): Repository => {
+  let byCwd = repositories.get(r.run)
+  if (byCwd === undefined) {
+    byCwd = new Map()
+    repositories.set(r.run, byCwd)
+  }
+  const cached = byCwd.get(r.cwd)
+  if (cached !== undefined) return cached
+  const top = toplevelOf(r.run, r.cwd)
+  const common = resolve(top, git(r, top, ['rev-parse', '--git-common-dir']).trim())
+  const found = { root: basename(common) === '.git' ? dirname(common) : top, common }
+  byCwd.set(r.cwd, found)
+
+  return found
 }
 
 /** Keeps troupe's worktrees out of the main checkout's status. */
