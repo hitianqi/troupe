@@ -2,13 +2,14 @@
 
 ## Intent
 
-让 troupe 面板更好用：FLOW 在多个 agent、依赖层级很深时也完整显示（间隔自适应，不挤成一列）；按下快捷键立即响应（现在约 2 秒才动）；角色框里显示真正生效的模型（含用户通过环境变量配置的情况），而不是 "sonnet"/"default" 之类的占位。
+让 troupe 面板更好用：FLOW 在多个 agent、依赖层级很深时也完整显示（间隔自适应，不挤成一列）；按下快捷键立即响应（现在约 2 秒才动）；角色框里显示真正生效的模型（含用户通过环境变量配置的情况），而不是 "sonnet"/"default" 之类的占位；`open`/dispatch 打开的多个角色窗口按「先左右、再上下」铺成整齐格子，分隔线完整清晰。
 
 ## Done when
 
 - FLOW 依赖树无论多深，每个 agent 的盒子都完整可见、缩进层级正确，不会多个盒子挤在同一列；agent 多时隔自行收窄以适配面板宽度。
 - 面板运行期间（尤其有 agent 在工作时）按任意快捷键都能几乎立即响应，不再有约 2 秒卡顿。
 - 角色盒子与详情中显示的模型是真正生效的模型：plan 未填 `model`、用户用环境变量（如 `~/.bashrc` 里的 `ANTHROPIC_MODEL`）配置了模型时，面板显示该模型而非占位。
+- `open`/dispatch 打开 2/3/4/5/6… 个角色窗口时按「先左右后上下」铺成整齐格子：2 个左右并排、3~4 个田字格、5~6 个 2 列 3 行，依次类推；分隔线完整、区分清晰。
 - `npm test` 全绿（golden 按需用 `UPDATE_GOLDENS=1 npm test` 重录），无越界文件改动。
 
 ## Out of scope
@@ -27,11 +28,12 @@
 
 ## How the work is split
 
-两个 builder 各负责一层，文件集完全不重叠，可并行；一个 reviewer 逐个复审。
+三个 builder 各负责一层，`display`/`panel` 文件集完全不重叠、可并行；`tile` 与 `panel` 共享 `role-commands.ts`，用 `depends_on` 串行避免合并冲突；一个 reviewer 逐个复审。
 
 - `display` 拥有「把已读到的状态画出来」这一层（`draw.ts`/`model.ts`/`agents.ts`/`panel-model.ts` + draw 测试），做 FLOW 间隔自适应（#1）和真实模型显示（#3）。
 - `panel` 拥有「怎么读状态、怎么跑渲染循环」这一层（`panel.ts` + 读状态的 `run.ts`/`state.ts`/`usage.ts`/`activity.ts`/`role-commands.ts`/`missions.ts`/`command-context.ts`），做按键延迟（#2）。
-- 共享风险点只有一条数据流：`panel-model.ts` 调用 `mission()`/`liveOf()`。因此 `panel` 不得改这两个函数的对外签名（只在内部缓存），否则会打断 `display`。静态文件无交集。
+- `tile` 拥有「窗口怎么铺开」这一层（`panes.ts` + dispatch 在 `role-commands.ts` 里的开窗处），做角色窗口格子化（#4）。它只改 `role-commands.ts` 中 `dispatch` 末尾那行 `select-layout tiled`，与 `panel` 改 `liveOf` 是同一文件的不同函数，但按规矩 `depends_on: [panel]` 串行。
+- 共享风险点还有一条数据流：`panel-model.ts` 调用 `mission()`/`liveOf()`。因此 `panel` 不得改这两个函数的对外签名（只在内部缓存），否则会打断 `display`。
 
 ```yaml
 troupe: 1
@@ -55,6 +57,11 @@ roles:
     use: claude-build
     goal: "消除面板约 2 秒的按键响应延迟"
     touches: [src/panel.ts, src/run.ts, src/command-context.ts, src/role-commands.ts, src/state.ts, src/usage.ts, src/activity.ts, src/missions.ts, tests/panel-live.node.mjs, tests/usage.node.mjs, tests/activity.node.mjs, tests/state.node.mjs]
+  tile:
+    use: claude-build
+    goal: "角色窗口按先左右后上下铺成整齐格子，保留蓝色分隔线完整区分"
+    touches: [src/panes.ts, src/role-commands.ts, tests/commands.node.mjs, tests/commands-integration.node.mjs]
+    depends_on: [panel]
   review:
     agent: claude
     model: sonnet
@@ -62,7 +69,7 @@ roles:
     flags: [--permission-mode, acceptEdits]
     goal: "Review each branch as it lands"
     touches: []
-    reviews: [display, panel]
+    reviews: [display, panel, tile]
     text: workflow:reviewer
 ```
 
@@ -92,6 +99,17 @@ roles:
 
 证明：`npm test` 全绿；给缓存正确性加测试（HEAD 变化后重算、未变化时命中）；人工验证——面板开着、有多个 role 处于 working 时按 ↑↓/tab/o 等快捷键几乎立即响应，无约 2 秒卡顿。
 
+## Role: tile
+
+现在 `src/panes.ts` 的 `createPane`（约 67–90 行）给角色开窗时，第 2 个及以后的窗口用 `split-window`（未带 `-h` 即默认纵向），最后 `src/role-commands.ts` 第 206 行再 `select-layout tiled`。结果依赖 tmux 的 `tiled`（按 `ceil(sqrt(N))` 选列数），不是「先左右、再上下」的整齐 2 列格子。改成确定性的格子铺法：
+
+- 目标：N 个角色窗口铺成 **2 列 × ceil(N/2) 行**，按「先左右、再上下」逐格填充：2 个 = 左右并排（1×2），3~4 个 = 田字格（2×2），5~6 个 = 2 列 3 行，依次类推（始终 2 列、行数随数量增长）。
+- 实现可二选一、也可结合：①按每个新窗选择正确的 `-h`（左右）/默认纵向（上下）与目标 pane 增量拼出格子；②用 `select-layout` 的自定义布局字符串一次性摆出 N 格。替换掉 `role-commands.ts` 里的 `select-layout tiled`。
+- 分隔线：保留现有蓝色 pane 边框，确保格子之间分隔线**完整、不断裂、清晰可辨**（必要时在 roles 窗口设置 `pane-border-style`/`pane-active-border-style`，不要让边框被关闭或出现空隙）。
+- 不要改动 `createPane` 的另两条调用路径：面板（`panel-open.ts` 的 45% 左右分割）与 orchestrator/使命窗口（`commands.ts` 的 new-window）；不要碰 `draw.ts`/`model.ts`/`panel-model.ts`/`panel.ts` 及读状态逻辑；`dispatch` 的其它步骤（worktree/brief/argv/日志）保持不动。
+
+证明：`npm run build && npm test` 全绿；更新 `tests/commands.node.mjs` 与 `tests/commands-integration.node.mjs`，断言不再是 `tiled`、而是按角色数产出正确的分割方向/布局；人工验证——依次 dispatch 2/3/4/5/6 个角色，看到「2 列 × … 行」的整齐格子，蓝色分隔线完整清晰。
+
 ## Role: review
 
-按分支落地顺序逐个 review。除 reviewer 规则外，重点核查：display 的 FLOW 缩进自适应在窄/宽面板及有/无 reviewer lane 下都正确、golden 与实现一致；panel 的缓存不会在 HEAD/结果变化后给出陈旧数据，且确实没有改 `mission()`/`liveOf()` 的签名以致打断 `panel-model.ts`；两角色的 `touches` 内文件外无改动。
+按分支落地顺序逐个 review。除 reviewer 规则外，重点核查：display 的 FLOW 缩进自适应在窄/宽面板及有/无 reviewer lane 下都正确、golden 与实现一致；panel 的缓存不会在 HEAD/结果变化后给出陈旧数据，且确实没有改 `mission()`/`liveOf()` 的签名以致打断 `panel-model.ts`；tile 的格子铺法在 2/3/4/5/6 个窗口下都正确、蓝色分隔线完整，且没有破坏 `createPane` 的面板/使命窗口两条其它调用路径；各角色的 `touches` 内文件外无改动。
