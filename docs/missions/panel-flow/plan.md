@@ -2,7 +2,7 @@
 
 ## Intent
 
-让 troupe 面板更好用：FLOW 在多个 agent、依赖层级很深时也完整显示（间隔自适应，不挤成一列）；按下快捷键立即响应（现在约 2 秒才动）；角色框里显示真正生效的模型（含用户通过环境变量配置的情况），而不是 "sonnet"/"default" 之类的占位；`open`/dispatch 打开的多个角色窗口按「先左右、再上下」铺成整齐格子，分隔线完整清晰。
+让 troupe 面板更好用：FLOW 在多个 agent、依赖层级很深时也完整显示（间隔自适应，不挤成一列）；按下快捷键立即响应（现在约 2 秒才动）；角色框里显示真正生效的模型（含用户通过环境变量配置的情况），而不是 "sonnet"/"default" 之类的占位；`open`/dispatch 打开的多个角色窗口按「先左右、再上下」铺成整齐格子，分隔线完整清晰；FLOW 依赖树从上下排布改成左右排布，用满屏幕右侧空间。
 
 ## Done when
 
@@ -10,6 +10,7 @@
 - 面板运行期间（尤其有 agent 在工作时）按任意快捷键都能几乎立即响应，不再有约 2 秒卡顿。
 - 角色盒子与详情中显示的模型是真正生效的模型：plan 未填 `model`、用户用环境变量（如 `~/.bashrc` 里的 `ANTHROPIC_MODEL`）配置了模型时，面板显示该模型而非占位。
 - `open`/dispatch 打开 2/3/4/5/6… 个角色窗口时按「先左右后上下」铺成整齐格子：2 个左右并排、3~4 个田字格、5~6 个 2 列 3 行，依次类推；分隔线完整、区分清晰。
+- FLOW 依赖树从左到右铺开：orchestrator 在左、各依赖层级依次向右，同级竖向堆叠，右侧宽度被充分利用，不再是自上而下堆成一条长列。
 - `npm test` 全绿（golden 按需用 `UPDATE_GOLDENS=1 npm test` 重录），无越界文件改动。
 
 ## Out of scope
@@ -28,11 +29,12 @@
 
 ## How the work is split
 
-三个 builder 各负责一层，`display`/`panel` 文件集完全不重叠、可并行；`tile` 与 `panel` 共享 `role-commands.ts`，用 `depends_on` 串行避免合并冲突；一个 reviewer 逐个复审。
+四个 builder 各负责一层，`display`/`panel`/`tile`/`flow-horizontal` 除注明处外文件集不重叠、`flow-horizontal` 与 `tile` 可并行；重名文件用 `depends_on` 串行避免合并冲突；一个 reviewer 逐个复审。
 
 - `display` 拥有「把已读到的状态画出来」这一层（`draw.ts`/`model.ts`/`agents.ts`/`panel-model.ts` + draw 测试），做 FLOW 间隔自适应（#1）和真实模型显示（#3）。
 - `panel` 拥有「怎么读状态、怎么跑渲染循环」这一层（`panel.ts` + 读状态的 `run.ts`/`state.ts`/`usage.ts`/`activity.ts`/`role-commands.ts`/`missions.ts`/`command-context.ts`），做按键延迟（#2）。
 - `tile` 拥有「窗口怎么铺开」这一层（`panes.ts` + dispatch 在 `role-commands.ts` 里的开窗处），做角色窗口格子化（#4）。它只改 `role-commands.ts` 中 `dispatch` 末尾那行 `select-layout tiled`，与 `panel` 改 `liveOf` 是同一文件的不同函数，但按规矩 `depends_on: [panel]` 串行。
+- `flow-horizontal` 拥有 FLOW 的排布方向（`draw.ts` 的 `flow()` + 可能的小幅 `motion.ts` 动画适配），把依赖树改成左右排布（#5）。它改 `draw.ts`，与已合并的 `display` 同名，故 `depends_on: [display]`（display 已 done/merged，实际可立即开）。
 - 共享风险点还有一条数据流：`panel-model.ts` 调用 `mission()`/`liveOf()`。因此 `panel` 不得改这两个函数的对外签名（只在内部缓存），否则会打断 `display`。
 
 ```yaml
@@ -62,6 +64,11 @@ roles:
     goal: "角色窗口按先左右后上下铺成整齐格子，保留蓝色分隔线完整区分"
     touches: [src/panes.ts, src/role-commands.ts, tests/commands.node.mjs, tests/commands-integration.node.mjs]
     depends_on: [panel]
+  flow-horizontal:
+    use: claude-build
+    goal: "FLOW 依赖树改为从左到右排布，用满屏幕右侧空间"
+    touches: [src/draw.ts, src/motion.ts, tests/draw.node.mjs, tests/goldens/]
+    depends_on: [display]
   review:
     agent: claude
     model: sonnet
@@ -69,7 +76,7 @@ roles:
     flags: [--dangerously-skip-permissions]
     goal: "Review each branch as it lands"
     touches: []
-    reviews: [display, panel, tile]
+    reviews: [display, panel, tile, flow-horizontal]
     text: workflow:reviewer
 ```
 
@@ -110,6 +117,19 @@ roles:
 
 证明：`npm run build && npm test` 全绿；更新 `tests/commands.node.mjs` 与 `tests/commands-integration.node.mjs`，断言不再是 `tiled`、而是按角色数产出正确的分割方向/布局；人工验证——依次 dispatch 2/3/4/5/6 个角色，看到「2 列 × … 行」的整齐格子，蓝色分隔线完整清晰。
 
+## Role: flow-horizontal
+
+现在 `src/draw.ts` 的 `flow()`（约 553–671 行）把依赖树画成**自上而下**的竖向列表：每个角色占一行，深度用横向缩进表示。绝大多数 mission 深度浅（1~2 层）但**广度大**（尤其并行做多件事时），竖向列表会在窄栏里堆成一条很长的列，浪费右侧宽度。改成**从左到右**排布：
+
+- orchestrator 在左（或左上），角色从左往右铺开；同级并行的角色横向并排（广度吃满宽度），依赖关系向更右递进（深度做浅时只需三两「列」）。
+- 把 `flow()` 的排布从「每角色一行、深度当行内缩进」改成「深度沿 x 轴向右递进、同层竖向排布」的横向布局，右侧空间被充分利用；不再产生一长条竖向列。
+- 保持已合并的东西不倒退：`effectiveModel` 真实模型显示、随宽度/深度自适应的间隔（现在落在横向列间距或行间距上）、reviewer lane 可达且不遮挡、`panel-model.ts` 与 detail 视图（FLOW 下方、随滚动）不受影响。
+- `Scene.column` 的 `boxes`/`trunks`/`lanes`/`links` 结构形状不变（仍是 (row,col) 点），`motion.ts` 的动画路径据此照常工作；若 `motion.ts` 的 floor 点阵/heads 默认了竖向语义，做最小适配即可，别改其缓存/状态逻辑。
+
+不要改动：`panel.ts` 渲染循环、`state.ts`/`usage.ts`/`activity.ts`/`missions.ts`/`role-commands.ts`/`panes.ts` 的读状态与开窗逻辑、其余 tab 与配色。
+
+证明：`npm run build && npm test` 全绿（`UPDATE_GOLDENS=1` 重录）；给「宽而浅（多个并行角色）」和「窄而深（长依赖链）」各加一条 draw 用例，golden 显示 FLOW 横向铺开、右侧宽度被用上、盒子/箭头/边完整；人工验收——打开面板看到 FLOW 从左到右、并行角色横向并排而非竖条。
+
 ## Role: review
 
-按分支落地顺序逐个 review。除 reviewer 规则外，重点核查：display 的 FLOW 缩进自适应在窄/宽面板及有/无 reviewer lane 下都正确、golden 与实现一致；panel 的缓存不会在 HEAD/结果变化后给出陈旧数据，且确实没有改 `mission()`/`liveOf()` 的签名以致打断 `panel-model.ts`；tile 的格子铺法在 2/3/4/5/6 个窗口下都正确、蓝色分隔线完整，且没有破坏 `createPane` 的面板/使命窗口两条其它调用路径；各角色的 `touches` 内文件外无改动。
+按分支落地顺序逐个 review。除 reviewer 规则外，重点核查：display 的 FLOW 缩进自适应在窄/宽面板及有/无 reviewer lane 下都正确、golden 与实现一致；panel 的缓存不会在 HEAD/结果变化后给出陈旧数据，且确实没有改 `mission()`/`liveOf()` 的签名以致打断 `panel-model.ts`；tile 的格子铺法在 2/3/4/5/6 个窗口下都正确、蓝色分隔线完整，且没有破坏 `createPane` 的面板/使命窗口两条其它调用路径；flow-horizontal 的横向布局在宽/浅与窄/深下都成立、reviewer lane 与 detail 视图不被破坏、`motion.ts` 动画路径仍正确；各角色的 `touches` 内文件外无改动。
