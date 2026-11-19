@@ -540,13 +540,19 @@ const askGate = (ask: string, inner: number): Gate => {
 }
 
 /**
- * The FLOW, as a dependency tree. Builders stack depth-first: a trunk from the
- * orchestrator feeds each one that starts at once, and a role that waits on
- * another sits right under it, indented, joined by an edge from its
- * prerequisite's box, dashed until that one is done. A reviewer reviews each
- * branch as it lands, so it sits in a lane to the right of the widest box,
- * joined to every role it reviews by an edge that lights once that role is
- * done; without room for the lane it sits below with a line saying so.
+ * The FLOW, as a dependency tree laid out from the left. Builders each take a
+ * slot, left to right in the plan's depth-first order, so the roles that start
+ * at once lie side by side and a role that waits on another sits one band
+ * below it and to its right; the slots spread across the width — the stride
+ * and the boxes narrow when they must — so a wide mission is a short row of
+ * boxes, a deep one a staircase to the right, and never a long column. The
+ * trunk runs right along the orchestrator's box and drops into each role that
+ * starts at once; an edge leaves the prerequisite's box, runs right along the
+ * band's wire row and drops into this one's top, dashed until that one is
+ * done. A reviewer reviews each branch as it lands, so it sits in a lane to
+ * the right of the tree when there is room, joined to every role it reviews
+ * by an edge that lights once that role is done; without the room it sits
+ * below with a line saying so.
  */
 type Flow = { canvas: Canvas } & Pick<NonNullable<Scene['column']>, 'orchestrator' | 'boxes' | 'trunks' | 'lanes' | 'links'>
 const DASH: Record<string, string> = { '│': '╎', '─': '╌' }
@@ -554,29 +560,62 @@ const flow = (m: PanelModel, ui: Ui, width: number): Flow => {
   const reviewers = m.roles.filter(role => role.touches.length === 0 && role.reviews.length > 0)
   const builders = m.roles.filter(role => !reviewers.includes(role))
   const tree = treeOf(builders)
-  const INDENT = 5
   const HEIGHT = 5
-  let box = Math.max(16, Math.min(BOX, width - INDENT))
+  const INDENT = 5
   const lane = Math.min(BOX, 24)
-  const deepest = Math.max(0, ...tree.map(one => one.depth))
-  // The indent step shares the width past the indent and the boxes — less a reviewer's
-  // lane, when one sits beside the tree — among the deepest levels, so every level keeps
-  // its own column however deep the tree: never wider than four cells, never below one.
-  const stepOf = (reserve: number) => (deepest === 0 ? 4 : Math.max(1, Math.min(4, Math.floor((width - INDENT - box - reserve) / deepest))))
   const laneWanted = reviewers.length === 1 && tree.length > 0
-  let STEP = stepOf(laneWanted ? 6 + lane : 0)
-  // The lane needs the deepest level to end clear of it; without the room the reviewer sits below.
-  const side = laneWanted && width >= INDENT + deepest * STEP + box + 6 + lane
-  if (!side) STEP = stepOf(0)
-  // At the floor step the boxes narrow too, so the deepest one still ends inside the width.
-  box = Math.max(16, Math.min(box, width - INDENT - deepest * STEP))
-  const colOf = (depth: number) => INDENT + depth * STEP
+  const last = tree.length - 1
+  // The least slot gap between roles that share a level: how far one slot must reach to
+  // keep same-level boxes apart. A level that holds one role needs no reach.
+  const levels = new Map<number, number[]>()
+  tree.forEach(({ depth }, index) => levels.set(depth, [...(levels.get(depth) ?? []), index]))
+  const sep = Math.min(...[...levels.values()].filter(one => one.length > 1).map(one => Math.min(...one.slice(1).map((at, i) => at - (one[i] ?? 0)))))
+  // The box and the stride between slots, spreading the roles across the width less
+  // `reserve`: the widest boxes whose same-level separation still fits the width.
+  const sizes = (reserve: number): { box: number; stride: number } | undefined => {
+    for (let b = Math.max(16, Math.min(BOX, width - INDENT)); b >= 16; b -= 1) {
+      if (INDENT + b + reserve > width) continue
+      if (last <= 0) return { box: b, stride: BOX + GAP }
+      const need = Number.isFinite(sep) ? Math.ceil((b + 3) / sep) : 1
+      const room = Math.floor((width - INDENT - b - reserve) / last)
+      if (need <= room) return { box: b, stride: room }
+    }
+    return undefined
+  }
+  const side = laneWanted && sizes(6 + lane) !== undefined
+  // Without a fit even at the narrowest box the slots crowd together and the boxes
+  // take turns a band lower (below, where a drop can dodge them); the stride stays above one.
+  const { box, stride } = (side ? sizes(6 + lane) : sizes(0)) ?? { box: Math.max(16, Math.min(BOX, width - INDENT)), stride: Math.max(1, Math.floor((width - INDENT - 16) / Math.max(1, last))) }
+  // A band per level, at least one below the prerequisite's own band, and further down
+  // while it would sit on a box — only when the width crowds the slots that close.
+  const at = new Map(tree.map((one, index) => [one.role.name, index]))
+  const band: number[] = []
+  const taken = new Map<number, [number, number][]>()
+  tree.forEach(({ role, depth, parent }, index) => {
+    const col = INDENT + index * stride
+    let row = Math.max(depth, parent === undefined ? 0 : (band[at.get(parent.name) ?? 0] ?? 0) + 1)
+    while ((taken.get(row) ?? []).some(([a, b]) => col < b && col + box > a)) row += 1
+    taken.set(row, [...(taken.get(row) ?? []), [col, col + box]])
+    band[index] = row
+  })
+  const bands = Math.max(-1, ...band) + 1
+  const reviewer = reviewers[0]
   const below = side ? [] : reviewers
-  const canvas = new Canvas(width, 3 + tree.length * (HEIGHT + 2) + below.length * (HEIGHT + 4))
+  // Where each role's box sits, before any of them is drawn.
+  const spot = new Map(tree.map((one, index) => [one.role.name, { row: 4 + (band[index] ?? 0) * (HEIGHT + 2), col: INDENT + index * stride }]))
+  // A reviewer beside the tree centres on the wire rows of the roles it reviews, and so
+  // can reach below the last band; the canvas grows to hold it.
+  const sources = side && reviewer !== undefined
+    ? reviewer.reviews.map(name => ({ name, at: spot.get(name), done: builders.find(one => one.name === name)?.state === 'done' })).filter(one => one.at !== undefined)
+    : []
+  const wires = sources.map(one => (one.at?.row ?? 0) + HEIGHT)
+  const mid = wires.length === 0 ? 6 : Math.round((Math.min(...wires) + Math.max(...wires)) / 2)
+  const canvas = new Canvas(width, Math.max(3 + bands * (HEIGHT + 2), side ? mid + 3 : 0) + below.length * (HEIGHT + 4))
   const boxes: Flow['boxes'] = []
   const trunks: Flow['trunks'] = []
   const lanes: Flow['lanes'] = []
   const links: Flow['links'] = []
+  const marks: { at: Point; text: string; tone: Tone }[] = []
   const roleBox = (role: RoleView, row: number, col: number, w: number, note = '') => {
     const look = LOOK[role.state]
     const selected = role.name === ui.selected
@@ -593,69 +632,97 @@ const flow = (m: PanelModel, ui: Ui, width: number): Flow => {
     return row + h
   }
 
+  /** Where a line can come down onto the box top at `row`: its middle, or the nearest column beside it that no box on the canvas crosses on the way down from `from`. */
+  const clear = (row: number, col: number, from: number): number => {
+    const mid = col + (box >> 1)
+    const blocked = (c: number) => boxes.some(one => c >= one.col && c < one.col + one.width && one.row < row && one.row + one.height > from)
+    for (let d = 0; mid - d > col || mid + d < col + box - 1; d += 1) {
+      for (const c of d === 0 ? [mid] : [mid - d, mid + d]) {
+        if (c > col && c < col + box - 1 && !blocked(c)) return c
+      }
+    }
+
+    return mid
+  }
+
   canvas.box(0, 0, Math.min(BOX, width), 3, 'chrome')
   canvas.put(1, 2, fit(`● ${t('orchestrator')}`, Math.min(BOX, width) - 4), { tone: 'bright' })
-  const placed = new Map<string, { row: number; col: number }>()
-  const roots: number[] = []
+  const roots: { name: string; top: number; col: number }[] = []
   const locked: Point[][] = []
-  tree.forEach(({ role, depth, parent }, index) => {
-    const row = 3 + index * (HEIGHT + 2) + 1
-    const col = colOf(depth)
+  tree.forEach(({ role, parent }, index) => {
+    const row = 4 + (band[index] ?? 0) * (HEIGHT + 2)
+    const col = INDENT + index * stride
     roleBox(role, row, col, box)
-    placed.set(role.name, { row, col })
-    const mid = row + 2
     const waits = role.dependsOn.some(dep => builders.some(one => one.name === dep))
-    if (!waits) roots.push(mid)
-    // The label sits just above the box, beside the edge.
-    const label = fit(t('after {0}', role.dependsOn.join(', ')), Math.max(0, width - col - 1)).trimEnd()
-    const cells = Array.from({ length: cellsOf(label) }, (_, i) => [row - 1, col + i] as Point)
-    if (waits) canvas.put(row - 1, col, label, { tone: 'dim' })
+    if (!waits) roots.push({ name: role.name, top: row, col })
     if (parent === undefined) {
-      // In a cycle: no prerequisite to hang under.
-      if (waits) links.push({ from: role.dependsOn, to: role.name, cells })
+      // In a cycle: no prerequisite to hang under, so the label sits above the box.
+      if (waits) {
+        const label = fit(t('after {0}', role.dependsOn.join(', ')), Math.max(0, width - col - 1)).trimEnd()
+        canvas.put(row - 1, col, label, { tone: 'dim' })
+        links.push({ from: role.dependsOn, to: role.name, cells: Array.from({ length: cellsOf(label) }, (_, i) => [row - 1, col + i] as Point) })
+      }
       return
     }
-    // The edge: down from under the prerequisite's box, then └▶ into this one's middle row.
-    const from = placed.get(parent.name) ?? { row: 0, col: INDENT }
-    const edge = Math.min(from.col + 2, col - 2)
-    const path: Point[] = [
-      ...Array.from({ length: Math.max(0, mid - from.row - HEIGHT) }, (_, i) => [from.row + HEIGHT + i, edge] as Point),
-      [mid, edge], ...Array.from({ length: Math.max(0, col - edge - 2) }, (_, i) => [mid, edge + 1 + i] as Point), [mid, col - 1],
-    ]
-    path.forEach(([r, c], i) => i === path.length - 1 ? canvas.put(r, c, '▶', { tone: 'chrome' }) : wire(canvas, r, c, r === mid ? (c === edge ? '└' : '─') : '│'))
+    // The edge: down from under the prerequisite's box, right along its band's wire
+    // row, then into this one's top; the label rides the wire beside the drop.
+    const from = spot.get(parent.name) ?? { row: 4, col: INDENT }
+    const drop = from.col + 2
+    const under = from.row + HEIGHT
+    const along = under + 1
+    const come = row === along + 1 ? col + (box >> 1) : clear(row, col, along + 1)
+    const label = fit(t('after {0}', role.dependsOn.join(', ')), Math.max(0, come - drop - 2)).trimEnd()
+    const path: Point[] = [[under, drop], [along, drop], ...Array.from({ length: Math.max(0, come - drop - 1) }, (_, i) => [along, drop + 1 + i] as Point), [along, come]]
+    wire(canvas, under, drop, '│')
+    wire(canvas, along, drop, '└')
+    wire(canvas, along, drop + 1, '─'.repeat(Math.max(0, come - drop - 1)))
+    if (row === along + 1) marks.push({ at: [along, come], text: '▼', tone: 'chrome' })
+    else {
+      wire(canvas, along, come, '┐')
+      path.push(...Array.from({ length: row - along - 2 }, (_, i) => [along + 1 + i, come] as Point))
+      for (let r = along + 1; r < row - 1; r += 1) wire(canvas, r, come, '│')
+      marks.push({ at: [row - 1, come], text: '▼', tone: 'chrome' })
+    }
+    if (label !== '') marks.push({ at: [along, come - cellsOf(label) - 1], text: label, tone: 'dim' })
     if (parent.state !== 'done') locked.push(path)
-    links.push({ from: role.dependsOn, to: role.name, cells, edge: { from: parent.name, path } })
+    links.push({ from: role.dependsOn, to: role.name, cells: Array.from({ length: cellsOf(label) }, (_, i) => [along, come - cellsOf(label) - 1 + i] as Point), edge: { from: parent.name, path } })
     // A dependent's packets run along its own edge.
     trunks.push({ name: role.name, path })
   })
+  // The labels and arrowheads land once every wire is in, so a longer edge cannot write over them.
+  for (const { at, text, tone } of marks) canvas.put(at[0], at[1], text, { tone })
   // An edge whose prerequisite is not done yet is dashed and faint; its joints keep their shape.
   for (const path of locked) for (const [r, c] of path) {
     const cell = canvas.cells[r]?.[c]
     if (cell !== undefined) Object.assign(cell, { ch: DASH[cell.ch] ?? cell.ch, tone: 'chrome', fade: 0.75 })
   }
-  // The trunk: from under the orchestrator down to the last role that starts at once.
+  // The trunk: right along the orchestrator's box, then down into each root's top.
   if (roots.length > 0) {
-    wire(canvas, 2, 2, '┬')
-    for (let row = 3; row < Math.max(...roots); row += 1) wire(canvas, row, 2, '│')
-    for (const row of roots) wire(canvas, row, 2, `${row === Math.max(...roots) ? '└' : '├'}─`), canvas.put(row, INDENT - 1, '▶', { tone: 'chrome' })
-    for (const { role } of tree) {
-      const at = (placed.get(role.name)?.row ?? 0) + 2
-      if (roots.includes(at)) trunks.push({ name: role.name, path: [...Array.from({ length: at - 2 }, (_, i) => [2 + i, 2] as Point), [at, 2], [at, 3], [at, INDENT - 1]] })
-    }
+    const drops = roots.map(({ name, top, col }) => {
+      const come = clear(top, col, 3)
+      for (let r = 3; r < top - 1; r += 1) wire(canvas, r, come, '│')
+      trunks.push({ name, path: [
+        ...Array.from({ length: come - 2 }, (_, i) => [2, 2 + i] as Point),
+        ...Array.from({ length: top - 3 }, (_, i) => [3 + i, come] as Point),
+        [top - 1, come],
+      ] })
+      canvas.put(top - 1, come, '▼', { tone: 'chrome' })
+      return come
+    })
+    const reach = Math.max(...drops)
+    wire(canvas, 2, 2, '─'.repeat(Math.max(0, reach - 2)))
+    for (const come of drops) wire(canvas, 2, come, come === reach ? '┐' : '┬')
   }
 
-  const reviewer = reviewers[0]
   if (side && reviewer !== undefined) {
-    const sources = reviewer.reviews.map(name => ({ name, at: placed.get(name), done: builders.find(one => one.name === name)?.state === 'done' })).filter(one => one.at !== undefined)
-    const spine = Math.max(...[...placed.values()].map(one => one.col + box)) + 2
-    const rows = sources.map(one => (one.at?.row ?? 0) + 2)
-    const mid = rows.length === 0 ? 6 : Math.round((Math.min(...rows) + Math.max(...rows)) / 2)
+    const spine = Math.max(...[...spot.values()].map(one => one.col + box)) + 2
     // Dim edges first, lit ones over them, so a landed branch reads all the way to the reviewer.
     for (const one of [...sources.filter(one => !one.done), ...sources.filter(one => one.done)]) {
       const tone: Tone = one.done ? 'ok' : 'chrome'
-      const at = (one.at?.row ?? mid - 2) + 2
-      const right = (one.at?.col ?? INDENT) + box
-      wire(canvas, at, right, '─'.repeat(spine - right), tone)
+      const at = (one.at?.row ?? mid - 2) + HEIGHT
+      const from = (one.at?.col ?? INDENT) + (box >> 1)
+      wire(canvas, at, from, '└', tone)
+      wire(canvas, at, from + 1, '─'.repeat(Math.max(0, spine - from - 1)), tone)
       for (let row = Math.min(at, mid) + 1; row < Math.max(at, mid); row += 1) wire(canvas, row, spine, '│', tone)
       // Partial joints merge: a source above and one below make ├ on the reviewer's row.
       wire(canvas, at, spine, at < mid ? '┐' : at > mid ? '┘' : '─', tone)
@@ -664,14 +731,14 @@ const flow = (m: PanelModel, ui: Ui, width: number): Flow => {
       canvas.put(mid, spine + 3, '▶', { tone })
       const step = at < mid ? 1 : -1
       lanes.push({ name: one.name, path: [
-        ...Array.from({ length: spine - right + 1 }, (_, i) => [at, right + i] as Point),
+        ...Array.from({ length: spine - from + 1 }, (_, i) => [at, from + i] as Point),
         ...Array.from({ length: Math.max(0, Math.abs(mid - at) - 1) }, (_, i) => [at + step * (i + 1), spine] as Point),
         ...(at === mid ? [] : [[mid, spine] as Point]), [mid, spine + 1], [mid, spine + 2], [mid, spine + 3],
       ] })
     }
     roleBox(reviewer, Math.max(0, mid - 2), spine + 4, Math.min(lane, width - spine - 4))
   }
-  let row = 3 + tree.length * (HEIGHT + 2)
+  let row = 3 + bands * (HEIGHT + 2)
   for (const role of below) row = roleBox(role, row, INDENT, box, t('reviews {0} as each lands', role.reviews.join(', '))) + 1
 
   return { canvas, orchestrator: { row: 0, col: 0, width: Math.min(BOX, width), height: 3 }, boxes, trunks, lanes, links }
