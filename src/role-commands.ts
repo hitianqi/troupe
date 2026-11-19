@@ -11,7 +11,7 @@ import { langOf, WRITE_CHINESE } from './i18n.ts'
 import type { Lang } from './i18n.ts'
 import { append, isApproved } from './log.ts'
 import type { Live } from './model.ts'
-import { boundTo, markedPanes, mission, missionTree, orchestratorsOf, unbind } from './missions.ts'
+import { boundTo, markedPanes, mission, missionTree, orchestratorsOf, unbind, worktreeList } from './missions.ts'
 import { createPane, ownedPane, rolesName, rolesWindow } from './panes.ts'
 import type { Role } from './plan.ts'
 import { earlierResults, readResult, RESULT_FILE, roleState, waitingOn, workOf } from './state.ts'
@@ -118,10 +118,10 @@ const approved = (m: Mission): void => {
 
 const prepareWorktree = (r: Runtime, m: Mission, worktree: string, branch: string, base: string): void => {
   excludeTroupe(m.common)
-  const entries = git(r, m.root, ['worktree', 'list', '--porcelain', '-z']).split('\0\0')
-  const existing = entries.find(entry => entry.split('\0').includes(`worktree ${worktree}`))
+  const entries = worktreeList(r, m.root)
+  const existing = entries.find(entry => entry.includes(`worktree ${worktree}`))
   if (existing !== undefined) {
-    if (!existing.split('\0').includes(`branch refs/heads/${branch}`)) throw new Refusal(`${worktree} is on a different branch`)
+    if (!existing.includes(`branch refs/heads/${branch}`)) throw new Refusal(`${worktree} is on a different branch`)
     return
   }
   if (existsSync(worktree)) throw new Refusal(`${worktree} exists but is not the role's registered worktree`)
@@ -283,10 +283,10 @@ export const teardown = async (r: Runtime, initial: Mission, force: boolean): Pr
   // The mission's own worktree goes too, once its branch is pushed.
   const missionBranch = `mission/${m.name}`
   const missionWorktree = existsSync(missionTree(m, m.name)) ? missionTree(m, m.name) : undefined
-  const entries = git(r, m.root, ['worktree', 'list', '--porcelain', '-z']).split('\0\0').filter(Boolean).map(entry => {
-    const fields = entry.split('\0')
-    return { path: fields.find(field => field.startsWith('worktree '))?.slice(9) ?? '', branch: fields.find(field => field.startsWith('branch refs/heads/'))?.slice(18) ?? '' }
-  })
+  const entries = worktreeList(r, m.root).map(fields => ({
+    path: fields.find(field => field.startsWith('worktree '))?.slice(9) ?? '',
+    branch: fields.find(field => field.startsWith('branch refs/heads/'))?.slice(18) ?? '',
+  }))
   const branches = git(r, m.root, ['for-each-ref', '--format=%(refname:short)', `refs/heads/${prefix}`]).trim().split('\n').filter(branch => branch.startsWith(prefix))
   const baseOf = (branch: string): string | undefined => m.folded.roles.get(branch.slice(prefix.length))?.base
   const trees = entries.filter(entry => entry.branch.startsWith(prefix) || resolve(dirname(entry.path)) === parent)

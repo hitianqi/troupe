@@ -3,13 +3,13 @@ import { basename, dirname, join } from 'node:path'
 
 import { loadAgents } from './agents.ts'
 import { MISSIONS, rootOf, textProblems } from './check.ts'
-import { excludeTroupe, git, mux, NAME, Refusal, repository, roleText, Usage, within, workflowDirs } from './command-context.ts'
+import { excludeTroupe, git, mux, NAME, Refusal, repository, roleText, toplevelOf, Usage, within, workflowDirs } from './command-context.ts'
 import type { Mission, Repository, Runtime } from './command-context.ts'
 import { fold, logPath, readLog } from './log.ts'
 import { callerPane } from './panes.ts'
 import { readPlan } from './plan.ts'
 import { tmux } from './run.ts'
-import { planHash } from './state.ts'
+import { planHash, sharePaneMarks } from './state.ts'
 
 // Several missions can be open at once. Each has its own worktree on branch
 // `mission/<m>` and is bound to its orchestrator's pane (`@troupe-mission`,
@@ -29,15 +29,46 @@ export class Unresolved extends Refusal {
 
 export const missionTree = (repo: Repository, name: string): string => join(repo.root, '.troupe/missions', name)
 
+/** Whether this git knows `worktree list --porcelain -z` (2.36+), learned once per runner. */
+const nulCapable = new Map<Runtime['run'], boolean>()
+
+/** `git worktree list --porcelain`, each entry its NUL- (or, before git 2.36, newline-) separated fields. */
+export const worktreeList = (r: Runtime, cwd: string): string[][] => {
+  if (nulCapable.get(r.run) !== false) {
+    const zero = r.run('git', ['worktree', 'list', '--porcelain', '-z'], { cwd })
+    if (zero.code === 0) return zero.out.split('\0\0').filter(Boolean).map(entry => entry.split('\0'))
+    nulCapable.set(r.run, false)
+  }
+
+  return git(r, cwd, ['worktree', 'list', '--porcelain']).trimEnd().split(/\n\n/).filter(Boolean).map(entry => entry.split('\n'))
+}
+
 /** Each worktree on a `mission/<m>` branch, by mission name. */
+type Trees = { key: string; trees: Map<string, string> }
+const treeCache = new Map<Runtime['run'], Map<string, Trees>>()
 export const missionTrees = (r: Runtime, repo: Repository): Map<string, string> => {
+  // The list changes only when a worktree appears or goes, and the worktrees folder's stamp says when that was.
+  let key = 'none'
+  try {
+    const stat = statSync(join(repo.common, 'worktrees'))
+    key = `${stat.dev}:${stat.ino}:${stat.mtimeMs}:${stat.ctimeMs}`
+  } catch {
+    // No worktrees at all yet; a first one creates the folder and a different key.
+  }
+  let byCommon = treeCache.get(r.run)
+  if (byCommon === undefined) {
+    byCommon = new Map()
+    treeCache.set(r.run, byCommon)
+  }
+  const cached = byCommon.get(repo.common)
+  if (cached?.key === key) return cached.trees
   const trees = new Map<string, string>()
-  for (const entry of git(r, repo.root, ['worktree', 'list', '--porcelain', '-z']).split('\0\0')) {
-    const fields = entry.split('\0')
+  for (const fields of worktreeList(r, repo.root)) {
     const path = fields.find(field => field.startsWith('worktree '))?.slice('worktree '.length)
     const name = fields.find(field => field.startsWith('branch refs/heads/mission/'))?.slice('branch refs/heads/mission/'.length)
     if (path && name && NAME.test(name)) trees.set(name, path)
   }
+  byCommon.set(repo.common, { key, trees })
 
   return trees
 }
@@ -58,19 +89,25 @@ export const openMissions = (r: Runtime, repo: Repository): { name: string; work
     .map(name => ({ name, worktree: trees.get(name) ?? '' }))
 }
 
-export type Marked = { pane: string; mission: string; repo: string; panel: string; orchestrator: string; token: string }
-const MARKS = ['#{pane_id}', '#{pane_dead}', '#{@troupe-mission}', '#{@troupe-mission-repo}', '#{@troupe-panel}', '#{@troupe-panel-orchestrator}', '#{@troupe-orchestrator-token}'].join('\t')
+export type Marked = { pane: string; mission: string; repo: string; panel: string; orchestrator: string; token: string; owner: string }
+const MARKS = ['#{pane_id}', '#{pane_dead}', '#{@troupe-mission}', '#{@troupe-mission-repo}', '#{@troupe-panel}', '#{@troupe-panel-orchestrator}', '#{@troupe-orchestrator-token}', '#{@troupe-owner}'].join('\t')
 
 /** Every live pane (and dead ones too when asked) with its troupe marks. */
 export const markedPanes = (r: Runtime, dead = false): Marked[] => {
   const found = tmux(['list-panes', '-a', '-F', MARKS], r.run, r.env)
   if (found.code !== 0) return []
+  const every = new Map<string, { dead: boolean; owner: string }>()
+  const listed: Marked[] = []
+  for (const line of found.out.split('\n')) {
+    const [pane = '', gone, mission = '', repo = '', panel = '', orchestrator = '', token = '', owner = ''] = line.split('\t')
+    if (!/^%\d+$/.test(pane)) continue
+    every.set(pane, { dead: gone === '1', owner })
+    if (dead || gone === '0') listed.push({ pane, mission, repo, panel, orchestrator, token, owner })
+  }
+  // The identities of every pane, dead ones too, serve the pane reads of this same synchronous run.
+  sharePaneMarks(every)
 
-  return found.out.split('\n').flatMap(line => {
-    const [pane = '', gone, mission = '', repo = '', panel = '', orchestrator = '', token = ''] = line.split('\t')
-
-    return /^%\d+$/.test(pane) && (dead || gone === '0') ? [{ pane, mission, repo, panel, orchestrator, token }] : []
-  })
+  return listed
 }
 
 /** The mission `pane` is bound to in this repository: a panel's through its orchestrator first, else its own mark. */
@@ -111,7 +148,9 @@ export const unbind = (r: Runtime, pane: string): void => {
 }
 
 /** The caller's pane, also when it runs outside tmux's variables; found at the current worktree's top. */
-export const callerOf = (r: Runtime): string | undefined => callerPane(r, rootOf(r.cwd, r.run))
+export const callerOf = (r: Runtime): string | undefined =>
+  // Inside tmux the pane is told by the variables; the worktree top is only needed to find it without them.
+  r.env.TMUX ? callerPane(r) : callerPane(r, rootOf(r.cwd, r.run))
 
 /**
  * The mission a command acts on, in order: `-m`; the caller pane's binding;
@@ -138,7 +177,7 @@ export const resolveMission = (r: Runtime, repo: Repository, want: string): stri
 
 /** The mission's plan: in its worktree, else in the current worktree, else in the main checkout. */
 export const planOf = (r: Runtime, repo: Repository, name: string): string | undefined =>
-  [missionTrees(r, repo).get(name), rootOf(r.cwd, r.run), repo.root]
+  [missionTrees(r, repo).get(name), toplevelOf(r.run, r.cwd), repo.root]
     .flatMap(dir => dir === undefined ? [] : [join(dir, MISSIONS, name, 'plan.md')])
     .find(path => existsSync(path) && statSync(path).isFile())
 
