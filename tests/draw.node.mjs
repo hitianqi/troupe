@@ -407,6 +407,25 @@ test('FLOW crowded: with no fit at any box width the slots take turns a band low
   assert.equal(plain(drawn).filter(line => line.includes('▼')).length >= 4, true, 'the roots keep their trunk drops')
 })
 
+test('FLOW detail: the live window takes the view\'s height, not what the flow leaves below it', () => {
+  // A one-band flow and a 20-line live screen at 96x34: the window once fitted the rows left
+  // under the flow (4); now it takes the view's own rows (15 of the screen's last lines) and
+  // the column scrolls to it.
+  const screen = Array.from({ length: 20 }, (_, i) => `line ${i} of the live screen`)
+  const roles = [role('alpha', { state: 'working', screen }), role('beta', { state: 'working', screen })]
+  const drawn = draw(scenario(roles), { tab: 1, selected: 'alpha' }, 96, 34)
+  const column = drawn.scene.column
+  assert.equal(column.detail.window.rows, 15, 'the window takes the view\'s rows less its own fields')
+  const lines = plain(drawn)
+  assert.match(lines[25], /its window, live/)
+  assert.match(lines[26], /line 5 of the live screen/, 'the window shows the screen\'s last rows')
+  assert.ok(drawn.maxScroll > 0, 'the column scrolls')
+  const scrolled = draw(scenario(roles), { tab: 1, selected: 'alpha', scroll: drawn.maxScroll }, 96, 34)
+  const tail = plain(scrolled).join('\n')
+  assert.match(tail, /line 19 of the live screen/, 'the window\'s last row comes in with the keys')
+  assert.match(tail, /o Open window/)
+})
+
 test('FLOW narrow: the reviewer goes below, says what it reviews, and stays selectable', () => {
   const drawn = draw(scenario(flowRoles()), { tab: 1, selected: 'review' }, 78, 52)
   golden('flow-narrow', plain(drawn))

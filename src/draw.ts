@@ -798,7 +798,8 @@ const detail = (role: RoleView, width: number, room: number): { lines: Line[]; k
   let window: { row: number; rows: number } | undefined
   if (role.state === 'planned') lines.push([{ text: ` ${t('not opened yet · {0}', startOf(role))}`, tone: 'dim' }])
   else {
-    // The live screen takes the rows left, less the key line.
+    // The live screen takes the view's rows less its own fields and the key line, so it
+    // grows with the screen however tall the flow above it runs.
     const inner = Math.max(1, Math.min(role.screen.length, room - lines.length - 3))
     const title = ` ${t('its window, live')} `
     lines.push([{ text: `┌─${title}${'─'.repeat(Math.max(0, width - cellsOf(title) - 3))}┐`, tone: 'chrome' }])
@@ -843,7 +844,7 @@ export const draw = (m: PanelModel, ui: Ui, width: number, height: number): Draw
   const needs = waiting.length + (m.gate === undefined ? 0 : 1)
   const scene: Scene = { list: [], waits: [] }
 
-  // Title bar, tabs, goal, rule.
+  // Title bar, tabs, goal.
   let at = c.runs(0, 0, [{ text: ' troupe', tone: 'bright', bold: true }, { text: '  ' }, { text: m.mission, tone: 'accent' }, { text: '  ·  ', tone: 'dim' }])
   at = c.put(0, at, known(m.stage?.label ?? ''), { tone: m.gate === undefined ? 'bright' : 'warn' })
   const toggle = langSwitch()
@@ -862,7 +863,6 @@ export const draw = (m: PanelModel, ui: Ui, width: number, height: number): Draw
   })
   const goal = m.goal || m.title
   c.put(2, Math.max(1, width - cellsOf(goal) - 1), fit(goal, width - 2), { tone: 'dim' })
-  c.put(3, 0, '─'.repeat(width), { tone: 'chrome' })
   let row = 4
   const bottom = height - (ui.input === undefined ? 2 : 3)
   let maxScroll = 0
@@ -995,8 +995,10 @@ const mission = (c: Canvas, m: PanelModel, ui: Ui, top: number, bottom: number, 
   const view = Math.max(0, bottom - top - 1)
   const flowLines = drawn.canvas.lines()
   const selected = m.roles.find(role => role.name === ui.selected)
-  const fits = view - flowLines.length - 1
-  const shown = selected === undefined ? undefined : detail(selected, width, fits >= 14 ? fits : view)
+  // The live window sizes against the view's height, less the detail's own rows — not against
+  // what the flow leaves below it — so a tall flow squeezes nothing: the window grows downward
+  // and the column scrolls to it.
+  const shown = selected === undefined ? undefined : detail(selected, width, view)
   const column: Line[] = [...flowLines, ...(shown === undefined ? [] : [[], ...shown.lines])]
   const maxScroll = Math.max(0, column.length - view)
   const from = Math.max(0, Math.min(ui.scroll ?? 0, maxScroll))
