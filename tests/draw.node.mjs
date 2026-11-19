@@ -426,6 +426,29 @@ test('FLOW detail: the live window takes the view\'s height, not what the flow l
   assert.match(tail, /o Open window/)
 })
 
+test('FLOW packed: no wire crosses another box, four to seven parallel builders across 70-100 columns', () => {
+  // The crowded fallback packs boxes a band lower, so a root can sit with every column of its
+  // span crossed by the boxes above it; its trunk then hooks past the crowd along the box's own
+  // top instead of dropping through them.
+  for (const n of [4, 5, 6, 7]) for (let width = 70; width <= 100; width += 5) {
+    const names = Array.from({ length: n }, (_, i) => `p${i}`)
+    const review = role('review', { agent: 'claude', badge: AGENTS.claude.badge, model: 'opus', touches: [], reviews: names.slice(0, 2) })
+    const shapes = {
+      parallel: [...names.map(name => role(name)), review],
+      dependent: [...names.slice(0, -2).map(name => role(name)), ...names.slice(-2).map(name => role(name, { dependsOn: [names[0]] })), review],
+    }
+    for (const [shape, roles] of Object.entries(shapes)) {
+      const drawn = draw(scenario(roles), { tab: 1, selected: names[0] }, width, 90)
+      const boxes = drawn.scene.column.boxes
+      const crossing = drawn.scene.column.trunks.flatMap(one => one.path.filter(([r, c]) =>
+        boxes.some(b => b.name !== one.name && r >= b.row && r < b.row + b.height && c >= b.col && c < b.col + b.width)))
+      assert.deepEqual(crossing, [], `${n} builders, ${shape}, at ${width} cols: a wire crosses a box`)
+      closed(drawn, width)
+      if (n === 6 && width === 80 && shape === 'parallel') golden('flow-packed', plain(drawn))
+    }
+  }
+})
+
 test('FLOW narrow: the reviewer goes below, says what it reviews, and stays selectable', () => {
   const drawn = draw(scenario(flowRoles()), { tab: 1, selected: 'review' }, 78, 52)
   golden('flow-narrow', plain(drawn))

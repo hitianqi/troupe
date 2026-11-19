@@ -605,6 +605,10 @@ const flow = (m: PanelModel, ui: Ui, width: number): Flow => {
     band[index] = row
   })
   const bands = Math.max(-1, ...band) + 1
+  // Every box's place, before any is drawn: the edges choose their drops against the whole
+  // tree, not just the boxes drawn so far, so a later box cannot land on a wire already run.
+  const planned: { name: string; row: number; col: number; width: number; height: number }[] =
+    tree.map((one, index) => ({ name: one.role.name, row: 4 + (band[index] ?? 0) * (HEIGHT + 2), col: INDENT + index * stride, width: box, height: HEIGHT }))
   const reviewer = reviewers[0]
   const below = side ? [] : reviewers
   // Where each role's box sits, before any of them is drawn.
@@ -638,17 +642,26 @@ const flow = (m: PanelModel, ui: Ui, width: number): Flow => {
     return row + h
   }
 
-  /** Where a line can come down onto the box top at `row`: its middle, or the nearest column beside it that no box on the canvas crosses on the way down from `from`. */
-  const clear = (row: number, col: number, from: number): number => {
+  /**
+   * Where a line can come down onto the box top at `row`: its middle, or the nearest column
+   * beside it that no box on the canvas crosses on the way down from `from`. When the boxes
+   * above crowd the whole span, the line hooks instead: down the nearest clear column past the
+   * span — hugging the right edge of the crowd, else the left, within the tree's own width —
+   * then along the box's own top onto its middle, so it never runs through another box.
+   */
+  const clear = (row: number, col: number, from: number): { come: number; down?: number } => {
     const mid = col + (box >> 1)
-    const blocked = (c: number) => boxes.some(one => c >= one.col && c < one.col + one.width && one.row < row && one.row + one.height > from)
+    const blocked = (c: number) => planned.some(one => c >= one.col && c < one.col + one.width && one.row < row && one.row + one.height > from)
     for (let d = 0; mid - d > col || mid + d < col + box - 1; d += 1) {
       for (const c of d === 0 ? [mid] : [mid - d, mid + d]) {
-        if (c > col && c < col + box - 1 && !blocked(c)) return c
+        if (c > col && c < col + box - 1 && !blocked(c)) return { come: c }
       }
     }
+    const wall = Math.min(width - 1, Math.max(INDENT, ...planned.map(one => one.col + one.width)))
+    for (let c = col + box; c <= wall; c += 1) if (!blocked(c)) return { come: mid, down: c }
+    for (let c = col - 1; c >= INDENT - 3; c -= 1) if (!blocked(c)) return { come: mid, down: c }
 
-    return mid
+    return { come: mid }
   }
 
   canvas.box(0, 0, Math.min(BOX, width), 3, 'chrome')
@@ -671,27 +684,37 @@ const flow = (m: PanelModel, ui: Ui, width: number): Flow => {
       return
     }
     // The edge: down from under the prerequisite's box, right along its band's wire
-    // row, then into this one's top; the label rides the wire beside the drop.
+    // row, then into this one's top — hooking past the crowd onto its own top when no
+    // column above it is clear; the label rides the wire beside the drop.
     const from = spot.get(parent.name) ?? { row: 4, col: INDENT }
     const drop = from.col + 2
     const under = from.row + HEIGHT
     const along = under + 1
-    const come = row === along + 1 ? col + (box >> 1) : clear(row, col, along + 1)
-    const label = fit(t('after {0}', role.dependsOn.join(', ')), Math.max(0, come - drop - 2)).trimEnd()
-    const path: Point[] = [[under, drop], [along, drop], ...Array.from({ length: Math.max(0, come - drop - 1) }, (_, i) => [along, drop + 1 + i] as Point), [along, come]]
+    const near = row === along + 1
+    const { come, down } = near ? { come: col + (box >> 1), down: undefined } : clear(row, col, along + 1)
+    const land = down ?? come
+    const label = fit(t('after {0}', role.dependsOn.join(', ')), Math.max(0, Math.abs(land - drop) - 2)).trimEnd()
+    const at = land >= drop ? land - cellsOf(label) - 1 : land + 1
+    const path: Point[] = [[under, drop], [along, drop], ...Array.from({ length: Math.max(0, Math.abs(land - drop) - 1) }, (_, i) => [along, drop + (land > drop ? i + 1 : -i - 1)] as Point), [along, land]]
     wire(canvas, under, drop, '│')
-    wire(canvas, along, drop, '└')
-    wire(canvas, along, drop + 1, '─'.repeat(Math.max(0, come - drop - 1)))
-    if (row === along + 1) marks.push({ at: [along, come], text: '▼', tone: 'chrome' })
+    wire(canvas, along, drop, land >= drop ? '└' : '┘')
+    wire(canvas, along, Math.min(drop, land) + 1, '─'.repeat(Math.max(0, Math.abs(land - drop) - 1)))
+    if (near) marks.push({ at: [along, come], text: '▼', tone: 'chrome' })
     else {
-      wire(canvas, along, come, '┐')
-      path.push(...Array.from({ length: row - along - 2 }, (_, i) => [along + 1 + i, come] as Point))
-      for (let r = along + 1; r < row - 1; r += 1) wire(canvas, r, come, '│')
+      wire(canvas, along, land, land > drop ? '┐' : '┌')
+      path.push(...Array.from({ length: row - along - 2 }, (_, i) => [along + 1 + i, land] as Point))
+      for (let r = along + 1; r < row - 1; r += 1) wire(canvas, r, land, '│')
+      if (down !== undefined) {
+        // The hook rides the box's own top row onto its middle, the arrowhead at the end.
+        wire(canvas, row - 1, land, land > come ? '┘' : '└')
+        wire(canvas, row - 1, Math.min(come, land) + 1, '─'.repeat(Math.max(0, Math.abs(land - come) - 1)))
+        path.push(...Array.from({ length: Math.abs(land - come) + 1 }, (_, i) => [row - 1, land + (land > come ? -i : i)] as Point))
+      }
       marks.push({ at: [row - 1, come], text: '▼', tone: 'chrome' })
     }
-    if (label !== '') marks.push({ at: [along, come - cellsOf(label) - 1], text: label, tone: 'dim' })
+    if (label !== '') marks.push({ at: [along, at], text: label, tone: 'dim' })
     if (parent.state !== 'done') locked.push(path)
-    links.push({ from: role.dependsOn, to: role.name, cells: Array.from({ length: cellsOf(label) }, (_, i) => [along, come - cellsOf(label) - 1 + i] as Point), edge: { from: parent.name, path } })
+    links.push({ from: role.dependsOn, to: role.name, cells: Array.from({ length: cellsOf(label) }, (_, i) => [along, at + i] as Point), edge: { from: parent.name, path } })
     // A dependent's packets run along its own edge.
     trunks.push({ name: role.name, path })
   })
@@ -702,22 +725,34 @@ const flow = (m: PanelModel, ui: Ui, width: number): Flow => {
     const cell = canvas.cells[r]?.[c]
     if (cell !== undefined) Object.assign(cell, { ch: DASH[cell.ch] ?? cell.ch, tone: 'chrome', fade: 0.75 })
   }
-  // The trunk: right along the orchestrator's box, then down into each root's top.
+  // The trunk: right along the orchestrator's box, then down into each root's top — hooking past
+  // the crowd onto the box's own top when no column above it is clear.
   if (roots.length > 0) {
+    const arrows: Point[] = []
     const drops = roots.map(({ name, top, col }) => {
-      const come = clear(top, col, 3)
-      for (let r = 3; r < top - 1; r += 1) wire(canvas, r, come, '│')
-      trunks.push({ name, path: [
-        ...Array.from({ length: come - 2 }, (_, i) => [2, 2 + i] as Point),
-        ...Array.from({ length: top - 3 }, (_, i) => [3 + i, come] as Point),
-        [top - 1, come],
-      ] })
-      canvas.put(top - 1, come, '▼', { tone: 'chrome' })
-      return come
+      const { come, down } = clear(top, col, 3)
+      const land = down ?? come
+      for (let r = 3; r < top - 1; r += 1) wire(canvas, r, land, '│')
+      const path: Point[] = [
+        ...Array.from({ length: land - 2 }, (_, i) => [2, 2 + i] as Point),
+        ...Array.from({ length: top - 3 }, (_, i) => [3 + i, land] as Point),
+      ]
+      if (down === undefined) path.push([top - 1, land])
+      else {
+        // The hook rides the box's own top row, onto its middle, the arrowhead at the end.
+        wire(canvas, top - 1, land, land > come ? '┘' : '└')
+        wire(canvas, top - 1, Math.min(come, land) + 1, '─'.repeat(Math.max(0, Math.abs(land - come) - 1)))
+        path.push(...Array.from({ length: Math.abs(land - come) + 1 }, (_, i) => [top - 1, land + (land > come ? -i : i)] as Point))
+      }
+      trunks.push({ name, path })
+      arrows.push([top - 1, come])
+      return land
     })
     const reach = Math.max(...drops)
     wire(canvas, 2, 2, '─'.repeat(Math.max(0, reach - 2)))
-    for (const come of drops) wire(canvas, 2, come, come === reach ? '┐' : '┬')
+    for (const land of drops) wire(canvas, 2, land, land === reach ? '┐' : '┬')
+    // The arrowheads land once every wire is in, so a hook riding another drop's column cannot erase one.
+    for (const [r, c] of arrows) canvas.put(r, c, '▼', { tone: 'chrome' })
   }
 
   if (side && reviewer !== undefined) {
