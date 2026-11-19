@@ -26,6 +26,8 @@ export type Agent = {
   badge?: Badge
   command: string
   model: string[]
+  /** The env var the agent reads its model from when the plan names none. */
+  modelEnv?: string
   effort: string[]
   /** Each group is one setting, satisfied by any flag in that group. */
   permission: string[][]
@@ -40,6 +42,7 @@ export const AGENTS: Record<string, Agent> = Object.assign(Object.create(null) a
     badge: { glyph: '✻', tone: 'coral' },
     command: 'claude',
     model: ['--model', '{model}'],
+    modelEnv: 'ANTHROPIC_MODEL',
     effort: ['--effort', '{effort}'],
     permission: [['--permission-mode', '--dangerously-skip-permissions']],
     prompt: 'last-arg',
@@ -117,7 +120,7 @@ export const screenOf = (agent: Agent, captured: string): Screen => {
 
 type Map = { [key: string]: Yaml }
 const isMap = (value: Yaml | undefined): value is Map => typeof value === 'object' && value !== null && !Array.isArray(value)
-const KEYS = ['command', 'model', 'effort', 'permission', 'prompt', 'screen', 'paste', 'badge', 'usage']
+const KEYS = ['command', 'model', 'modelEnv', 'effort', 'permission', 'prompt', 'screen', 'paste', 'badge', 'usage']
 const STATES = ['waits', 'working', 'ready'] as const
 
 const lineOf = (source: string, field: string): number => {
@@ -159,6 +162,13 @@ const readAgent = (source: string): Agent => {
   })
   if (data.prompt !== 'last-arg') return fail('prompt', 'must be last-arg')
   if (data.paste !== 'bracketed') return fail('paste', 'must be bracketed')
+  const envName = (value: Yaml | undefined, field: string): string | undefined => {
+    if (value === undefined) return undefined
+    if (typeof value !== 'string' || !/^[A-Z][A-Z0-9_]*$/.test(value)) return fail(field, 'must be an upper case env var name')
+
+    return value
+  }
+  const modelEnv = envName(data.modelEnv, 'modelEnv')
   if (data.usage !== undefined && data.usage !== 'claude' && data.usage !== 'codex') return fail('usage', 'must be claude or codex')
   const usage = data.usage as Agent['usage']
   if (!isMap(data.screen)) return fail('screen', 'must be a mapping')
@@ -184,7 +194,7 @@ const readAgent = (source: string): Agent => {
     badge = { glyph: data.badge.glyph, tone: data.badge.tone as Tone }
   }
 
-  return { command: data.command, model, effort, permission, prompt: data.prompt, screen, paste: data.paste, ...(badge && { badge }), ...(usage === undefined ? {} : { usage }) }
+  return { command: data.command, model, effort, permission, prompt: data.prompt, screen, paste: data.paste, ...(badge && { badge }), ...(usage === undefined ? {} : { usage }), ...(modelEnv === undefined ? {} : { modelEnv }) }
 }
 
 /** Files replace an adapter in full: built-ins, then home, then repository. Problems must be resolved before use. */

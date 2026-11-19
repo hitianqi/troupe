@@ -10,7 +10,7 @@ import { Canvas, cellsOf as widthOf, fit, paint, textOf, TONES, wrap } from '../
 import { draw, effortOf } from '../dist/draw.js'
 import { setLang } from '../dist/i18n.js'
 import { fold } from '../dist/log.js'
-import { decisionsOf, modelOf } from '../dist/model.js'
+import { decisionsOf, effectiveModel, modelOf } from '../dist/model.js'
 import { readPlan } from '../dist/plan.js'
 import { AGENTS } from '../dist/agents.js'
 import { hitAt, transition } from '../dist/panel-input.js'
@@ -285,7 +285,7 @@ test('FLOW: a trunk into the root, a stem to its dependent, the reviewer in a si
   closed(drawn, 150 - 29)
 })
 
-test('FLOW tree: each level indents four, two dependents share their prerequisite\'s edge, an edge is dashed until it is done, and deep chains stop indenting at the width', () => {
+test('FLOW tree: each level indents four, two dependents share their prerequisite\'s edge, an edge is dashed until it is done, and a deep chain narrows its step to keep every level its own column', () => {
   const roles = [role('api', { state: 'done' }), role('web', { dependsOn: ['api'] }), role('e2e', { dependsOn: ['web'] }), role('mobile', { dependsOn: ['api'] }), role('store')]
   const drawn = draw(scenario(roles), { tab: 1, selected: 'store' }, 150, 70)
   const [api, web, e2e, mobile, store] = ['api', 'web', 'e2e', 'mobile', 'store'].map(name => boxesOf(drawn).find(box => box.target.name === name))
@@ -303,14 +303,37 @@ test('FLOW tree: each level indents four, two dependents share their prerequisit
   const trunks = drawn.scene.column.trunks
   assert.deepEqual(trunks.find(one => one.name === 'e2e').path.at(-1), [e2e.row + 2 - drawn.scene.column.row, e2e.col - 1 - drawn.scene.column.col], 'packets for a dependent run along its own edge')
   assert.ok(drawn.scene.column.links.some(link => link.to === 'e2e' && link.edge.from === 'web'))
-  // A chain eight deep at 60 columns: the boxes stop moving right before they leave the width.
+  // A chain eight deep at 60 columns: the step narrows to its floor and the boxes with it, so no level is squeezed onto another's column.
   const chain = Array.from({ length: 8 }, (_, i) => role(`r${i}`, { dependsOn: i === 0 ? [] : [`r${i - 1}`] }))
   const deep = draw(scenario(chain), { tab: 1, selected: 'r0' }, 60, 80)
   closed(deep, 60)
-  const cols = boxesOf(deep).map(box => box.col)
-  assert.ok(cols.every((col, i) => i === 0 || col >= cols[i - 1]))
+  const deepBoxes = boxesOf(deep)
+  const cols = deepBoxes.map(box => box.col)
+  assert.ok(cols.every((col, i) => i === 0 || col > cols[i - 1]), 'every level keeps its own column')
+  assert.ok(deepBoxes.every(box => box.width < 26), 'the boxes narrow with the step')
   assert.ok(plain(deep).every(line => line.length <= 60))
   assert.equal(plain(deep).filter(line => line.includes('▶')).length, 8, 'each still has its arrow')
+})
+
+test('FLOW deep tree: the step narrows with depth so every level keeps its own column and box', () => {
+  const names = ['core', 'api', 'web', 'e2e', 'docs', 'mr']
+  const roles = names.map((name, i) => role(name, { dependsOn: i === 0 ? [] : [names[i - 1]] }))
+  const drawn = draw(scenario(roles), { tab: 1, selected: 'core' }, 78, 70)
+  golden('flow-deep', plain(drawn))
+  const boxes = boxesOf(drawn)
+  const cols = boxes.map(box => box.col)
+  assert.equal(boxes.length, names.length)
+  assert.deepEqual(cols, [...cols].sort((a, b) => a - b), 'depth-first down the chain')
+  assert.equal(new Set(cols).size, cols.length, 'no level is squeezed onto another\'s column')
+  const step = cols[1] - cols[0]
+  assert.ok(step >= 1 && step < 4, `the step narrows to fit the deepest level (step ${step})`)
+  for (let i = 2; i < cols.length; i++) assert.equal(cols[i] - cols[i - 1], step, 'the step is even')
+  assert.ok(cols.at(-1) + boxes.at(-1).width <= 78, 'the deepest box ends inside the width')
+  closed(drawn, 78)
+  assert.equal(plain(drawn).filter(line => line.includes('▶')).length, names.length, 'each box keeps its arrow')
+  // The same width with a shallow tree keeps the full four-cell step.
+  const shallow = boxesOf(draw(scenario([role('core'), role('api', { dependsOn: ['core'] })]), { tab: 1, selected: 'core' }, 78, 30))
+  assert.equal(shallow[1].col - shallow[0].col, 4)
 })
 
 test('FLOW narrow: the reviewer goes below, says what it reviews, and stays selectable', () => {
@@ -552,6 +575,24 @@ test('model elapsed uses the last logged dispatch and remains absent before disp
 test('models carry optional adapter badges into role views', () => {
   const m = modelOf({ mission: 'demo', planPath: 'plan.md', planText: PLAN, plan: readPlan(PLAN), hash: HASH, folded: fold(APPROVED), log: APPROVED, live: new Map(), stages: DEFAULT_STAGES, now: new Date(at('12:07')), agents: { codex: { ...AGENTS.codex, badge: { glyph: 'C', tone: 'warn' } } } })
   assert.deepEqual(m.roles[0].badge, { glyph: 'C', tone: 'warn' })
+})
+
+test('the model a role runs with: the plan\'s, else its agent\'s model env var, else default', () => {
+  const source = `# Demo\n\n## Role: bot\n\nBuild it.\n\n\`\`\`yaml\nroles:\n  bot:\n    agent: claude\n    goal: build\n    touches: [src/]\n    flags: [--dangerously-skip-permissions]\n\`\`\`\n`
+  const base = { mission: 'demo', planPath: 'plan.md', planText: source, plan: readPlan(source), hash: HASH, folded: fold([]), log: [], live: new Map(), stages: DEFAULT_STAGES, now: new Date(at('12:07')) }
+  const withEnv = modelOf({ ...base, env: { ANTHROPIC_MODEL: 'opus-4-8' } })
+  assert.equal(withEnv.roles[0].model, '')
+  assert.equal(withEnv.roles[0].envModel, 'opus-4-8')
+  assert.equal(effectiveModel(withEnv.roles[0]), 'opus-4-8')
+  // The plan's model wins; an unset var, or an agent that reads none, stays unknown.
+  const pinned = readPlan(source.replace('    goal: build', '    model: sonnet\n    goal: build'))
+  assert.equal(effectiveModel(modelOf({ ...base, plan: pinned }).roles[0]), 'sonnet')
+  assert.equal(effectiveModel(modelOf({ ...base, env: {} }).roles[0]), '')
+  assert.equal(effectiveModel(modelOf({ ...base, agents: { claude: { ...AGENTS.claude, modelEnv: undefined } }, env: { ANTHROPIC_MODEL: 'opus-4-8' } }).roles[0]), '')
+  // The panel shows the model the role runs with, not the placeholder.
+  const lines = plain(draw(withEnv, { tab: 1, selected: 'bot' }, 96, 40))
+  assert.ok(lines.some(line => line.includes('claude opus-4-8')))
+  assert.ok(!lines.join('\n').includes('claude default'))
 })
 
 

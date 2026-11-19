@@ -5,7 +5,7 @@ import { pairsOf, wordDiff } from './diff.ts'
 import type { FileDiff } from './diff.ts'
 import { known, lang, plural, t } from './i18n.ts'
 import type { Phrase } from './i18n.ts'
-import { clockOf, durationOf } from './model.ts'
+import { clockOf, durationOf, effectiveModel } from './model.ts'
 import type { PanelModel, RoleView, StageMark } from './model.ts'
 import { clashesOf, sectionsOf, treeOf } from './plan.ts'
 import type { RoleState } from './state.ts'
@@ -457,7 +457,7 @@ const planSummary = (m: PanelModel, width: number, tone: Tone, page: boolean): {
   const placed = new Set<string>()
   m.roles.forEach((role, index) => {
     if (index > 0 && page) lines.push([])
-    const agent = `${role.agent} ${role.model || t('default')}`
+    const agent = `${role.agent} ${effectiveModel(role) || t('default')}`
     const look = LOOK[role.state]
     lines.push([
       { text: ' ' }, badge(role), { text: ' ' },
@@ -555,15 +555,22 @@ const flow = (m: PanelModel, ui: Ui, width: number): Flow => {
   const builders = m.roles.filter(role => !reviewers.includes(role))
   const tree = treeOf(builders)
   const INDENT = 5
-  const STEP = 4
   const HEIGHT = 5
-  const box = Math.max(16, Math.min(BOX, width - INDENT))
+  let box = Math.max(16, Math.min(BOX, width - INDENT))
   const lane = Math.min(BOX, 24)
   const deepest = Math.max(0, ...tree.map(one => one.depth))
-  const side = reviewers.length === 1 && tree.length > 0 && width >= INDENT + deepest * STEP + box + 6 + lane
-  // Indentation stops where the box would leave the width (or the reviewer's lane).
-  const levels = side ? deepest : Math.max(0, Math.floor((width - box - INDENT) / STEP))
-  const colOf = (depth: number) => INDENT + Math.min(depth, levels) * STEP
+  // The indent step shares the width past the indent and the boxes — less a reviewer's
+  // lane, when one sits beside the tree — among the deepest levels, so every level keeps
+  // its own column however deep the tree: never wider than four cells, never below one.
+  const stepOf = (reserve: number) => (deepest === 0 ? 4 : Math.max(1, Math.min(4, Math.floor((width - INDENT - box - reserve) / deepest))))
+  const laneWanted = reviewers.length === 1 && tree.length > 0
+  let STEP = stepOf(laneWanted ? 6 + lane : 0)
+  // The lane needs the deepest level to end clear of it; without the room the reviewer sits below.
+  const side = laneWanted && width >= INDENT + deepest * STEP + box + 6 + lane
+  if (!side) STEP = stepOf(0)
+  // At the floor step the boxes narrow too, so the deepest one still ends inside the width.
+  box = Math.max(16, Math.min(box, width - INDENT - deepest * STEP))
+  const colOf = (depth: number) => INDENT + depth * STEP
   const below = side ? [] : reviewers
   const canvas = new Canvas(width, 3 + tree.length * (HEIGHT + 2) + below.length * (HEIGHT + 4))
   const boxes: Flow['boxes'] = []
@@ -577,7 +584,7 @@ const flow = (m: PanelModel, ui: Ui, width: number): Flow => {
     const h = HEIGHT + notes.length
     canvas.box(row, col, w, h, selected ? look.tone : role.state === 'planned' ? 'chrome' : look.tone, selected ? DOUBLE : SINGLE)
     canvas.put(row + 1, col + 2, spread(`${look.glyph} ${role.name}`, t(look.text), w - 4), { tone: look.tone, ...(selected && { bold: true }) })
-    canvas.runs(row + 2, col + 2, [badge(role), { text: ` ${fit(`${role.agent} ${role.model || t('default')}`, w - 6)}`, tone: 'dim' }])
+    canvas.runs(row + 2, col + 2, [badge(role), { text: ` ${fit(`${role.agent} ${effectiveModel(role) || t('default')}`, w - 6)}`, tone: 'dim' }])
     const ctx = contextOf(role) === '—' ? '' : `${t('ctx')} ${contextOf(role)}`
     canvas.runs(row + 3, col + 2, [...fitRuns(effortOf(role.effort), w - 4 - cellsOf(ctx)), { text: ctx, tone: 'dim' }])
     notes.forEach((one, index) => canvas.put(row + 4 + index, col + 2, one, { tone: 'dim' }))
@@ -696,7 +703,7 @@ const detail = (role: RoleView, width: number, room: number): { lines: Line[]; k
   const field = (name: Phrase, text: string, tone?: Tone) =>
     wrap(text, width - 10).slice(0, 2).forEach((one, index) => lines.push([{ text: fit(index === 0 ? ` ${t(name)}` : '', 10), tone: 'dim' }, { text: one, ...(tone && { tone }) }]))
   field('goal', role.goal)
-  lines.push([{ text: fit(` ${t('agent')}`, 10), tone: 'dim' }, badge(role), { text: ` ${role.agent} ${role.model || t('default')}   ` }, ...effortOf(role.effort)])
+  lines.push([{ text: fit(` ${t('agent')}`, 10), tone: 'dim' }, badge(role), { text: ` ${role.agent} ${effectiveModel(role) || t('default')}   ` }, ...effortOf(role.effort)])
   if (role.tokens !== undefined) lines.push([{ text: fit(` ${t('context')}`, 10), tone: 'dim' }, ...contextBar(role, 16), { text: `   ${tokensOf(role)}`, tone: 'dim' }])
   lines.push([{ text: fit('', 10) }, { text: fit(role.flags.join(' '), width - 10), tone: 'accent' }])
   const commits = role.work?.commits.length ?? 0
@@ -1001,7 +1008,7 @@ const card = (role: RoleView, width: number, selected: boolean, seed: number): {
     ]],
   ]
   const right: [Phrase, Line][] = [
-    ['agent', [badge(role), { text: ` ${role.agent} ${role.model || t('default')}` }]],
+    ['agent', [badge(role), { text: ` ${role.agent} ${effectiveModel(role) || t('default')}` }]],
     ['time', role.elapsed === undefined ? [{ text: '—', tone: 'dim' }] : [{ text: role.elapsed }, { text: t(' since dispatch'), tone: 'dim' }]],
     ['branch', [{ text: role.branch }]],
     ['flags', [{ text: role.flags.join(' ') || '—', tone: role.flags.length === 0 ? 'dim' : 'accent' }]],

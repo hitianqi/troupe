@@ -1,4 +1,4 @@
-import { badgeOf } from './agents.ts'
+import { AGENTS, badgeOf } from './agents.ts'
 import type { Agent, Badge } from './agents.ts'
 import { known, t } from './i18n.ts'
 import { isApproved, PLAN_GATE } from './log.ts'
@@ -28,7 +28,9 @@ export type Live = {
   /** A reviewer's results put aside before its current one, oldest first. */
   earlier?: Result[]
 }
-export type RoleView = Role & Live & { branch: string; screen: string[]; badge?: Badge; dispatchedAt?: string; elapsed?: string; seconds?: number }
+export type RoleView = Role & Live & { branch: string; screen: string[]; badge?: Badge; dispatchedAt?: string; elapsed?: string; seconds?: number
+  /** The model the agent reads from its model env var, '' when it reads none or it is unset. */
+  envModel?: string }
 export type StageMark = 'done' | 'now' | 'open' | 'gate' | 'todo'
 export type StageView = Stage & { mark: StageMark; note: string }
 export type GateView = { id: string; label: string; ask: string; isPlan: boolean }
@@ -117,8 +119,20 @@ export type ModelInput = {
   stages: Stage[]
   now: Date
   agents?: Record<string, Agent>
+  /** The environment the roles run in: an agent's model env var names the model it uses when the plan names none. */
+  env?: NodeJS.ProcessEnv
   drafting?: { since?: number }
 }
+
+/** The model an agent runs with when the plan names none: its model env var, '' when it reads none or it is unset. */
+const envModelOf = (agent: string, agents: Record<string, Agent> | undefined, env: NodeJS.ProcessEnv | undefined): string => {
+  const name = (agents?.[agent] ?? AGENTS[agent])?.modelEnv
+
+  return name === undefined ? '' : env?.[name] ?? ''
+}
+
+/** The model a role runs with: the plan's, else the one its agent reads from its model env var; '' when neither. */
+export const effectiveModel = (role: Pick<RoleView, 'model' | 'envModel'>): string => role.model || role.envModel || ''
 
 export const modelOf = (input: ModelInput): PanelModel => {
   const { plan, folded, stages } = input
@@ -130,7 +144,7 @@ export const modelOf = (input: ModelInput): PanelModel => {
     const seconds = opened === undefined ? NaN : Math.max(0, Math.floor((input.now.getTime() - Date.parse(opened.at)) / 1000))
     const elapsed = !Number.isFinite(seconds) ? undefined : durationOf(seconds)
 
-    return { ...role, ...live, badge: badgeOf(role.agent, input.agents?.[role.agent]), branch: opened?.branch ?? `role/${input.mission}/${role.name}`, screen: live.screen ?? [], ...(opened && { dispatchedAt: opened.at }), ...(elapsed && { elapsed, seconds }) }
+    return { ...role, ...live, badge: badgeOf(role.agent, input.agents?.[role.agent]), envModel: envModelOf(role.agent, input.agents, input.env), branch: opened?.branch ?? `role/${input.mission}/${role.name}`, screen: live.screen ?? [], ...(opened && { dispatchedAt: opened.at }), ...(elapsed && { elapsed, seconds }) }
   })
   const planGate = folded.gates.get(PLAN_GATE)
   // The plan gate stands open while the plan as it is now is not approved and someone asked for it.
