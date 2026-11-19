@@ -62,7 +62,8 @@ Build the page.
 const MARKS = { '@troupe-owner': 'owner', '@troupe-orchestrator-token': 'token', '@troupe-panel': 'panel', '@troupe-planning': 'planning',
   '@troupe-mission': 'mission', '@troupe-mission-repo': 'missionRepo', '@troupe-panel-orchestrator': 'panelOrchestrator' }
 const format = (id, p, text) => text.replace(/#\{([^}]+)\}/g, (_, key) => key === 'pane_id' ? id : key === 'pane_dead' ? (p.dead ? '1' : '0')
-  : key === 'window_name' ? p.windowName : key === 'session_id' ? '$1' : key === 'window_id' ? p.window : String(p[MARKS[key]] ?? ''))
+  : key === 'window_name' ? p.windowName : key === 'session_id' ? '$1' : key === 'window_id' ? p.window
+  : key === 'window_width' ? '200' : key === 'window_height' ? '50' : String(p[MARKS[key]] ?? ''))
 
 const world = (t, env = { TROUPE_TMUX_SOCKET: 'unit-socket' }) => {
   const base = mkdtempSync(join(tmpdir(), 'troupe-command-'))
@@ -137,7 +138,11 @@ const world = (t, env = { TROUPE_TMUX_SOCKET: 'unit-socket' }) => {
     }
     if (args[0] === 'capture-pane') return panes.has(target) ? yes(panes.get(target).screen) : no()
     if (args[0] === 'list-panes' && args.at(-1).includes('#{pane_pid}')) return yes('')
-    if (args[0] === 'list-panes') return yes([...panes].map(([id, p]) => format(id, p, args.at(-1))).join('\n'))
+    if (args[0] === 'list-panes') {
+      const scope = panes.get(target)
+      const mine = ([, p]) => args.includes('-a') || args.includes('-s') || scope === undefined || p.window === scope.window
+      return yes([...panes].filter(mine).map(([id, p]) => format(id, p, args.at(-1))).join('\n'))
+    }
     if (args[0] === 'load-buffer') afterLoad?.()
     if (args[0] === 'kill-pane') panes.delete(target)
     return yes()
@@ -210,6 +215,8 @@ test('dispatch writes a complete brief, quoted argv and log event, refuses dupli
   w.write(join(opened.worktree, '.troupe/result.md'), '---\nstatus: done\nsummary: built\n---\n')
   assert.equal((await w.call('dispatch', 'web')).code, 0)
   assert.ok(w.calls.some(c => c.args.includes('split-window')))
+  // Two roles: the window becomes one row of two cells, the first role left, the second right.
+  assert.ok(w.calls.some(c => c.args.includes('select-layout') && c.args.at(-1).endsWith(',200x50,0,0{100x50,0,0,1,99x50,101,0,2}')))
   assert.equal(readFileSync(join(w.root, '.git/info/exclude'), 'utf8').split('/.troupe/').length, 2)
 })
 
@@ -429,7 +436,15 @@ test('dispatch reuses the named session and roles window, leaving unlogged panes
   assert.equal((await w.call('dispatch', 'web')).code, 0)
   assert.ok(!w.calls.some(c => c.args.includes('new-session') || c.args.includes('new-window')))
   assert.equal(w.calls.filter(c => c.args.includes('split-window')).length, 2)
-  assert.ok(w.calls.some(c => c.args.includes('select-layout') && c.args.includes('@99') && c.args.includes('tiled')))
+  // Two panes lay out as one row of two; the third as that row over a full-width one — never tmux's `tiled`.
+  const applied = w.calls.filter(c => c.args.includes('select-layout'))
+  assert.ok(applied.every(c => c.args.includes('@99')), 'the roles window is the one relaid out')
+  assert.ok(applied[0].args.at(-1).endsWith(',200x50,0,0{100x50,0,0,99,99x50,101,0,1}'), applied[0].args.at(-1))
+  assert.ok(applied[1].args.at(-1).endsWith(',200x50,0,0[200x25,0,0{100x25,0,0,99,99x25,101,0,1},200x24,0,26,2]'), applied[1].args.at(-1))
+  assert.ok(!w.calls.some(c => c.args.includes('tiled')))
+  // The separators between the cells are pinned blue, whatever the person's tmux theme.
+  assert.ok(w.calls.some(c => c.args.includes('pane-border-style') && c.args.at(-1) === 'fg=blue'))
+  assert.ok(w.calls.some(c => c.args.includes('pane-active-border-style') && c.args.at(-1) === 'fg=brightblue'))
   assert.equal((await w.call('close', '--all')).code, 0)
   assert.deepEqual([...w.panes.keys()], ['%98', '%99'])
 })
@@ -443,6 +458,8 @@ test('dispatch creates roles in an existing session without a roles window', asy
   assert.ok(created.args.includes('$1:'))
   assert.ok(created.args.includes('roles-m1'))
   assert.ok(!w.calls.some(c => c.args.includes('new-session')))
+  // A single pane already fills its window: there is nothing to lay out.
+  assert.ok(!w.calls.some(c => c.args.includes('select-layout')))
 })
 
 test('a pane is cleaned up if its dispatch cannot be logged', async t => {

@@ -7,7 +7,7 @@ import { join } from 'node:path'
 import { test } from 'node:test'
 
 import { append, fold, isApproved, logPath, readLog } from '../dist/log.js'
-import { paneOf, planHash, readResult, resultOf, roleState, waitingOn, workOf } from '../dist/state.js'
+import { paneOf, planHash, readResult, resultOf, roleState, sharePaneMarks, waitingOn, workOf } from '../dist/state.js'
 import { pairsOf, parseDiff, wordDiff } from '../dist/diff.js'
 import { run } from '../dist/run.js'
 
@@ -101,6 +101,61 @@ test("a role's work: commits since base, changed files, and those outside its to
   assert.deepEqual(partial.changed, ['README.md', 'src/a.ts'])
   assert.equal(partial.files, undefined)
   assert.equal(partial.diffProblem, 'diff exploded')
+})
+
+test("a role's work is read again only once its worktree moved: a commit, an edit, or its touches", () => {
+  const wt = temp()
+  const git = (...args) => execFileSync('git', args, { cwd: wt, encoding: 'utf8' })
+  git('init', '-q', '-b', 'main')
+  git('-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-q', '--allow-empty', '-m', 'base')
+  const base = git('rev-parse', 'HEAD').trim()
+  mkdirSync(join(wt, 'src'))
+  writeFileSync(join(wt, 'src/a.ts'), 'a')
+  git('add', '.')
+  git('-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-q', '-m', 'add a')
+  let reads = 0
+  const counting = (command, args, options) => { reads += 1; return run(command, args, options) }
+  const work = workOf(wt, base, ['src/'], counting)
+  assert.deepEqual(work.commits.map(c => c.subject), ['add a'])
+  // A worktree that stands still is one status read: the same work, nothing else.
+  reads = 0
+  assert.equal(workOf(wt, base, ['src/'], counting), work)
+  assert.equal(reads, 1)
+  // An edit that leaves every status line standing still still re-reads, and shows its own bytes.
+  writeFileSync(join(wt, 'src/a.ts'), 'a\nb\n')
+  const edited = workOf(wt, base, ['src/'], counting)
+  assert.deepEqual(edited.files[0].hunks[0].lines.map(l => `${l.sign}${l.text}`), ['+a', '+b'])
+  writeFileSync(join(wt, 'src/a.ts'), 'a\nc\n')
+  assert.deepEqual(workOf(wt, base, ['src/'], counting).files[0].hunks[0].lines.map(l => `${l.sign}${l.text}`), ['+a', '+c'])
+  // A new commit re-reads the log.
+  git('add', '.')
+  git('-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-q', '-m', 'edit')
+  assert.deepEqual(workOf(wt, base, ['src/'], counting).commits.map(c => c.subject), ['edit', 'add a'])
+  // Different touches are different work.
+  assert.deepEqual(workOf(wt, base, [], counting).outside, ['src/a.ts'])
+})
+
+test('pane reads share one list-panes while the loop stands still, and ask again once it yields', async () => {
+  const calls = []
+  const run = (command, args) => {
+    calls.push(args.join(' '))
+    if (args.includes('display')) return { code: 0, out: '%1\t0\tours', err: '' }
+    if (args.includes('capture-pane')) return { code: 0, out: 'READY', err: '' }
+
+    return { code: 0, out: '', err: '' }
+  }
+  sharePaneMarks(new Map([['%1', { dead: false, owner: 'ours' }], ['%3', { dead: true, owner: 'ours' }]]))
+  assert.deepEqual(paneOf('%1', run, {}, 'ours'), { alive: true, dead: false, screen: 'READY' })
+  // A retained pane whose agent exited is dead, not gone: it can still be cleaned up.
+  assert.deepEqual(paneOf('%3', run, {}, 'ours'), { alive: true, dead: true, screen: 'READY' })
+  // A pane the shared marks do not name — and one whose owner moved on — still asks and is gone.
+  assert.deepEqual(paneOf('%2', run, {}, 'ours'), { alive: false, dead: false, screen: '' })
+  assert.deepEqual(paneOf('%1', run, {}, 'theirs'), { alive: false, dead: false, screen: '' })
+  assert.ok(!calls.some(one => one.includes('%1') && one.includes('display')), 'the shared marks identified %1 with no display')
+  assert.ok(calls.some(one => one.includes('%2') && one.includes('display')))
+  await new Promise(resolve => setImmediate(resolve))
+  assert.deepEqual(paneOf('%1', run, {}, 'ours'), { alive: true, dead: false, screen: 'READY' })
+  assert.ok(calls.some(one => one.includes('%1') && one.includes('display')), 'once the loop yields, the marks are stale and tmux is asked')
 })
 
 test('a diff parsed per file: status, counts, line numbers on both sides, binary and mode-only files', () => {

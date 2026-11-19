@@ -10,7 +10,7 @@ import { Canvas, cellsOf as widthOf, fit, paint, textOf, TONES, wrap } from '../
 import { draw, effortOf } from '../dist/draw.js'
 import { setLang } from '../dist/i18n.js'
 import { fold } from '../dist/log.js'
-import { decisionsOf, modelOf } from '../dist/model.js'
+import { decisionsOf, effectiveModel, modelOf } from '../dist/model.js'
 import { readPlan } from '../dist/plan.js'
 import { AGENTS } from '../dist/agents.js'
 import { hitAt, transition } from '../dist/panel-input.js'
@@ -258,59 +258,195 @@ test('FLOW: a trunk into the root, a stem to its dependent, the reviewer in a si
   const drawn = draw(m, { tab: 1, selected: 'build' }, 150, 50)
   golden('flow-wide', plain(drawn))
   const boxes = boxesOf(drawn)
-  const find = name => boxes.find(box => box.target.name === name)
   const lines = plain(drawn)
-  const [lock, build, review] = ['lock', 'build', 'review'].map(find)
-  // The dependent right under its prerequisite, indented four, joined by an edge from under its box: │ down, then └▶.
-  assert.equal(build.col, lock.col + 4)
-  assert.ok(lock.row + lock.height < build.row)
-  const stem = lock.col + 2
-  for (let row = lock.row + lock.height; row < build.row + 2; row++) assert.equal(cellsOf(drawn.lines[row])[stem].text, '│', `edge row ${row}`)
-  assert.deepEqual(cellsOf(drawn.lines[build.row + 2]).slice(stem, stem + 2).map(cell => cell.text), ['└', '▶'])
-  assert.equal(cellsOf(drawn.lines[build.row - 1]).slice(build.col, build.col + 10).map(cell => cell.text).join(''), 'after lock', 'the label beside the edge, above the box')
-  // One root: the trunk comes down from the orchestrator and ends in └─▶ at lock.
-  assert.ok(lines.some(line => /└─▶│/.test(line)))
-  assert.ok(!lines.some(line => line.includes('├─▶')))
-  // The reviewer sits in a lane to the right, between its two sources.
+  const cell = (row, col) => cellsOf(drawn.lines[row])[col]
+  const [lock, build, review] = ['lock', 'build', 'review'].map(name => boxes.find(box => box.target.name === name))
+  // The dependent one band below its prerequisite and to its right, joined by an edge that
+  // leaves its box, runs right along the wire row and drops into the box's top.
+  assert.equal(build.row, lock.row + 7)
+  assert.ok(build.col > lock.col, 'the dependent sits to the right of its prerequisite')
+  const drop = lock.col + 2
+  const come = build.col + 13
+  assert.equal(cell(lock.row + 5, drop).text, '│')
+  assert.equal(cell(lock.row + 6, drop).text, '└')
+  assert.equal(cell(lock.row + 6, come).text, '▼')
+  // The label rides the wire just before the arrowhead; sample the dashes around it.
+  for (const col of [drop + 2, come - 12, come - 1]) assert.equal(cell(lock.row + 6, col).text, '─', `wire col ${col}`)
+  assert.match(lines[lock.row + 6].slice(drop, come), /after lock/, 'the label rides the wire')
+  // One root: the trunk runs right along the orchestrator's box and drops into its top.
+  assert.equal(cell(lock.row - 2, lock.col + 13).text, '┬')
+  assert.equal(cell(lock.row - 1, lock.col + 13).text, '▼')
+  // The reviewer sits in a lane to the right, between its two sources, ending at the pane's edge.
   assert.ok(review.col > build.col + build.width)
   assert.ok(review.row >= lock.row && review.row < build.row + build.height)
+  assert.equal(review.col + review.width, 150, 'the lane uses the right side of the screen')
   assert.ok(!lines.some(line => /as each lands/.test(line)))
-  // Each edge leaves its role's middle row; it is ok once that role is done, chrome otherwise.
-  const edge = box => cellsOf(drawn.lines[box.row + 2])[box.col + box.width]
-  assert.deepEqual([edge(lock).text, edge(lock).tone], ['─', 'ok'])
-  assert.deepEqual([edge(build).text, edge(build).tone], ['─', 'chrome'])
+  // Each lane edge leaves its role's box below the middle; it is ok once that role is done, chrome otherwise.
+  const edge = box => cell(box.row + 5, box.col + 13)
+  assert.deepEqual([edge(lock).text, edge(lock).tone], ['└', 'ok'])
+  assert.deepEqual([edge(build).text, edge(build).tone], ['└', 'chrome'])
   const arrow = cellsOf(drawn.lines[review.row + 2])[review.col - 1]
   assert.equal(arrow.text, '▶')
   assert.equal(arrow.tone, 'ok', 'the landed branch reads all the way to the reviewer')
-  closed(drawn, 150 - 29)
+  closed(drawn, 150)
 })
 
-test('FLOW tree: each level indents four, two dependents share their prerequisite\'s edge, an edge is dashed until it is done, and deep chains stop indenting at the width', () => {
+test('FLOW tree: depth runs right and a band down, two dependents share their prerequisite\'s drop, an edge is dashed until it is done, and a deep chain narrows its stride to keep every level its own column', () => {
   const roles = [role('api', { state: 'done' }), role('web', { dependsOn: ['api'] }), role('e2e', { dependsOn: ['web'] }), role('mobile', { dependsOn: ['api'] }), role('store')]
   const drawn = draw(scenario(roles), { tab: 1, selected: 'store' }, 150, 70)
   const [api, web, e2e, mobile, store] = ['api', 'web', 'e2e', 'mobile', 'store'].map(name => boxesOf(drawn).find(box => box.target.name === name))
-  assert.deepEqual([api, web, e2e, mobile, store].map(box => box.row).sort((a, b) => a - b), [api.row, web.row, e2e.row, mobile.row, store.row], 'depth-first: a role, then what waits on it, then the next root')
-  assert.deepEqual([web.col, e2e.col, mobile.col, store.col].map(col => col - api.col), [4, 8, 4, 0])
   const cell = (row, col) => cellsOf(drawn.lines[row])[col]
-  // api's edge runs past web and e2e to mobile: a ├ where web branches off, └▶ into mobile.
-  assert.equal(cell(web.row + 2, api.col + 2).text, '├')
-  assert.equal(cell(e2e.row + 2, api.col + 2).text, '│')
-  assert.deepEqual([cell(mobile.row + 2, api.col + 2).text, cell(mobile.row + 2, api.col + 3).text], ['└', '▶'])
-  assert.equal(cell(mobile.row + 2, api.col + 2).fade, undefined, 'api is done: its edges are solid')
+  // The plan's depth-first order runs left to right, one even stride between slots.
+  const cols = [api, web, e2e, mobile, store].map(box => box.col)
+  assert.ok(cols.every((col, i) => i === 0 || col > cols[i - 1]), 'each slot sits to the right of the one before it')
+  for (const [a, b] of [[api, web], [web, e2e], [e2e, mobile], [mobile, store]]) assert.equal(b.col - a.col, web.col - api.col, 'the stride between slots is even')
+  // Depth steps a band down; same-level roles share a band, and the next root is back on the first.
+  assert.equal(web.row, api.row + 7, 'a dependent sits one band below its prerequisite')
+  assert.equal(e2e.row, web.row + 7)
+  assert.equal(mobile.row, web.row, 'the same level shares a band, side by side')
+  assert.equal(store.row, api.row, 'a second root returns to the first band')
+  // Both dependents of api hang from one drop under its box, sharing the band's wire row.
+  const drop = api.col + 2
+  const comeWeb = web.col + 13
+  const comeMobile = mobile.col + 13
+  assert.equal(cell(web.row - 2, drop).text, '│')
+  assert.equal(cell(web.row - 1, drop).text, '└')
+  assert.equal(cell(web.row - 1, comeWeb).text, '▼')
+  assert.equal(cell(web.row - 1, comeMobile).text, '▼')
+  assert.match(plain(drawn)[web.row - 1], /after api.*after api/, 'both labels ride the one wire row')
+  assert.equal(cell(web.row - 1, drop + 2).fade, undefined, 'api is done: its edges are solid')
   // web is not done: its edge to e2e is dashed and faint, the joint keeps its shape.
-  assert.deepEqual([cell(web.row + web.height, web.col + 2).text, cell(e2e.row + 2, web.col + 2).text, cell(e2e.row + 2, web.col + 3).text], ['╎', '└', '▶'])
-  assert.equal(cell(e2e.row + 2, web.col + 2).fade, 0.75)
+  assert.deepEqual([cell(e2e.row - 2, web.col + 2).text, cell(e2e.row - 2, web.col + 2).fade], ['╎', 0.75])
+  assert.deepEqual([cell(e2e.row - 1, web.col + 2).text, cell(e2e.row - 1, web.col + 3).text], ['└', '╌'])
+  assert.equal(cell(e2e.row - 1, web.col + 3).fade, 0.75)
   const trunks = drawn.scene.column.trunks
-  assert.deepEqual(trunks.find(one => one.name === 'e2e').path.at(-1), [e2e.row + 2 - drawn.scene.column.row, e2e.col - 1 - drawn.scene.column.col], 'packets for a dependent run along its own edge')
+  assert.deepEqual(trunks.find(one => one.name === 'e2e').path.at(-1), [e2e.row - 1 - drawn.scene.column.row, e2e.col + 13 - drawn.scene.column.col], 'packets for a dependent run along its own edge')
   assert.ok(drawn.scene.column.links.some(link => link.to === 'e2e' && link.edge.from === 'web'))
-  // A chain eight deep at 60 columns: the boxes stop moving right before they leave the width.
+  // A chain eight deep at 60 columns: the stride narrows to its floor and the boxes with it, so no level is squeezed onto another's column.
   const chain = Array.from({ length: 8 }, (_, i) => role(`r${i}`, { dependsOn: i === 0 ? [] : [`r${i - 1}`] }))
   const deep = draw(scenario(chain), { tab: 1, selected: 'r0' }, 60, 80)
   closed(deep, 60)
-  const cols = boxesOf(deep).map(box => box.col)
-  assert.ok(cols.every((col, i) => i === 0 || col >= cols[i - 1]))
+  const deepBoxes = boxesOf(deep)
+  const deepCols = deepBoxes.map(box => box.col)
+  assert.ok(deepCols.every((col, i) => i === 0 || col > deepCols[i - 1]), 'every level keeps its own column')
+  assert.ok(deepBoxes.every(box => box.width < 26), 'the boxes narrow with the stride')
   assert.ok(plain(deep).every(line => line.length <= 60))
-  assert.equal(plain(deep).filter(line => line.includes('▶')).length, 8, 'each still has its arrow')
+  assert.equal(plain(deep).filter(line => line.includes('▼')).length, 8, 'each still has its arrow')
+})
+
+test('FLOW deep tree: the stride narrows with depth so every level keeps its own column and box, and the chain reaches the right side of the pane', () => {
+  const names = ['core', 'api', 'web', 'e2e', 'docs', 'mr']
+  const roles = names.map((name, i) => role(name, { dependsOn: i === 0 ? [] : [names[i - 1]] }))
+  const drawn = draw(scenario(roles), { tab: 1, selected: 'core' }, 78, 70)
+  golden('flow-deep', plain(drawn))
+  const boxes = boxesOf(drawn)
+  const cols = boxes.map(box => box.col)
+  assert.equal(boxes.length, names.length)
+  assert.deepEqual(cols, [...cols].sort((a, b) => a - b), 'depth-first across the chain')
+  assert.equal(new Set(cols).size, cols.length, 'no level is squeezed onto another\'s column')
+  const step = cols[1] - cols[0]
+  assert.ok(step >= 1 && step < 4, `the step narrows to fit the deepest level (step ${step})`)
+  for (let i = 2; i < cols.length; i++) assert.equal(cols[i] - cols[i - 1], step, 'the step is even')
+  assert.ok(cols.at(-1) + boxes.at(-1).width <= 78, 'the deepest box ends inside the width')
+  assert.ok(cols.at(-1) + boxes.at(-1).width >= 78 - 4, 'the chain spreads to the right side of the pane')
+  closed(drawn, 78)
+  assert.equal(plain(drawn).filter(line => line.includes('▼')).length, names.length, 'each box keeps its arrow')
+  // The same width with a shallow tree spreads its two slots wide apart.
+  const shallow = boxesOf(draw(scenario([role('core'), role('api', { dependsOn: ['core'] })]), { tab: 1, selected: 'core' }, 78, 30))
+  assert.ok(shallow[1].col - shallow[0].col > 4, 'a shallow pair spreads its slots')
+})
+
+test('FLOW wide and shallow: parallel roles lie side by side across the whole width, not stacked into a column', () => {
+  const names = ['panel', 'commands', 'timing', 'docs', 'seed']
+  const drawn = draw(scenario(names.map(name => role(name))), { tab: 1, selected: 'panel' }, 150, 40)
+  golden('flow-parallel', plain(drawn))
+  const boxes = boxesOf(drawn)
+  assert.equal(boxes.length, names.length)
+  // Every parallel role shares the first band, one even stride apart, the last flush with the right edge.
+  assert.ok(boxes.every(box => box.row === boxes[0].row), 'side by side on one band')
+  const cols = boxes.map(box => box.col)
+  assert.ok(cols.every((col, i) => i === 0 || col > cols[i - 1]), 'each role sits to the right of the one before it')
+  for (let i = 2; i < cols.length; i++) assert.equal(cols[i] - cols[i - 1], cols[1] - cols[0], 'the stride is even')
+  assert.equal(cols.at(-1) + boxes.at(-1).width, 150, 'the band reaches the right side of the screen')
+  assert.ok(!plain(drawn).some(line => /after /.test(line)), 'nothing waits on anything: the trunk feeds every role at once')
+  assert.equal(plain(drawn).join('\n').split('▼').length - 1, names.length, 'each role keeps its trunk drop')
+  closed(drawn, 150)
+})
+
+test('FLOW narrow and deep: a long chain stairs one stride right per level down to the floor, boxes whole, to the pane\'s right side', () => {
+  const names = Array.from({ length: 10 }, (_, i) => `step-${i}`)
+  const drawn = draw(scenario(names.map((name, i) => role(name, { dependsOn: i === 0 ? [] : [names[i - 1]] }))), { tab: 1, selected: 'step-0' }, 66, 90)
+  golden('flow-chain', plain(drawn))
+  const boxes = boxesOf(drawn)
+  assert.equal(boxes.length, names.length)
+  const cols = boxes.map(box => box.col)
+  assert.ok(cols.every((col, i) => i === 0 || col > cols[i - 1]), 'every level keeps its own column')
+  for (let i = 1; i < cols.length; i++) assert.equal(cols[i] - cols[i - 1], 1, 'the stride narrows to its floor')
+  for (let i = 1; i < boxes.length; i++) assert.equal(boxes[i].row - boxes[i - 1].row, 7, 'each level steps one band down')
+  assert.ok(boxes.every(box => box.width < 26), 'the boxes narrow with the stride')
+  assert.ok(cols.at(-1) + boxes.at(-1).width <= 66 && cols.at(-1) + boxes.at(-1).width >= 66 - 4, 'the deepest box ends against the right side of the pane')
+  assert.ok(plain(drawn).every(line => line.length <= 66))
+  assert.equal(plain(drawn).filter(line => line.includes('▼')).length, names.length, 'each level keeps its arrow')
+  closed(drawn, 66)
+})
+
+test('FLOW crowded: with no fit at any box width the slots take turns a band lower, boxes whole and clear of each other', () => {
+  // Six builders, four of them parallel, at 80 columns: no box width gives every
+  // same-level pair its gap, so the boxes stack bands — whole, inside the width.
+  const roles = [role('alpha'), role('beta'), role('gamma'), role('delta'), role('epsilon', { dependsOn: ['alpha'] }), role('zeta', { dependsOn: ['beta'] }), role('review', { agent: 'claude', badge: AGENTS.claude.badge, model: 'opus', touches: [], reviews: ['alpha', 'beta'] })]
+  const drawn = draw(scenario(roles), { tab: 1, selected: 'alpha' }, 80, 60)
+  golden('flow-crowd', plain(drawn))
+  const boxes = boxesOf(drawn).filter(box => box.target.name !== 'review')
+  assert.equal(boxes.length, 6)
+  closed(drawn, 80)
+  const right = drawn.scene.column.col + drawn.scene.column.width
+  assert.ok(boxes.every(box => box.col + box.width <= right), 'every box inside the flow width')
+  for (const [a, b] of boxes.flatMap((a, i) => boxes.slice(i + 1).map(b => [a, b]))) {
+    assert.ok(a.row + a.height <= b.row || b.row + b.height <= a.row || a.col + a.width <= b.col || b.col + b.width <= a.col, `${a.target.name} and ${b.target.name} overlap`)
+  }
+  assert.equal(plain(drawn).filter(line => line.includes('▼')).length >= 4, true, 'the roots keep their trunk drops')
+})
+
+test('FLOW detail: the live window takes the view\'s height, not what the flow leaves below it', () => {
+  // A one-band flow and a 20-line live screen at 96x34: the window once fitted the rows left
+  // under the flow (4); now it takes the view's own rows (15 of the screen's last lines) and
+  // the column scrolls to it.
+  const screen = Array.from({ length: 20 }, (_, i) => `line ${i} of the live screen`)
+  const roles = [role('alpha', { state: 'working', screen }), role('beta', { state: 'working', screen })]
+  const drawn = draw(scenario(roles), { tab: 1, selected: 'alpha' }, 96, 34)
+  const column = drawn.scene.column
+  assert.equal(column.detail.window.rows, 15, 'the window takes the view\'s rows less its own fields')
+  const lines = plain(drawn)
+  assert.match(lines[25], /its window, live/)
+  assert.match(lines[26], /line 5 of the live screen/, 'the window shows the screen\'s last rows')
+  assert.ok(drawn.maxScroll > 0, 'the column scrolls')
+  const scrolled = draw(scenario(roles), { tab: 1, selected: 'alpha', scroll: drawn.maxScroll }, 96, 34)
+  const tail = plain(scrolled).join('\n')
+  assert.match(tail, /line 19 of the live screen/, 'the window\'s last row comes in with the keys')
+  assert.match(tail, /o Open window/)
+})
+
+test('FLOW packed: no wire crosses another box, four to seven parallel builders across 70-100 columns', () => {
+  // The crowded fallback packs boxes a band lower, so a root can sit with every column of its
+  // span crossed by the boxes above it; its trunk then hooks past the crowd along the box's own
+  // top instead of dropping through them.
+  for (const n of [4, 5, 6, 7]) for (let width = 70; width <= 100; width += 5) {
+    const names = Array.from({ length: n }, (_, i) => `p${i}`)
+    const review = role('review', { agent: 'claude', badge: AGENTS.claude.badge, model: 'opus', touches: [], reviews: names.slice(0, 2) })
+    const shapes = {
+      parallel: [...names.map(name => role(name)), review],
+      dependent: [...names.slice(0, -2).map(name => role(name)), ...names.slice(-2).map(name => role(name, { dependsOn: [names[0]] })), review],
+    }
+    for (const [shape, roles] of Object.entries(shapes)) {
+      const drawn = draw(scenario(roles), { tab: 1, selected: names[0] }, width, 90)
+      const boxes = drawn.scene.column.boxes
+      const crossing = drawn.scene.column.trunks.flatMap(one => one.path.filter(([r, c]) =>
+        boxes.some(b => b.name !== one.name && r >= b.row && r < b.row + b.height && c >= b.col && c < b.col + b.width)))
+      assert.deepEqual(crossing, [], `${n} builders, ${shape}, at ${width} cols: a wire crosses a box`)
+      closed(drawn, width)
+      if (n === 6 && width === 80 && shape === 'parallel') golden('flow-packed', plain(drawn))
+    }
+  }
 })
 
 test('FLOW narrow: the reviewer goes below, says what it reviews, and stays selectable', () => {
@@ -324,12 +460,12 @@ test('FLOW narrow: the reviewer goes below, says what it reviews, and stays sele
   assert.ok(review && build && lock)
   assert.ok(review.row >= build.row + build.height && review.col === lock.col, 'below the builders, not in a lane')
   assert.match(text, /reviews lock, build/)
-  assert.equal(text.split('▶').length - 1, 2, 'the trunk arrow and the dependency edge; no edge into the reviewer')
+  assert.equal(text.split('▼').length - 1, 2, 'the trunk into lock and the edge into build; no edge into the reviewer')
   assert.deepEqual(hitAt(drawn.hits, review.row + 1, review.col + 2), { kind: 'role', name: 'review' })
   closed(drawn, 78)
 })
 
-test('FLOW with several reviewers puts them below with the reviews line', () => {
+test('FLOW with several reviewers puts them below with the reviews line, while the builders spread side by side', () => {
   const roles = [role('panel'), role('commands'), role('review-a', { touches: [], reviews: ['panel'] }), role('review-b', { touches: [], reviews: ['commands'] })]
   const drawn = draw(scenario(roles), { tab: 1, selected: 'panel' }, 150, 70)
   const boxes = boxesOf(drawn)
@@ -337,9 +473,14 @@ test('FLOW with several reviewers puts them below with the reviews line', () => 
   const lines = plain(drawn)
   assert.ok(lines.some(line => line.includes('reviews panel')))
   assert.ok(lines.some(line => line.includes('reviews commands')))
+  // The two builders share the first band, side by side across the width.
+  const [panel, commands] = ['panel', 'commands'].map(name => boxes.find(box => box.target.name === name))
+  assert.equal(commands.row, panel.row)
+  assert.ok(commands.col >= panel.col + panel.width, 'the second root spreads to the right of the first')
+  assert.equal(commands.col + commands.width, 150, 'the first band reaches the right side of the screen')
   const first = Math.min(...boxes.filter(box => /^review/.test(box.target.name)).map(box => box.row))
   assert.ok(boxes.filter(box => !/^review/.test(box.target.name)).every(box => box.row + box.height <= first))
-  closed(drawn, 150 - 29)
+  closed(drawn, 150)
 })
 
 test('FLOW does not draw a dependency through an independent builder wrapped between parent and child', () => {
@@ -554,27 +695,54 @@ test('models carry optional adapter badges into role views', () => {
   assert.deepEqual(m.roles[0].badge, { glyph: 'C', tone: 'warn' })
 })
 
+test('the model a role runs with: the plan\'s, else its agent\'s model env var, else default', () => {
+  const source = `# Demo\n\n## Role: bot\n\nBuild it.\n\n\`\`\`yaml\nroles:\n  bot:\n    agent: claude\n    goal: build\n    touches: [src/]\n    flags: [--dangerously-skip-permissions]\n\`\`\`\n`
+  const base = { mission: 'demo', planPath: 'plan.md', planText: source, plan: readPlan(source), hash: HASH, folded: fold([]), log: [], live: new Map(), stages: DEFAULT_STAGES, now: new Date(at('12:07')) }
+  const withEnv = modelOf({ ...base, env: { ANTHROPIC_MODEL: 'opus-4-8' } })
+  assert.equal(withEnv.roles[0].model, '')
+  assert.equal(withEnv.roles[0].envModel, 'opus-4-8')
+  assert.equal(effectiveModel(withEnv.roles[0]), 'opus-4-8')
+  // The plan's model wins; an unset var, or an agent that reads none, stays unknown.
+  const pinned = readPlan(source.replace('    goal: build', '    model: sonnet\n    goal: build'))
+  assert.equal(effectiveModel(modelOf({ ...base, plan: pinned }).roles[0]), 'sonnet')
+  assert.equal(effectiveModel(modelOf({ ...base, env: {} }).roles[0]), '')
+  assert.equal(effectiveModel(modelOf({ ...base, agents: { claude: { ...AGENTS.claude, modelEnv: undefined } }, env: { ANTHROPIC_MODEL: 'opus-4-8' } }).roles[0]), '')
+  // The panel shows the model the role runs with, not the placeholder.
+  const lines = plain(draw(withEnv, { tab: 1, selected: 'bot' }, 96, 40))
+  assert.ok(lines.some(line => line.includes('claude opus-4-8')))
+  assert.ok(!lines.join('\n').includes('claude default'))
+})
 
-test('FLOW parallel roots: each gets its own trunk arrow, boxes stay clear, the reviewer joins both', () => {
+
+test('FLOW parallel roots: each gets its own trunk drop, the roots sit side by side, the reviewer joins both on one wire', () => {
   const roles = [role('panel'), role('commands'), role('review', { touches: [], reviews: ['panel', 'commands'] })]
   const drawn = draw(scenario(roles), { tab: 1, selected: 'panel' }, 150, 50)
   const boxes = boxesOf(drawn)
   const [first, second, reviewer] = ['panel', 'commands', 'review'].map(name => boxes.find(hit => hit.target.name === name))
-  assert.ok(first.row + first.height <= second.row, 'stacked, not overlapping')
   const lines = plain(drawn)
-  const arrows = lines.filter(line => /[├└]─▶[│║]/.test(line))
-  assert.equal(arrows.length, 2)
-  assert.ok(/├─▶[│║]/.test(lines[first.row + 2]) && /└─▶[│║]/.test(lines[second.row + 2]), 'a ├─▶ then the last └─▶')
-  assert.ok(!lines.some(line => /after (panel|commands)/.test(line.slice(0, 80)) && line.includes('▼')))
+  const cell = (row, col) => cellsOf(drawn.lines[row])[col]
+  // The roots share the first band, side by side across the width.
+  assert.equal(second.row, first.row, 'side by side, not stacked')
+  assert.ok(second.col >= first.col + first.width, 'the second root spreads to the right of the first')
+  // Each root gets its own trunk drop: the trunk runs right along the orchestrator's box, a ┬ at the first, a ┐ at the last, a ▼ into each top.
+  assert.equal(cell(first.row - 2, first.col + 13).text, '┬')
+  assert.equal(cell(second.row - 2, second.col + 13).text, '┐')
+  assert.equal(cell(first.row - 1, first.col + 13).text, '▼')
+  assert.equal(cell(second.row - 1, second.col + 13).text, '▼')
+  assert.ok(!lines.some(line => /after (panel|commands)/.test(line.slice(0, 80)) && line.includes('▼')), 'roots start at once: no dependency edges')
   for (const box of [first, second]) {
     const inside = drawn.lines.slice(box.row + 1, box.row + box.height - 1).map(line => textOf(line).slice(box.col + 1, box.col + box.width - 1))
     assert.ok(inside.every(line => !/[│▼▶]/.test(line)))
-    assert.equal(cellsOf(drawn.lines[box.row + 2])[box.col + box.width].text, '─')
-    assert.equal(cellsOf(drawn.lines[box.row + 2])[box.col + box.width].tone, 'chrome', 'not done yet, so not lit')
   }
-  assert.ok(reviewer.col > first.col + first.width)
-  assert.equal(cellsOf(drawn.lines[reviewer.row + 2])[reviewer.col - 1].text, '▶')
-  closed(drawn, 150 - 29)
+  // The reviewer joins both on one wire below the builders: the first branch starts it, the second splits off it.
+  assert.equal(cell(first.row + 5, first.col + 13).text, '└')
+  assert.equal(cell(first.row + 5, second.col + 13).text, '┴', 'the second branch splits off the shared wire')
+  assert.equal(cell(first.row + 5, second.col + 13).tone, 'chrome', 'not done yet, so not lit')
+  assert.ok(reviewer.col > second.col + second.width)
+  assert.equal(reviewer.col + reviewer.width, 150, 'the lane uses the right side of the screen')
+  const arrow = cellsOf(drawn.lines[reviewer.row + 2])[reviewer.col - 1]
+  assert.deepEqual([arrow.text, arrow.tone], ['▶', 'chrome'], 'one arrow into the reviewer, not lit yet')
+  closed(drawn, 150)
 })
 
 test('PLAN issue references continue paragraphs and hanging lists; only real headings split them', () => {
@@ -609,14 +777,18 @@ test('FLOW edge tones follow each reviewed role: ok when done, chrome otherwise'
   const drawn = draw(scenario(roles), { tab: 1, selected: 'panel' }, 150, 60)
   const boxes = boxesOf(drawn)
   const reviewer = boxes.find(hit => hit.target.name === 'review')
-  for (const [name, tone] of [['panel', 'ok'], ['commands', 'chrome'], ['build', 'ok']]) {
+  const cell = (row, col) => cellsOf(drawn.lines[row])[col]
+  // Each lane leaves its role's box below the middle; its corner says that branch's own state,
+  // while the shared wire past it still carries the strongest light — a landed branch reads through.
+  for (const [name, tone, text] of [['panel', 'ok', '└'], ['commands', 'chrome', '┴'], ['build', 'ok', '└']]) {
     const box = boxes.find(hit => hit.target.name === name)
-    const cells = cellsOf(drawn.lines[box.row + 2])
-    assert.deepEqual([cells[box.col + box.width].text, cells[box.col + box.width].tone], ['─', tone], name)
+    assert.deepEqual([cell(box.row + 5, box.col + 13).text, cell(box.row + 5, box.col + 13).tone], [text, tone], name)
   }
+  const commands = boxes.find(hit => hit.target.name === 'commands')
+  assert.equal(cell(commands.row + 5, commands.col + 14).tone, 'ok', 'the landed branch reads past the corner that has not')
   // The arrow into the reviewer is lit because some branch has landed.
-  assert.deepEqual([cellsOf(drawn.lines[reviewer.row + 2])[reviewer.col - 1].text, cellsOf(drawn.lines[reviewer.row + 2])[reviewer.col - 1].tone], ['▶', 'ok'])
-  closed(drawn, 150 - 29)
+  assert.deepEqual([cell(reviewer.row + 2, reviewer.col - 1).text, cell(reviewer.row + 2, reviewer.col - 1).tone], ['▶', 'ok'])
+  closed(drawn, 150)
 })
 
 test('FLOW fits long unknown effort inside builder and reviewer borders', () => {

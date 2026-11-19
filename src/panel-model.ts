@@ -45,7 +45,7 @@ export const readPanel = (r: Runtime, want: string): Reading => {
     const model = modelOf({
       mission: m.name, planPath: relative(m.worktree, m.path), planText: m.source, plan,
       agents: m.agents, hash: m.hash, folded: m.folded, log: m.events, stages: stages.stages,
-      live: new Map(m.plan.roles.map(role => [role.name, liveOf(r, m, role)])), now: new Date(r.now()),
+      live: new Map(m.plan.roles.map(role => [role.name, liveOf(r, m, role)])), now: new Date(r.now()), env: r.env,
       ...(isDrafting && { drafting: Number.isFinite(since) ? { since } : {} }),
     })
 

@@ -1,7 +1,7 @@
  troupe  auth-refresh  ·  Plan OK?                              ◆ 1 needs you  ·  12:07   中/EN
   1 MISSION   2 ROLES   3 PLAN   4 LOG   5 DIFF
                                 Refresh tokens rotate on every use, and a reused one is refused
-────────────────────────────────────────────────────────────────────────────────────────────────
+
 ╭─ ◆ APPROVE THE PLAN ─────────────────────────────────────────────────────────────────────────╮
 │ Goal   Refresh tokens rotate on every use, and a reused one is refused                       │
 │ Why    Stolen refresh tokens stay valid for 30 days today (issue #212)                       │
@@ -44,15 +44,15 @@
 ─ ROLES ────────────────── │ ─ FLOW · scroll for more ↓ ────────────────────────────────────────
  build                     │ ┌────────────────────────┐
 ▸   ○ api         ⬢    —   │ │ ● orchestrator         │
-  └ ○ web         ✻    —   │ └─┬──────────────────────┘
-    ○ store       ✻    —   │   │
- review                    │   │  ╔════════════════════════╗
-    ○ review      ✻    —   │   │  ║ ○ api          planned ║
-                           │   ├─▶║ ⬢ codex gpt-6.1-sol    ║──────┐
-─ STAGES ───────────────── │   │  ║ ◼◼◼◻◻ high             ║      │
-  ✓ Plan                   │   │  ╚════════════════════════╝      │
-  ◆ Plan OK?               │   │    ╎                             │
-  ○ Build             0/3  │   │    ╎ after api                   │
-  ○ Review            0/1  │   │    ╎ ┌────────────────────────┐  │   ┌──────────────────────┐
+  └ ○ web         ✻    —   │ └─────────────────┬──────┴────────────────────────────┐
+    ○ store       ✻    —   │                   ▼                                   ▼
+ review                    │      ╔════════════════════════╗          ┌────────────────────────┐
+    ○ review      ✻    —   │      ║ ○ api          planned ║          │ ○ store        planned │
+                           │      ║ ⬢ codex gpt-6.1-sol    ║          │ ✻ claude opus          │
+─ STAGES ───────────────── │      ║ ◼◼◼◻◻ high             ║          │ ◼◼◼◻◻ high             │
+  ✓ Plan                   │      ╚════════════════════════╝          └────────────────────────┘
+  ◆ Plan OK?               │        ╎
+  ○ Build             0/3  │        └╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌after api╌▼
+  ○ Review            0/1  │                        ┌────────────────────────┐
 
  a  approve   c  change   v  plan   ↑↓  role   1-5  tabs   ?  help

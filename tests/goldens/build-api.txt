@@ -1,33 +1,35 @@
  troupe  auth-refresh  ·  Build                                 ◆ 1 needs you  ·  12:07   中/EN
   1 MISSION   2 ROLES   3 PLAN   4 LOG   5 DIFF
                                 Refresh tokens rotate on every use, and a reused one is refused
-────────────────────────────────────────────────────────────────────────────────────────────────
+
 ▌ ◆ api    waits on you · Trust this folder?                                      o Open window
 
 ─ ROLES ────────────────── │ ─ FLOW ────────────────────────────────────────────────────────────
  build                     │ ┌────────────────────────┐
 ▸   ◆ api         ⬢    —   │ │ ● orchestrator         │
-  └ ○ web         ✻    —   │ └─┬──────────────────────┘
-    ● store       ✻    —   │   │
- review                    │   │  ╔════════════════════════╗
-    ○ review      ✻    —   │   │  ║ ◆ api     waits on you ║
-                           │   ├─▶║ ⬢ codex gpt-6.1-sol    ║──────┐
-─ STAGES ───────────────── │   │  ║ ◼◼◼◻◻ high             ║      │
-  ✓ Plan                   │   │  ╚════════════════════════╝      │
-  ✓ Plan OK?        10:42  │   │    ╎                             │
-  ● Build             0/3  │   │    ╎ after api                   │
-  ○ Review            0/1  │   │    ╎ ┌────────────────────────┐  │   ┌──────────────────────┐
-  ◇ MR OK?                 │   │    ╎ │ ○ web          planned │  │   │ ○ review     planned │
-  ○ Open MR                │   │    └▶│ ✻ claude sonnet        │──┼──▶│ ✻ claude sonnet      │
-  ◇ Merged?                │   │      │ ◼◼◻◻◻ medium           │  │   │ ◼◼◼◻◻ high           │
-  ○ Teardown               │   │      └────────────────────────┘  │   └──────────────────────┘
-                           │   │                                  │
-─ ACTIVITY ─────────────── │   │                                  │
- 12:07 dispatched store    │   │  ┌────────────────────────┐      │
- 12:07 dispatched api      │   │  │ ● store        working │      │
- 10:42 stage: build        │   └─▶│ ✻ claude opus          │──────┘
- 10:42 plan approved       │      │ ◼◼◼◻◻ high             │
- 10:41 plan gate opened    │      └────────────────────────┘
+  └ ○ web         ✻    —   │ └─────────────────┬──────┴────────────────────────────┐
+    ● store       ✻    —   │                   ▼                                   ▼
+ review                    │      ╔════════════════════════╗          ┌────────────────────────┐
+    ○ review      ✻    —   │      ║ ◆ api     waits on you ║          │ ● store        working │
+                           │      ║ ⬢ codex gpt-6.1-sol    ║          │ ✻ claude opus          │
+─ STAGES ───────────────── │      ║ ◼◼◼◻◻ high             ║          │ ◼◼◼◻◻ high             │
+  ✓ Plan                   │      ╚════════════════════════╝          └────────────────────────┘
+  ✓ Plan OK?        10:42  │        ╎
+  ● Build             0/3  │        └╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌after api╌▼
+  ○ Review            0/1  │                        ┌────────────────────────┐
+  ◇ MR OK?                 │                        │ ○ web          planned │
+  ○ Open MR                │                        │ ✻ claude sonnet        │
+  ◇ Merged?                │                        │ ◼◼◻◻◻ medium           │
+  ○ Teardown               │                        └────────────────────────┘
+                           │
+─ ACTIVITY ─────────────── │      ┌────────────────────────┐
+ 12:07 dispatched store    │      │ ○ review       planned │
+ 12:07 dispatched api      │      │ ✻ claude sonnet        │
+ 10:42 stage: build        │      │ ◼◼◼◻◻ high             │
+ 10:42 plan approved       │      │ reviews api, store,    │
+ 10:41 plan gate opened    │      │ web as each lands      │
+                           │      └────────────────────────┘
+                           │
                            │
                            │
                            │ ─ ◆ api · waits on you ────────────────────────────────────────────
@@ -50,8 +52,6 @@
                            │ │   Press enter to confirm                                        │
                            │ └─────────────────────────────────────────────────────────────────┘
                            │  o Open window    s Send…    d Diff    answer it first
-                           │
-                           │
                            │
                            │
 
