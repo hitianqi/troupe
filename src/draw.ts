@@ -736,6 +736,10 @@ const flow = (m: PanelModel, ui: Ui, width: number): Flow => {
         ...(at === mid ? [] : [[mid, spine] as Point]), [mid, spine + 1], [mid, spine + 2], [mid, spine + 3],
       ] })
     }
+    // Same-band branches share a wire row, so a landed one's run paints over the others'
+    // corners; redraw each corner in its branch's own tone — the corner says whether that
+    // branch has landed, the shared wire beyond it carries the strongest light.
+    for (const one of sources) wire(canvas, (one.at?.row ?? mid - 2) + HEIGHT, (one.at?.col ?? INDENT) + (box >> 1), '└', one.done ? 'ok' : 'chrome')
     roleBox(reviewer, Math.max(0, mid - 2), spine + 4, Math.min(lane, width - spine - 4))
   }
   let row = 3 + bands * (HEIGHT + 2)

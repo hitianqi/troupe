@@ -1,0 +1,90 @@
+ troupe  auth-refresh  ·  Build                     12:07   中/EN
+  1 MISSION   2 ROLES   3 PLAN   4 LOG   5 DIFF
+  Refresh tokens rotate on every use, and a reused one is refused
+──────────────────────────────────────────────────────────────────
+
+─ ROLES ────────────────── │ ─ FLOW · scroll for more ↓ ──────────
+ build                     │ ┌────────────────────────┐
+▸   ○ step-0      ⬢    —   │ │ ● orchestrator         │
+  └ ○ step-1      ⬢    —   │ └───────────────┬────────┘
+  └ ○ step-2      ⬢    —   │                 ▼
+  └ ○ step-3      ⬢    —   │      ╔═════════════════════╗
+  └ ○ step-4      ⬢    —   │      ║ ○ step-0    planned ║
+  └ ○ step-5      ⬢    —   │      ║ ⬢ codex gpt-6.1-sol ║
+  └ ○ step-6      ⬢    —   │      ║ ◼◼◼◻◻ high          ║
+  └ ○ step-7      ⬢    —   │      ╚═════════════════════╝
+  └ ○ step-8      ⬢    —   │        ╎
+  └ ○ step-9      ⬢    —   │        └after s…╌▼
+                           │       ┌─────────────────────┐
+─ STAGES ───────────────── │       │ ○ step-1    planned │
+  ✓ Plan                   │       │ ⬢ codex gpt-6.1-sol │
+  ✓ Plan OK?        10:42  │       │ ◼◼◼◻◻ high          │
+  ● Build             0/3  │       └─────────────────────┘
+  ○ Review            0/1  │         ╎
+  ◇ MR OK?                 │         └after s…╌▼
+  ○ Open MR                │        ┌─────────────────────┐
+  ◇ Merged?                │        │ ○ step-2    planned │
+  ○ Teardown               │        │ ⬢ codex gpt-6.1-sol │
+                           │        │ ◼◼◼◻◻ high          │
+─ ACTIVITY ─────────────── │        └─────────────────────┘
+ 12:07 dispatched store    │          ╎
+ 12:07 dispatched api      │          └after s…╌▼
+ 10:42 stage: build        │         ┌─────────────────────┐
+ 10:42 plan approved       │         │ ○ step-3    planned │
+ 10:41 plan gate opened    │         │ ⬢ codex gpt-6.1-sol │
+                           │         │ ◼◼◼◻◻ high          │
+                           │         └─────────────────────┘
+                           │           ╎
+                           │           └after s…╌▼
+                           │          ┌─────────────────────┐
+                           │          │ ○ step-4    planned │
+                           │          │ ⬢ codex gpt-6.1-sol │
+                           │          │ ◼◼◼◻◻ high          │
+                           │          └─────────────────────┘
+                           │            ╎
+                           │            └after s…╌▼
+                           │           ┌─────────────────────┐
+                           │           │ ○ step-5    planned │
+                           │           │ ⬢ codex gpt-6.1-sol │
+                           │           │ ◼◼◼◻◻ high          │
+                           │           └─────────────────────┘
+                           │             ╎
+                           │             └after s…╌▼
+                           │            ┌─────────────────────┐
+                           │            │ ○ step-6    planned │
+                           │            │ ⬢ codex gpt-6.1-sol │
+                           │            │ ◼◼◼◻◻ high          │
+                           │            └─────────────────────┘
+                           │              ╎
+                           │              └after s…╌▼
+                           │             ┌─────────────────────┐
+                           │             │ ○ step-7    planned │
+                           │             │ ⬢ codex gpt-6.1-sol │
+                           │             │ ◼◼◼◻◻ high          │
+                           │             └─────────────────────┘
+                           │               ╎
+                           │               └after s…╌▼
+                           │              ┌─────────────────────┐
+                           │              │ ○ step-8    planned │
+                           │              │ ⬢ codex gpt-6.1-sol │
+                           │              │ ◼◼◼◻◻ high          │
+                           │              └─────────────────────┘
+                           │                ╎
+                           │                └after s…╌▼
+                           │               ┌─────────────────────┐
+                           │               │ ○ step-9    planned │
+                           │               │ ⬢ codex gpt-6.1-sol │
+                           │               │ ◼◼◼◻◻ high          │
+                           │               └─────────────────────┘
+                           │
+                           │
+                           │ ─ ○ step-0 · planned ────────────────
+                           │  goal     Rotate the token on
+                           │           refresh; refuse a reused
+                           │  agent    ⬢ codex gpt-6.1-sol   ◼◼◼◻◻
+                           │           -a on-request -s workspace…
+                           │  branch   role/demo/step-0
+                           │  touches  src/step-0.ts
+                           │
+
+ ↑↓  role   ⏎  detail   o  open   s  send   d  diff   1-5  tabs  …

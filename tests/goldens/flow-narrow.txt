@@ -6,20 +6,20 @@
 ─ ROLES ────────────────── │ ─ FLOW ──────────────────────────────────────────
  build                     │ ┌────────────────────────┐
     ✓ lock        ⬢    —   │ │ ● orchestrator         │
-  └ ○ build       ⬢    —   │ └─┬──────────────────────┘
-▸   ○ review      ✻    —   │   │
-                           │   │  ┌────────────────────────┐
-─ STAGES ───────────────── │   │  │ ✓ lock            done │
-  ✓ Plan                   │   └─▶│ ⬢ codex gpt-6.1-sol    │
+  └ ○ build       ⬢    —   │ └─────────────────┬──────┘
+▸   ○ review      ✻    —   │                   ▼
+                           │      ┌────────────────────────┐
+─ STAGES ───────────────── │      │ ✓ lock            done │
+  ✓ Plan                   │      │ ⬢ codex gpt-6.1-sol    │
   ✓ Plan OK?        10:42  │      │ ◼◼◼◻◻ high             │
   ● Build             0/3  │      └────────────────────────┘
   ○ Review            0/1  │        │
-  ◇ MR OK?                 │        │ after lock
-  ○ Open MR                │        │ ┌────────────────────────┐
-  ◇ Merged?                │        │ │ ○ build        planned │
-  ○ Teardown               │        └▶│ ⬢ codex gpt-6.1-sol    │
-                           │          │ ◼◼◼◻◻ high             │
-─ ACTIVITY ─────────────── │          └────────────────────────┘
+  ◇ MR OK?                 │        └─────────────────after lock─▼
+  ○ Open MR                │                        ┌────────────────────────┐
+  ◇ Merged?                │                        │ ○ build        planned │
+  ○ Teardown               │                        │ ⬢ codex gpt-6.1-sol    │
+                           │                        │ ◼◼◼◻◻ high             │
+─ ACTIVITY ─────────────── │                        └────────────────────────┘
  12:07 dispatched store    │
  12:07 dispatched api      │      ╔════════════════════════╗
  10:42 stage: build        │      ║ ○ review       planned ║

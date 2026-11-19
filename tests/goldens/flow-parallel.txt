@@ -1,0 +1,40 @@
+ troupe  auth-refresh  ·  Build                                                                                                         12:07   中/EN
+  1 MISSION   2 ROLES   3 PLAN   4 LOG   5 DIFF
+                                                                                      Refresh tokens rotate on every use, and a reused one is refused
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+─ ROLES ────────────────── │ ─ FLOW ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ build                     │ ┌────────────────────────┐
+▸   ○ panel       ⬢    —   │ │ ● orchestrator         │
+    ○ commands    ⬢    —   │ └──────────────┬─────────┴─────────────┬───────────────────────┬───────────────────────┬───────────────────────┐
+    ○ timing      ⬢    —   │                ▼                       ▼                       ▼                       ▼                       ▼
+    ○ docs        ⬢    —   │      ╔══════════════════╗    ┌──────────────────┐    ┌──────────────────┐    ┌──────────────────┐    ┌──────────────────┐
+    ○ seed        ⬢    —   │      ║ ○ panel  planned ║    │ ○ comma… planned │    │ ○ timing planned │    │ ○ docs   planned │    │ ○ seed   planned │
+                           │      ║ ⬢ codex gpt-6.1… ║    │ ⬢ codex gpt-6.1… │    │ ⬢ codex gpt-6.1… │    │ ⬢ codex gpt-6.1… │    │ ⬢ codex gpt-6.1… │
+─ STAGES ───────────────── │      ║ ◼◼◼◻◻ high       ║    │ ◼◼◼◻◻ high       │    │ ◼◼◼◻◻ high       │    │ ◼◼◼◻◻ high       │    │ ◼◼◼◻◻ high       │
+  ✓ Plan                   │      ╚══════════════════╝    └──────────────────┘    └──────────────────┘    └──────────────────┘    └──────────────────┘
+  ✓ Plan OK?        10:42  │
+  ● Build             0/3  │
+  ○ Review            0/1  │ ─ ○ panel · planned ─────────────────────────────────────────────────────────────────────────────────────────────────────
+  ◇ MR OK?                 │  goal     Rotate the token on refresh; refuse a reused one with 401 reuse
+  ○ Open MR                │  agent    ⬢ codex gpt-6.1-sol   ◼◼◼◻◻ high
+  ◇ Merged?                │           -a on-request -s workspace-write
+  ○ Teardown               │  branch   role/demo/panel
+                           │  touches  src/panel.ts
+─ ACTIVITY ─────────────── │
+ 12:07 dispatched store    │  not opened yet · starts at once
+ 12:07 dispatched api      │  o Open window    s Send…    d Diff
+ 10:42 stage: build        │
+ 10:42 plan approved       │
+ 10:41 plan gate opened    │
+                           │
+                           │
+                           │
+                           │
+                           │
+                           │
+                           │
+                           │
+                           │
+
+ ↑↓  role   ⏎  detail   o  open   s  send   d  diff   1-5  tabs   ?  help
