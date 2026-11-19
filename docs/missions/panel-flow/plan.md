@@ -66,7 +66,7 @@ roles:
     agent: claude
     model: sonnet
     effort: high
-    flags: [--permission-mode, acceptEdits]
+    flags: [--dangerously-skip-permissions]
     goal: "Review each branch as it lands"
     touches: []
     reviews: [display, panel, tile]
