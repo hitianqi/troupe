@@ -584,8 +584,14 @@ const flow = (m: PanelModel, ui: Ui, width: number): Flow => {
   }
   const side = laneWanted && sizes(6 + lane) !== undefined
   // Without a fit even at the narrowest box the slots crowd together and the boxes
-  // take turns a band lower (below, where a drop can dodge them); the stride stays above one.
-  const { box, stride } = (side ? sizes(6 + lane) : sizes(0)) ?? { box: Math.max(16, Math.min(BOX, width - INDENT)), stride: Math.max(1, Math.floor((width - INDENT - 16) / Math.max(1, last))) }
+  // take turns a band lower (below, where a drop can dodge them). The stride stays above
+  // one, and the box narrows with it so the last slot still ends inside the width.
+  const crowded = () => {
+    const stride = Math.max(1, Math.floor((width - INDENT - 16) / Math.max(1, last)))
+
+    return { box: Math.max(16, Math.min(BOX, width - INDENT - last * stride)), stride }
+  }
+  const { box, stride } = (side ? sizes(6 + lane) : sizes(0)) ?? crowded()
   // A band per level, at least one below the prerequisite's own band, and further down
   // while it would sit on a box — only when the width crowds the slots that close.
   const at = new Map(tree.map((one, index) => [one.role.name, index]))

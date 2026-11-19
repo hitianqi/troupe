@@ -1,0 +1,60 @@
+ troupe  auth-refresh  ·  Build                                   12:07   中/EN
+  1 MISSION   2 ROLES   3 PLAN   4 LOG   5 DIFF
+                Refresh tokens rotate on every use, and a reused one is refused
+────────────────────────────────────────────────────────────────────────────────
+
+─ ROLES ────────────────── │ ─ FLOW ────────────────────────────────────────────
+ build                     │ ┌────────────────────────┐
+▸   ○ alpha       ⬢    —   │ │ ● orchestrator         │
+  └ ○ epsilon     ⬢    —   │ └────────────┬───────────┴─┬─────────┬───────┐
+    ○ beta        ⬢    —   │              ▼             │         ▼       │
+  └ ○ zeta        ⬢    —   │      ╔══════════════╗      │ ┌──────────────┐│
+    ○ gamma       ⬢    —   │      ║ ○ a… planned ║      │ │ ○ g… planned ││
+    ○ delta       ⬢    —   │      ║ ⬢ codex gpt… ║      │ │ ⬢ codex gpt… ││
+    ○ review      ✻    —   │      ║ ◼◼◼◻◻ high   ║      │ │ ◼◼◼◻◻ high   ││
+                           │      ╚══════════════╝      │ └──────────────┘│
+─ STAGES ───────────────── │        ╎                   │                 │
+  ✓ Plan                   │        └after alp…╌▼       │                 ▼
+  ✓ Plan OK?        10:42  │            ┌──────────────┐│       ┌──────────────┐
+  ● Build             0/3  │            │ ○ e… planned ││       │ ○ d… planned │
+  ○ Review            0/1  │            │ ⬢ codex gpt… ││       │ ⬢ codex gpt… │
+  ◇ MR OK?                 │            │ ◼◼◼◻◻ high   ││       │ ◼◼◼◻◻ high   │
+  ○ Open MR                │            └──────────────┘│       └──────────────┘
+  ◇ Merged?                │                            │
+  ○ Teardown               │                            ▼
+                           │                  ┌──────────────┐
+─ ACTIVITY ─────────────── │                  │ ○ b… planned │
+ 12:07 dispatched store    │                  │ ⬢ codex gpt… │
+ 12:07 dispatched api      │                  │ ◼◼◼◻◻ high   │
+ 10:42 stage: build        │                  └──────────────┘
+ 10:42 plan approved       │                    ╎
+ 10:41 plan gate opened    │                    └after beta╌▼
+                           │                        ┌──────────────┐
+                           │                        │ ○ z… planned │
+                           │                        │ ⬢ codex gpt… │
+                           │                        │ ◼◼◼◻◻ high   │
+                           │                        └──────────────┘
+                           │
+                           │      ┌──────────────┐
+                           │      │ ○ r… planned │
+                           │      │ ✻ claude op… │
+                           │      │ ◼◼◼◻◻ high   │
+                           │      │ reviews      │
+                           │      │ alpha, beta  │
+                           │      │ as each      │
+                           │      │ lands        │
+                           │      └──────────────┘
+                           │
+                           │ ─ ○ alpha · planned ───────────────────────────────
+                           │  goal     Rotate the token on refresh; refuse a
+                           │           reused one with 401 reuse
+                           │  agent    ⬢ codex gpt-6.1-sol   ◼◼◼◻◻ high
+                           │           -a on-request -s workspace-write
+                           │  branch   role/demo/alpha
+                           │  touches  src/alpha.ts
+                           │
+                           │  not opened yet · starts at once
+                           │  o Open window    s Send…    d Diff
+                           │
+
+ ↑↓  role   ⏎  detail   o  open   s  send   d  diff   1-5  tabs   ?  help

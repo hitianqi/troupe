@@ -390,6 +390,23 @@ test('FLOW narrow and deep: a long chain stairs one stride right per level down 
   closed(drawn, 66)
 })
 
+test('FLOW crowded: with no fit at any box width the slots take turns a band lower, boxes whole and clear of each other', () => {
+  // Six builders, four of them parallel, at 80 columns: no box width gives every
+  // same-level pair its gap, so the boxes stack bands — whole, inside the width.
+  const roles = [role('alpha'), role('beta'), role('gamma'), role('delta'), role('epsilon', { dependsOn: ['alpha'] }), role('zeta', { dependsOn: ['beta'] }), role('review', { agent: 'claude', badge: AGENTS.claude.badge, model: 'opus', touches: [], reviews: ['alpha', 'beta'] })]
+  const drawn = draw(scenario(roles), { tab: 1, selected: 'alpha' }, 80, 60)
+  golden('flow-crowd', plain(drawn))
+  const boxes = boxesOf(drawn).filter(box => box.target.name !== 'review')
+  assert.equal(boxes.length, 6)
+  closed(drawn, 80)
+  const right = drawn.scene.column.col + drawn.scene.column.width
+  assert.ok(boxes.every(box => box.col + box.width <= right), 'every box inside the flow width')
+  for (const [a, b] of boxes.flatMap((a, i) => boxes.slice(i + 1).map(b => [a, b]))) {
+    assert.ok(a.row + a.height <= b.row || b.row + b.height <= a.row || a.col + a.width <= b.col || b.col + b.width <= a.col, `${a.target.name} and ${b.target.name} overlap`)
+  }
+  assert.equal(plain(drawn).filter(line => line.includes('▼')).length >= 4, true, 'the roots keep their trunk drops')
+})
+
 test('FLOW narrow: the reviewer goes below, says what it reviews, and stays selectable', () => {
   const drawn = draw(scenario(flowRoles()), { tab: 1, selected: 'review' }, 78, 52)
   golden('flow-narrow', plain(drawn))
