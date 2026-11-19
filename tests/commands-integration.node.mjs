@@ -108,7 +108,7 @@ screen:
 paste: bracketed
 `)
   mkdirSync(join(root, 'docs/missions/m1'), { recursive: true })
-  writeFileSync(join(root, 'docs/missions/m1/plan.md'), '# Scratch\n\n```yaml\ngoal: Check commands\nbase: main\nroles:\n  api:\n    agent: fake\n    flags: [--policy, ask]\n    touches: []\n```\n\n## Role: api\n\nReply when sent a line.\n')
+  writeFileSync(join(root, 'docs/missions/m1/plan.md'), '# Scratch\n\n```yaml\ngoal: Check commands\nbase: main\nroles:\n  api:\n    agent: fake\n    flags: [--policy, ask]\n    touches: []\n  web:\n    agent: fake\n    flags: [--policy, ask]\n    touches: []\n```\n\n## Role: api\n\nReply when sent a line.\n\n## Role: web\n\nReply when sent a line.\n')
   git('add', '.')
   git('-c', 'user.name=Probe', '-c', 'user.email=probe@example.invalid', 'commit', '-qm', 'initial')
   const r = runtime({ cwd: root, home, env, inputTTY: false, outputTTY: false })
@@ -138,6 +138,18 @@ paste: bracketed
   }
   assert.ok(seen.has('working'), [...seen].join(', '))
   assert.ok(seen.has('idle'), [...seen].join(', '))
+  // The roles window fills two columns, left to right then top to bottom: api sits beside the pane already there.
+  const grid = () => tmux(['list-panes', '-t', dispatch.pane, '-F', '#{pane_left},#{pane_top},#{pane_width},#{pane_height}'], undefined, env).out.trim().split('\n').map(line => line.split(',').map(Number))
+  const [width, height] = tmux(['display', '-p', '-t', dispatch.pane, '#{window_width} #{window_height}'], undefined, env).out.trim().split(/\s+/).map(Number)
+  const left = Math.ceil((width - 1) / 2)
+  assert.deepEqual(grid(), [[0, 0, left, height], [left + 1, 0, width - 1 - left, height]])
+  assert.equal((await execute('dispatch', ['web', '-m', 'm1'], r)).code, 0)
+  // A third pane completes a row of two over a full-width one; `tiled` would have stacked all three.
+  const tall = height - 1
+  assert.deepEqual(grid(), [[0, 0, left, Math.ceil(tall / 2)], [left + 1, 0, width - 1 - left, Math.ceil(tall / 2)], [0, Math.ceil(tall / 2) + 1, width, tall - Math.ceil(tall / 2)]])
+  // The grid's separators are blue whatever the person's tmux theme says, the active cell's brighter.
+  assert.equal(tmux(['show-options', '-w', '-t', dispatch.pane, '-v', 'pane-border-style'], undefined, env).out.trim(), 'fg=blue')
+  assert.equal(tmux(['show-options', '-w', '-t', dispatch.pane, '-v', 'pane-active-border-style'], undefined, env).out.trim(), 'fg=brightblue')
   const sent = await execute('send', ['api', 'Hello from the integration test', '-m', 'm1'], r)
   assert.equal(sent.code, 0, sent.out)
   const waited = await execute('wait', ['--role', 'api', '--timeout', '5', '-m', 'm1'], r)
@@ -150,7 +162,7 @@ paste: bracketed
   assert.equal(closed.code, 0, closed.out)
   assert.ok(existsSync(status.roles[0].worktree))
   assert.equal(git('rev-parse', '--verify', 'role/m1/api').trim().length, 40)
-  assert.deepEqual(readLog(m.log).events.map(e => e.ev), ['gate-answer', 'dispatch', 'send', 'close'])
+  assert.deepEqual(readLog(m.log).events.map(e => e.ev), ['gate-answer', 'dispatch', 'dispatch', 'send', 'close'])
   assert.match(readFileSync(join(status.roles[0].worktree, '.troupe/result.md'), 'utf8'), /Scratch result/)
   assert.equal((await execute('dispatch', ['api', '-m', 'm1'], r)).code, 0)
   assert.equal((await execute('wait', ['--role', 'api', '--ready', '--timeout', '5', '-m', 'm1'], r)).code, 0)

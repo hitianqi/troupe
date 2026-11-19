@@ -12,7 +12,7 @@ import type { Lang } from './i18n.ts'
 import { append, isApproved } from './log.ts'
 import type { Live } from './model.ts'
 import { boundTo, markedPanes, mission, missionTree, orchestratorsOf, unbind, worktreeList } from './missions.ts'
-import { createPane, ownedPane, rolesName, rolesWindow } from './panes.ts'
+import { createPane, ownedPane, rolesGrid, rolesName, rolesWindow } from './panes.ts'
 import type { Role } from './plan.ts'
 import { earlierResults, readResult, RESULT_FILE, roleState, waitingOn, workOf } from './state.ts'
 import { shellOf, tmux } from './run.ts'
@@ -198,12 +198,12 @@ export const dispatch = async (r: Runtime, initial: Mission, name: string): Prom
   const argv = argvOf(agent, role, `Read the brief in ${brief} and follow it.`, gitDirsOf(r, m, role, worktree), roleSettings(r, m, agent, worktree))
   const opened = createPane(r, m, name, worktree, argv, window, undefined, rolesName(m.name))
   try {
+    rolesGrid(r, opened)
     append(m.log, 'cli', { ev: 'dispatch', role: name, ...opened, worktree, branch, base, argv, agent: role.agent })
   } catch (error) {
     if (ownedPane(r, opened).alive) tmux(['kill-pane', '-t', opened.pane], r.run, r.env)
     throw error
   }
-  mux(r, ['select-layout', '-t', opened.window, 'tiled'])
 
   return { code: 0, out: `Dispatched ${name} to ${opened.pane}; ${worktree} on ${branch}\n` }
 }
