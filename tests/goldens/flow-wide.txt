@@ -1,26 +1,26 @@
  troupe  auth-refresh  ·  Build                                                                                                         12:07   中/EN
   1 MISSION   2 ROLES   3 PLAN   4 LOG   5 DIFF
                                                                                       Refresh tokens rotate on every use, and a reused one is refused
-──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
 
 ─ ROLES ────────────────── │ ─ FLOW ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────
  build                     │ ┌────────────────────────┐
     ✓ lock        ⬢    —   │ │ ● orchestrator         │
-▸ └ ○ build       ⬢    —   │ └─┬──────────────────────┘
-    ○ review      ✻    —   │   │
-                           │   │  ┌────────────────────────┐
-─ STAGES ───────────────── │   │  │ ✓ lock            done │
-  ✓ Plan                   │   └─▶│ ⬢ codex gpt-6.1-sol    │──────┐
-  ✓ Plan OK?        10:42  │      │ ◼◼◼◻◻ high             │      │
-  ● Build             0/3  │      └────────────────────────┘      │   ┌──────────────────────┐
-  ○ Review            0/1  │        │                             │   │ ○ review     planned │
-  ◇ MR OK?                 │        │ after lock                  ├──▶│ ✻ claude opus        │
-  ○ Open MR                │        │ ╔════════════════════════╗  │   │ ◼◼◼◻◻ high           │
-  ◇ Merged?                │        │ ║ ○ build        planned ║  │   └──────────────────────┘
-  ○ Teardown               │        └▶║ ⬢ codex gpt-6.1-sol    ║──┘
-                           │          ║ ◼◼◼◻◻ high             ║
-─ ACTIVITY ─────────────── │          ╚════════════════════════╝
- 12:07 dispatched store    │
+▸ └ ○ build       ⬢    —   │ └─────────────────┬──────┘
+    ○ review      ✻    —   │                   ▼
+                           │      ┌────────────────────────┐
+─ STAGES ───────────────── │      │ ✓ lock            done │
+  ✓ Plan                   │      │ ⬢ codex gpt-6.1-sol    │
+  ✓ Plan OK?        10:42  │      │ ◼◼◼◻◻ high             │
+  ● Build             0/3  │      └────────────────────────┘
+  ○ Review            0/1  │        │          └──────────────────────────────────────────────────────────────────────────┐
+  ◇ MR OK?                 │        └───────────────────────────────────────────────────────────after lock─▼              │
+  ○ Open MR                │                                                                  ╔════════════════════════╗  │   ┌──────────────────────┐
+  ◇ Merged?                │                                                                  ║ ○ build        planned ║  │   │ ○ review     planned │
+  ○ Teardown               │                                                                  ║ ⬢ codex gpt-6.1-sol    ║  ├──▶│ ✻ claude opus        │
+                           │                                                                  ║ ◼◼◼◻◻ high             ║  │   │ ◼◼◼◻◻ high           │
+─ ACTIVITY ─────────────── │                                                                  ╚════════════════════════╝  │   └──────────────────────┘
+ 12:07 dispatched store    │                                                                               └──────────────┘
  12:07 dispatched api      │
  10:42 stage: build        │ ─ ○ build · planned ─────────────────────────────────────────────────────────────────────────────────────────────────────
  10:42 plan approved       │  goal     Rotate the token on refresh; refuse a reused one with 401 reuse
